@@ -46,6 +46,8 @@ class Database:
         cursor = self.urd.cursor()
         is_admin = cursor.execute(q, params).fetchval()
 
+        self.user = {'admin': is_admin}
+
         info = {
             "base": {
                 "name": self.name, 
@@ -102,7 +104,7 @@ class Database:
         sql = """
         select table_, view_
         from role_permission r
-        where role_ in (select role_ from user_role where user = ?)
+        where role_ in (select role_ from user_role where user_ = ?)
           and (schema_ = '*' or schema_ = ?)
         """
 
@@ -133,7 +135,7 @@ class Database:
                 view = rights[key]
             elif '*' in rights:
                 view = rights['*']
-            elif self.schema == 'urd' and self.user.admin and key in ['filter', 'format', 'role', 'role_permission', 'user_']:
+            elif self.schema == 'urd' and self.user['admin'] and key in ['filter', 'format', 'role', 'role_permission', 'user_']:
                 view = True
             
             if not view: continue

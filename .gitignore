@@ -1,0 +1,4 @@
+static/
+schemas/*/
+!schemas/urd/
+__pycache__/

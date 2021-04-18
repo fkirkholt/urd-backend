@@ -1,9 +1,7 @@
 import pyodbc
 import os
 from schema import Schema
-from dotmap import DotMap
 from config import config
-from sqlparams import SQLParams
 
 class Database:
     def __init__(self, db_name):

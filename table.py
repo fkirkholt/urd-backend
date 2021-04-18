@@ -1,7 +1,5 @@
 import json
-from dotmap import DotMap
 from schema import Schema
-from sqlparams import SQLParams
 
 class Table:
     def __init__(self, db, tbl_name):

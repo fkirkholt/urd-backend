@@ -388,9 +388,7 @@ class Table:
 
     def get_user_permission(self, tbl_name):
         # todo: Når behøver jeg å angi tbl_name?
-        roles = self.db.get_user_roles()
-
-        if len(roles) == 0: roles =[0]
+        user = 'admin' # todo: Autentisering
 
         sql = """
         --sql
@@ -400,23 +398,16 @@ class Table:
             select max(schema_) schema_, max(role_) role_,
                    max(table_) table_
             from role_permission
-            where schema_ in (:schema, '*')
-              and table_ in (:table, '*')
-              and role_ in :roles
+            where schema_ in (?, '*')
+              and table_ in (?, '*')
+              and role_ in (select role_ from user_role where user_ = ?)
             group by role_
         ) rp2 on rp.role_ = rp2.role_ and rp.schema_ = rp2.schema_
         and rp.table_ = rp2.table_;
         """
 
-        query = SQLParams('named', 'qmark')
-        sql, params = query.format(sql, {
-            'schema': self.db.schema,
-            'table': tbl_name,
-            'roles': tuple(roles)
-        })
-
         cursor = self.db.urd.cursor()
-        rows = cursor.execute(sql, params).fetchall()
+        rows = cursor.execute(sql, self.db.schema, tbl_name, user).fetchall()
 
         permission = {
             'view': False,

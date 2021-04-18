@@ -69,31 +69,18 @@ class Database:
 
         return info
 
-    def get_user_roles(self):
-        cursor = self.urd.cursor()
-        user_id = 'admin'  # todo: Autentisering
-        cursor.execute("select role_ from user_role where user_ = ?", user_id)
-        user_roles = cursor.fetchall()
-
-        return [user_role.role_ for user_role in user_roles]
-
     def get_user_admin_schemas(self):
-        roles = self.get_user_roles()
-
-        if len(roles) == 0: return []
+        user = 'admin' # todo: Autentisering
 
         sql = """
         select schema_
         from role_permission
-        where role_ in :roles
+        where role_ in (select role_ from user_ where user_ = ?)
           and admin = '1'
         """
 
-        query = SQLParams('named', 'qmark')
-        sql, params = query.format(sql, {'roles': tuple(roles)})
-
         cursor = self.urd.cursor()
-        rows = cursor.execute(sql, params).fetchall()
+        rows = cursor.execute(sql, user).fetchall()
 
         return [row.schema_ for row in rows]
 

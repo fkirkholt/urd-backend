@@ -6,7 +6,7 @@ from database import Database
 from table import Table
 from record import Record
 import json
-from random import *
+import os
 from config import config
 
 app = FastAPI()
@@ -17,12 +17,12 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="static/html")
-rand = random()
+mod = os.path.getmtime("static/js/bundle.js")
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("urd.html", {
-        "request": request, "v": rand, "base": config['db']['name']
+        "request": request, "v": mod, "base": config['db']['name']
     })
 
 @app.get("/database")

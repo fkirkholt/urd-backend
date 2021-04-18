@@ -31,9 +31,11 @@ def db_info(base: str):
     return {'data': db.get_info()}
 
 @app.get("/table")
-def get_table(base: str, table: str, sort: str = None):
+def get_table(base: str, table: str, sort: str = None, limit: int = 30, offset: int = 0):
     db = Database(base)
     table = Table(db, table)
+    table.limit  = limit
+    table.offset = offset
     if sort:
         table.grid['sort_columns'] = json.loads(sort)
     return {'data': table.get_grid()}

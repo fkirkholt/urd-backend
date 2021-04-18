@@ -9,7 +9,6 @@ class Table:
         for key, val in table.items():
             setattr(self, key, val)
         self.offset = 0 # todo
-        self.limit = 30 # todo
         self.extension_tables = [] # todo
         if not hasattr(self, 'form'):
             self.form = self.get_form()
@@ -130,9 +129,7 @@ class Table:
         sql+= " " + join + ' ' + condition + ' ' + order
 
         cursor = self.db.cnxn.cursor()
-        count = cursor.execute(sql).rowcount
-        print('count display values')
-        print(count) # todo: Legg inn i self.count eller noe slikt
+        self.count = cursor.execute(sql).rowcount
         cursor.skip(self.offset)
         rows = cursor.fetchmany(self.limit)
 
@@ -213,8 +210,6 @@ class Table:
             recs[index]['primary_key'] = {key: row[key] for key in self.primary_key}
         # todo: row formats
 
-        # todo: hent records count i en av de andre funksjonene
-
         sums = [] # todo: self.get_sums(join, condition, order_by)
 
         # todo: Don't let fields be reference to self.fields
@@ -225,7 +220,7 @@ class Table:
         data = {
             'name': self.name,
             'records': recs,
-            'count_records': 1, # count_records, # todo
+            'count_records': self.count,
             'fields': fields,
             'grid': {
                 'columns': self.grid['columns'],

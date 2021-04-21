@@ -6,9 +6,18 @@ class Table:
         table = db.tables[tbl_name]
         self.db = db
         self.name = tbl_name
-        for key, val in table.items():
-            setattr(self, key, val)
+        self.primary_key = table.get('primary_key', [])
+        self.indexes = table.get('indexes', {})
+        self.foreign_keys = table.get('foreign_keys', [])
+        self.fields = table.get('fields')
+        self.view = self.get_view
+        self.filter = table.get('filter', None)
+        self.grid = table.get('grid', [])
+        self.type = table.get('type', 'data')
+        self.label = table.get('label', tbl_name)
+        self.relations = table.get('relations', [])
         self.offset = 0 # todo
+        self.limit = 30
         self.extension_tables = [] # todo
         if not hasattr(self, 'form'):
             self.form = self.get_form()
@@ -232,7 +241,6 @@ class Table:
         # todo: Find selected index
 
         order_by = self.make_order_by(selects)
-        print("order by: " + order_by)
 
         condition = '' # todo
 

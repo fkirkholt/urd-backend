@@ -17,25 +17,16 @@ class Record:
         # Get values for the table fields
         # -------------------------------
         # todo: Vurder å legge dette til egen funksjon
-
-        selects = {}
-
-        for alias, field in self.tbl.fields.items():
-            if 'view' in field and 'datatype' not in field:
-                # todo: Merkelig test. Hva har datatype med dette å gjøre?
-                selects[alias] = "(%s) as %s" % (field['view'], alias)
-            else:
-                selects[alias] = self.tbl.name + '.' + alias
         
         join = "\n".join(joins)
 
-        selects = set(selects.values())
-        select_sql = ", ".join(selects)
+        selects = [self.tbl.name + '.' + key for key in self.tbl.fields]
+        select = ", ".join(selects)
 
         conditions = [self.tbl.name+'.'+key+" = '"+str(value)+"'" for key, value in self.pk.items()]
         cond = ' and '.join(conditions)
 
-        sql = "select " + select_sql
+        sql = "select " + select
         sql+= "  from " + view + " " + self.tbl.name + "\n"
         sql+= join
         sql+= " where %s" % cond 

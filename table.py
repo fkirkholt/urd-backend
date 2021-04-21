@@ -19,7 +19,45 @@ class Table:
         
 
     def get_view(self): # todo
-        return self.name
+        if hasattr(self, 'view'):
+            return self.view
+
+        filter = getattr(self, 'filter', None)
+        if filter:
+            condition = 'where ' + self.filter # todo: replace vars
+        else:
+            condition = ''
+        
+        cols = []
+        n = 0 # modified columns
+        for key, col in self.fields.items():
+            if col.get('table', self.name) != self.name: continue
+
+            if 'name' not in col:
+                col['name'] = key
+
+            if 'source' in col:
+                cols.append("(%s) as %s" % (col['source'], key))
+                n += 1
+            elif col['name'] != key:
+                cols.append("%s as %s" % (col['name'], key))
+                n += 1
+            else:
+                cols.append(col['name'])
+
+        if n:
+            select = ', '.join(cols)
+            view = "(select " + select + "\n"
+            view+= " from " + self.name + "\n"
+            view+= condition + ")\n"
+        elif condition:
+            view = "(select " + self.name + ".*\n"
+            view+= " from " + self.name + "\n"
+            view+= condition + ")"
+        else:
+            view = self.name
+
+        return view
     
     def get_options(self, field): # todo
         fk = self.foreign_keys[field['alias']]

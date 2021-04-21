@@ -248,7 +248,7 @@ class Table:
             recs[index]['primary_key'] = {key: row[key] for key in self.primary_key}
         # todo: row formats
 
-        sums = [] # todo: self.get_sums(join, condition, order_by)
+        sums = self.get_sums(join, condition)
 
         # todo: Don't let fields be reference to self.fields
         fields = json.loads(json.dumps(self.fields))
@@ -392,8 +392,30 @@ class Table:
             
         return ''
 
-    def get_sums(self):
-        return []
+    def get_sums(self, join, condition):
+        sums = []
+
+        cols = self.grid.get('summation_columns', [])
+
+        if len(cols):
+            selects = []
+            for col in cols:
+                selects.append("sum(%s) as %s" % (col, col))
+            select = ', '.join(selects)
+
+            view = self.get_view()
+
+            sql = "select " + select + "\n"
+            sql+= "from " + view + " " + self.name + "\n"
+            sql+= join + "\n"
+            sql+= condition
+
+            cursor = self.db.cnxn.cursor()
+            row = cursor.execute(sql).fetchone()
+            cols = [col[0] for col in cursor.description]
+            sums = dict(zip(cols, row))
+
+        return sums
     
     def get_form(self):
         form = {}

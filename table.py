@@ -19,8 +19,7 @@ class Table:
         self.offset = 0 # todo
         self.limit = 30
         self.extension_tables = [] # todo
-        if not hasattr(self, 'form'):
-            self.form = self.get_form()
+        self.form = self.get_form()
         self.conditions = []
         self.client_conditions = []
         if 'sort_columns' not in self.grid:
@@ -31,8 +30,7 @@ class Table:
         if hasattr(self, 'view'):
             return self.view
 
-        filter = getattr(self, 'filter', None)
-        if filter:
+        if self.filter:
             condition = 'where ' + self.filter # todo: replace vars
         else:
             condition = ''
@@ -110,8 +108,6 @@ class Table:
 
         condition = "where " + " AND ".join(conditions) if len(conditions) else ''
 
-        view = cand_tbl.get_view()
-
         # todo: Satt inn for å få dette til å fungere
         # jf. kommentaren under get_grid
         if not 'column_view' in field:
@@ -120,7 +116,7 @@ class Table:
         sql = "select " + value_field + " as value, "
         sql+= "(" + field['view'] + ") as label, "
         sql+= "(" + field['column_view'] + ") as coltext "
-        sql+= "from " + view + " " + field['alias'] + "\n"
+        sql+= "from " + cand_tbl.view + " " + field['alias'] + "\n"
         sql+= condition + "\n" + order
 
         cursor = self.db.cnxn.cursor()
@@ -169,10 +165,9 @@ class Table:
             selects[key] = value + ' as ' + key
         
         select = ', '.join(selects.values())
-        view = self.get_view() # todo
 
         sql = "select " + select
-        sql+= "  from " + view + ' ' + self.name
+        sql+= "  from " + self.view + ' ' + self.name
         sql+= " " + join + ' ' + condition + ' ' + order
 
         cursor = self.db.cnxn.cursor()
@@ -325,7 +320,6 @@ class Table:
             
             # Get view for reference table
             table = Table(ref_base, fk['table'])
-            view = table.get_view()
 
             # Check if user has permission to view table
             # todo: Har ingenting i denne funksjonen å gjøre
@@ -343,20 +337,19 @@ class Table:
                 conditions.append(alias + '.' + ref_field_name + ' = ' + self.name + '.' + col)
             conditions_list = ' AND '.join(conditions)
 
-            joins.append("left join %s %s on %s" % (view, alias, conditions_list))
+            joins.append("left join %s %s on %s" % (table.view, alias, conditions_list))
 
         # Joins extension tables
         # todo: Må kunne gå gjennom skjemaet istedenfor
         #       å opprette Table for hver bidige tabell
         for tbl_name in self.extension_tables:
             table = Table(self.db, tbl_name)
-            view = table.get_view()
             conditions = []
             # todo: Prøv å bruke list comprehension isteden
             for idx, field in table.primary_key.items():
                 conditions.append(tbl_name + '.' + field + ' = ' + self.name + '.' + self.primary_key[idx])
             
-            joins.append("left join %s %s on %s" % (view, tbl_name, ' and '.join(conditions)))
+            joins.append("left join %s %s on %s" % (table.view, tbl_name, ' and '.join(conditions)))
         
         return joins
 
@@ -411,10 +404,8 @@ class Table:
                 selects.append("sum(%s) as %s" % (col, col))
             select = ', '.join(selects)
 
-            view = self.get_view()
-
             sql = "select " + select + "\n"
-            sql+= "from " + view + " " + self.name + "\n"
+            sql+= "from " + self.view + " " + self.name + "\n"
             sql+= join + "\n"
             sql+= condition
 
@@ -518,9 +509,8 @@ class Table:
         return self.client_conditions
     
     def get_record_count(self, condition, join=''):
-        view = self.get_view()
         sql = "select count(*) \n"
-        sql+= "  from %s %s \n" % (view, self.name)
+        sql+= "  from %s %s \n" % (self.view, self.name)
         sql+= join + "\n"
         sql+= condition
 

@@ -59,7 +59,8 @@ class Record:
                 displays[key] = "(%s) as %s" % (field['view'], key)
 
         if len(displays) > 0:
-            select = ', '.join(displays)
+            select = ', '.join(displays.values())
+            print(select)
 
             sql = "select " + select + "\n"
             sql+= "  from " + view + " " + self.tbl.name + "\n"

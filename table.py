@@ -10,16 +10,16 @@ class Table:
         self.indexes = table.get('indexes', {})
         self.foreign_keys = table.get('foreign_keys', [])
         self.fields = table.get('fields')
-        self.view = self.get_view
         self.filter = table.get('filter', None)
+        self.view = self.get_view()
         self.grid = table.get('grid', [])
         self.type = table.get('type', 'data')
         self.label = table.get('label', tbl_name)
         self.relations = table.get('relations', [])
         self.offset = 0 # todo
         self.limit = 30
-        self.extension_tables = [] # todo
-        self.form = self.get_form()
+        self.extension_tables = table.get('extension_tables', [])
+        self.form = table.get('form', self.get_form())
         self.conditions = []
         self.client_conditions = []
         if 'sort_columns' not in self.grid:
@@ -346,7 +346,7 @@ class Table:
             table = Table(self.db, tbl_name)
             conditions = []
             # todo: Prøv å bruke list comprehension isteden
-            for idx, field in table.primary_key.items():
+            for idx, field in enumerate(table.primary_key):
                 conditions.append(tbl_name + '.' + field + ' = ' + self.name + '.' + self.primary_key[idx])
             
             joins.append("left join %s %s on %s" % (table.view, tbl_name, ' and '.join(conditions)))

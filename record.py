@@ -48,7 +48,7 @@ class Record:
             # todo: Trenger jeg å sette field['datatype'] til None?
             fields[key] = field
         
-        # Get textual representation of relations
+        # Get display value of fk columns
         # ---------------------------------------
         # todo: Vurder å legge dette til egen funksjon
 
@@ -112,8 +112,10 @@ class Record:
         # todo: Dokumenter parametre
         # todo: Altfor lang og rotete funksjon
         # Don't try to get record for new records that's not saved
-        if hasattr(self, 'pk') and None not in set(self.pk):
+        print(set(self.pk))
+        if hasattr(self, 'pk') and len(set(self.pk)) > 0:
             rec = self.get()
+        else: return []
         
         relations = {}
 

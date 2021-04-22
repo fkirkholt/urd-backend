@@ -6,6 +6,7 @@ class Table:
         table = db.tables[tbl_name]
         self.db = db
         self.name = tbl_name
+        self.type = table.get('type', 'data')
         self.primary_key = table.get('primary_key', [])
         self.indexes = table.get('indexes', {})
         self.foreign_keys = table.get('foreign_keys', [])
@@ -13,22 +14,17 @@ class Table:
         self.filter = table.get('filter', None)
         self.view = self.get_view()
         self.grid = table.get('grid', [])
-        self.type = table.get('type', 'data')
         self.label = table.get('label', tbl_name)
         self.relations = table.get('relations', [])
         self.offset = 0 # todo
         self.limit = 30
-        self.extension_tables = table.get('extension_tables', [])
         self.form = table.get('form', self.get_form())
         self.conditions = []
         self.client_conditions = []
         if 'sort_columns' not in self.grid:
             self.grid['sort_columns'] = []
-        
 
     def get_view(self): # todo
-        if hasattr(self, 'view'):
-            return self.view
 
         if self.filter:
             condition = 'where ' + self.filter # todo: replace vars
@@ -338,18 +334,6 @@ class Table:
             conditions_list = ' AND '.join(conditions)
 
             joins.append("left join %s %s on %s" % (table.view, alias, conditions_list))
-
-        # Joins extension tables
-        # todo: Må kunne gå gjennom skjemaet istedenfor
-        #       å opprette Table for hver bidige tabell
-        for tbl_name in self.extension_tables:
-            table = Table(self.db, tbl_name)
-            conditions = []
-            # todo: Prøv å bruke list comprehension isteden
-            for idx, field in enumerate(table.primary_key):
-                conditions.append(tbl_name + '.' + field + ' = ' + self.name + '.' + self.primary_key[idx])
-            
-            joins.append("left join %s %s on %s" % (table.view, tbl_name, ' and '.join(conditions)))
         
         return joins
 
@@ -423,11 +407,6 @@ class Table:
                 field['table'] = self.name
         
         form['items'] = [key for key, field in self.fields.items() if field['table'] == self.name]
-
-        for tbl_name in self.extension_tables:
-            item = {'label': tbl_name}
-            item['items'] = [key for key, field in self.fields.items() if field['table'] == tbl_name]
-            form['items'].append(item)
 
         for key in self.relations:
             form['items'].append("relations." + key)

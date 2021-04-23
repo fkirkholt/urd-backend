@@ -1,5 +1,7 @@
 from table import Table
 from database import Database
+from schema import Schema
+import re
 
 class Record:
     def __init__(self, db, tbl_name, pk):
@@ -81,8 +83,9 @@ class Record:
                 # Don't load options if there's a reference to current table in condition
                 searchable = False
                 if 'filter' in field['foreign_key']:
-                    pattern = 'todo'
-                    # todo: Gjør ferdig denne senere
+                    pat = r"\b" + self.tbl.name + r"\."
+                    if re.search(pat, field['foreign_key']['filter']):
+                        searchable = True
 
                 if searchable: continue
 
@@ -149,9 +152,7 @@ class Record:
 
             # Add condition to fetch only rows that link to record
             for idx, col in enumerate(rel['fk_columns']):
-                fk_field = tbl_rel.fields[col]
                 ref_key = rel['ref_columns'][idx]
-                ref_field = self.tbl.fields[ref_key]
 
                 val = rec['fields'][ref_key]['value'] if len(self.pk) else None
                 tbl_rel.add_condition("%s.%s = '%s'" % (rel['table'], col, val))

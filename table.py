@@ -1,5 +1,6 @@
 import json
 from schema import Schema
+from database import Database
 
 class Table:
     def __init__(self, db, tbl_name):
@@ -16,15 +17,16 @@ class Table:
         self.grid = table.get('grid', [])
         self.label = table.get('label', tbl_name)
         self.relations = table.get('relations', [])
-        self.offset = 0 # todo
+        self.offset = 0
         self.limit = 30
         self.form = table.get('form', self.get_form())
         self.conditions = []
         self.client_conditions = []
+        self.user_filtered = False
         if 'sort_columns' not in self.grid:
             self.grid['sort_columns'] = []
 
-    def get_view(self): # todo
+    def get_view(self):
 
         if self.filter:
             condition = 'where ' + self.filter # todo: replace vars
@@ -62,7 +64,7 @@ class Table:
 
         return view
     
-    def get_options(self, field): # todo
+    def get_options(self, field, fields=None): # todo
         fk = self.foreign_keys[field['alias']]
 
         if 'schema' not in fk or fk['schema'] == self.db.schema:
@@ -95,12 +97,11 @@ class Table:
             admin_schemas = "'" + "', '".join(self.db.get_user_admin_schemas()) + "'"
             conditions.append("schema_ in (%s)" % admin_schemas)
         
-        # todo: Adds condition if this select depends on other selects
-        # Antar dette kun gjelder ved kall fra record.
-        # Det er vel da "fields" er fylt ut, og field.value finnes
-        # if 'value' in field and len(fk.local) > 1:
-        #     for idx, foreign_field in fk.local.items():
-        #         if foreign_field != field.name and 
+        # Adds condition if this select depends on other selects
+        if 'value' in field and len(fk['local']) > 1:
+            for idx, key in enumerate(fk['local']):
+                if key != field['name'] and fields[key]['value']:
+                    conditions.append(fk['foreign'][idx] + " = '" + fields[key]['value'] + "'")
 
         condition = "where " + " AND ".join(conditions) if len(conditions) else ''
 
@@ -220,9 +221,18 @@ class Table:
 
             for idx, colname in enumerate(fk['foreign']):
                 foreign = fk['foreign'][idx]
-                wheres.append(col_name + ' = ' + self.name + '.' + foreign)
+                wheres.append(colname + ' = ' + self.name + '.' + foreign)
 
-            # todo: Fullfør seinere
+            selects['count_children'] = """(
+                select count(*)
+                from %s.%s child_table
+                where %s
+                )""" % (self.db.name, self.name, ' and '.join(wheres))
+
+            # Filters on highest level if not filtered by user
+            if self.user_filtered == False:
+                self.add_condition(self.name + '.' + rel_column['alias']) + "is null" if 'default' not in rel_column else " = '" + rel_column['default'] + "'"
+
 
         # todo: Make select to get disabled status for actions
 
@@ -357,7 +367,7 @@ class Table:
             order_by = "order by "
             sort_fields = self.get_sort_fields(selects)
 
-            for key, sort in sort_fields.items():
+            for sort in sort_fields.values():
                 if self.db.system == 'mysql':
                     order_by += "isnull(%s), %s %s, " % (sort['field'], sort['field'], sort['order'])
                 elif self.db.system in ['oracle', 'postgres']:

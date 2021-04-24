@@ -2,6 +2,7 @@ from table import Table
 from database import Database
 from schema import Schema
 import re
+from addict import Dict
 
 class Record:
     def __init__(self, db, tbl_name, pk):
@@ -39,14 +40,14 @@ class Record:
         # Build array over fields, with value and other properties
         # todo: Hvofor parameter self.tbl.name?
         # permission = self.tbl.get_user_permission(self.tbl.name)
-        permission = {"edit": True} # todo: bruk funksjon over
+        permission = Dict({"edit": True}) # todo: bruk funksjon over
 
         fields = {}
         for key, field in self.tbl.fields.items():
             # todo: Denne genererer feil for view-kolonner
-            field['value'] = getattr(row, key)
+            field.value = getattr(row, key)
             if 'editable' not in field:
-                field['editable'] = permission['edit']
+                field.editable = permission.edit
             # todo: Trenger jeg å sette field['datatype'] til None?
             fields[key] = field
         
@@ -58,7 +59,7 @@ class Record:
 
         for key, field in self.tbl.fields.items():
             if 'view' in field:
-                displays[key] = "(%s) as %s" % (field['view'], key)
+                displays[key] = "(%s) as %s" % (field.view, key)
 
         if len(displays) > 0:
             select = ', '.join(displays.values())
@@ -75,24 +76,24 @@ class Record:
             row = dict(zip(colnames, row))
             for key, value in row.items():
                 field = fields[key]
-                field['text'] = value
+                field.text = value
 
                 # todo: Is this necessary
                 if 'foreign_key' not in field: continue
 
                 # Don't load options if there's a reference to current table in condition
                 searchable = False
-                if 'filter' in field['foreign_key']:
+                if 'filter' in field.foreign_key:
                     pat = r"\b" + self.tbl.name + r"\."
-                    if re.search(pat, field['foreign_key']['filter']):
+                    if re.search(pat, field.foreign_key.filter):
                         searchable = True
 
                 if searchable: continue
 
                 if 'view' in field:
                     if 'column_view' not in field:
-                        field['column_view'] = field['view']
-                    field['options'] = self.tbl.get_options(field, fields)
+                        field.column_view = field.view
+                    field.options = self.tbl.get_options(field, fields)
 
                 fields[key] = field
 
@@ -104,12 +105,12 @@ class Record:
             # del field['alias']
             fields[key] = field
 
-        return {
+        return Dict({
             'base_name': self.db.name,
             'table_name': self.tbl.name,
             'primary_key': self.pk,
             'fields': fields
-        }
+        })
 
     def get_relations(self, count, rel_alias):
         # todo: Dokumenter parametre
@@ -128,37 +129,37 @@ class Record:
             if rel_alias and rel_alias != key: continue
 
             if 'schema' not in rel:
-                rel['schema'] = self.db.schema
+                rel.schema = self.db.schema
             
-            if rel['schema'] != self.db.schema:
-                rel['db_name'] = Schema(rel['schema']).get_db_name()
+            if rel.schema != self.db.schema:
+                rel.db_name = Schema(rel.schema).get_db_name()
             else:
-                rel['db_name'] = self.db.name
+                rel.db_name = self.db.name
 
-            if 'table' not in rel: rel['table'] = key
+            if 'table' not in rel: rel.table = key
 
-            db = Database(rel['db_name'])
-            tbl_rel = Table(db, rel['table'])
+            db = Database(rel.db_name)
+            tbl_rel = Table(db, rel.table)
 
             permission = tbl_rel.get_user_permission(tbl_rel.name)
 
-            if not permission['view']: continue
+            if not permission.view: continue
 
-            fk = rel['foreign_key']
+            fk = rel.foreign_key
             # todo: Trenger disse å være attributter til rel?
             #       Kan de ikke være vanlige variabler isteden?
-            rel['fk_columns'] = tbl_rel.foreign_keys[fk]['local']
-            rel['ref_columns'] = tbl_rel.foreign_keys[fk]['foreign']
+            rel.fk_columns = tbl_rel.foreign_keys[fk].local
+            rel.ref_columns = tbl_rel.foreign_keys[fk].foreign
 
             # Add condition to fetch only rows that link to record
-            for idx, col in enumerate(rel['fk_columns']):
-                ref_key = rel['ref_columns'][idx]
+            for idx, col in enumerate(rel.fk_columns):
+                ref_key = rel.ref_columns[idx]
 
-                val = rec['fields'][ref_key]['value'] if len(self.pk) else None
-                tbl_rel.add_condition("%s.%s = '%s'" % (rel['table'], col, val))
+                val = rec.fields[ref_key].value if len(self.pk) else None
+                tbl_rel.add_condition("%s.%s = '%s'" % (rel.table, col, val))
             
             if 'filter' in rel:
-                tbl_rel.add_condition(rel['filter'])
+                tbl_rel.add_condition(rel.filter)
             
             if (count):
                 # todo: Burde vel være unødvendig med egen kode for å telle. Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
@@ -168,18 +169,18 @@ class Record:
                 # todo: Hvorfor filtrere på øvrste nivå kun ved count?
                 if hasattr(tbl_rel, 'expansion_column') and tbl_rel.name != self.tbl.name:
                     fk = tbl_rel.get_parent_fk()
-                    parent_col = tbl_rel.fields[fk['alias']]
-                    tbl_rel.add_condition(tbl_rel.name+'.'+parent_col['alias'] + (" = " + parent_col['default'] if 'default' in parent_col else " IS NULL"))
+                    parent_col = tbl_rel.fields[fk.alias]
+                    tbl_rel.add_condition(tbl_rel.name+'.'+parent_col.alias + (" = " + parent_col.default if 'default' in parent_col else " IS NULL"))
 
                 conditions = tbl_rel.get_conditions()
                 condition = "where " + (" and ".join(conditions)) if len(conditions) else ""
                 count_records = tbl_rel.get_record_count(condition)
-                relation = {
+                relation = Dict({
                     'count_records': count_records,
-                    'name': rel['table'],
+                    'name': rel.table,
                     'conditions': conditions,
-                    'base_name': rel['db_name']
-                }        
+                    'base_name': rel.db_name
+                })     
             else:
                 # todo: Are these necessary?
                 tbl_rel.limit = 500
@@ -194,11 +195,11 @@ class Record:
 
                 # Find condition for relation
                 # todo: Har håndtert at pk ikke er satt i php-koden
-                values = [rec['fields'][key] for key in rel['ref_columns']]
+                values = [rec.fields[key] for key in rel.ref_columns]
 
-                for idx, col in enumerate(rel['fk_columns']):
-                    relation['fields'][col]['default'] = values[idx]
-                    relation['fields'][col]['defines_relation'] = True
+                for idx, col in enumerate(rel.fk_columns):
+                    relation.fields[col].default = values[idx]
+                    relation.fields[col].defines_relation = True
                 
             relations[key] = relation
 

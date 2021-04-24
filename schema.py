@@ -1,13 +1,14 @@
 import json
 from config import config
 import pyodbc
+from addict import Dict
 
 class Schema:
     def __init__(self, name):
         with open('schemas/' + name + '/schema.json') as myfile:
             data = myfile.read()
 
-        schema = json.loads(data)
+        schema = Dict(json.loads(data))
 
         self.name = name
         self.tables = schema["tables"]

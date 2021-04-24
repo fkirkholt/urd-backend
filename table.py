@@ -1,6 +1,7 @@
 import json
 from schema import Schema
 from database import Database
+from addict import Dict
 
 class Table:
     def __init__(self, db, tbl_name):
@@ -39,16 +40,16 @@ class Table:
             if col.get('table', self.name) != self.name: continue
 
             if 'name' not in col:
-                col['name'] = key
+                col.name = key
 
             if 'source' in col:
-                cols.append("(%s) as %s" % (col['source'], key))
+                cols.append("(%s) as %s" % (col.source, key))
                 n += 1
-            elif col['name'] != key:
-                cols.append("%s as %s" % (col['name'], key))
+            elif col.name != key:
+                cols.append("%s as %s" % (col.name, key))
                 n += 1
             else:
-                cols.append(col['name'])
+                cols.append(col.name)
 
         if n:
             select = ', '.join(cols)
@@ -65,27 +66,27 @@ class Table:
         return view
     
     def get_options(self, field, fields=None): # todo
-        fk = self.foreign_keys[field['alias']]
+        fk = self.foreign_keys[field.alias]
 
-        if 'schema' not in fk or fk['schema'] == self.db.schema:
-            fk['schema'] = self.db.schema
+        if 'schema' not in fk or fk.schema == self.db.schema:
+            fk.schema = self.db.schema
             ref_schema = self.db.schema
             ref_base = self.db
         else:
-            ref_schema = Schema(fk['schema'])
+            ref_schema = Schema(fk.schema)
             ref_base_name = ref_schema.get_db_name()
             ref_base = Database(ref_base_name)
         
-        cand_tbl = Table(ref_base, fk['table'])
+        cand_tbl = Table(ref_base, fk.table)
 
         # List of fields
-        kodefelter = [field['alias'] + '.' + name for name in fk['foreign']]
+        kodefelter = [field.alias + '.' + name for name in fk.foreign]
 
         # Field that holds the value of the options
         value_field = kodefelter[-1]
 
         # Sorting
-        sort_fields = [field['alias'] + '.' + col for col in cand_tbl.grid['sort_columns']]
+        sort_fields = [field.alias + '.' + col for col in cand_tbl.grid.sort_columns]
 
         order = "order by " + ', '.join(sort_fields) if len(sort_fields) else ''
 
@@ -98,22 +99,22 @@ class Table:
             conditions.append("schema_ in (%s)" % admin_schemas)
         
         # Adds condition if this select depends on other selects
-        if 'value' in field and len(fk['local']) > 1:
-            for idx, key in enumerate(fk['local']):
-                if key != field['name'] and fields[key]['value']:
-                    conditions.append(fk['foreign'][idx] + " = '" + fields[key]['value'] + "'")
+        if 'value' in field and len(fk.local) > 1:
+            for idx, key in enumerate(fk.local):
+                if key != field.name and fields[key].value:
+                    conditions.append(fk.foreign[idx] + " = '" + fields[key].value + "'")
 
         condition = "where " + " AND ".join(conditions) if len(conditions) else ''
 
         # todo: Satt inn for å få dette til å fungere
         # jf. kommentaren under get_grid
         if not 'column_view' in field:
-            field['column_view'] = field['view']
+            field.column_view = field.view
 
         sql = "select " + value_field + " as value, "
-        sql+= "(" + field['view'] + ") as label, "
-        sql+= "(" + field['column_view'] + ") as coltext "
-        sql+= "from " + cand_tbl.view + " " + field['alias'] + "\n"
+        sql+= "(" + field.view + ") as label, "
+        sql+= "(" + field.column_view + ") as coltext "
+        sql+= "from " + cand_tbl.view + " " + field.alias + "\n"
         sql+= condition + "\n" + order
 
         cursor = self.db.cnxn.cursor()
@@ -188,39 +189,39 @@ class Table:
         for col in self.primary_key:
             selects[col] = self.name + '.' + col
 
-        for alias in self.grid['columns']:
+        for alias in self.grid.columns:
 
             col = self.fields[alias]
-            col['alias'] = alias
+            col.alias = alias
 
-            col['ref'] = self.name + '.' + alias
+            col.ref = self.name + '.' + alias
 
             if alias in self.foreign_keys:
                 fk = self.foreign_keys[alias]
-                self.fields[alias]['foreign_key'] = fk # todo: burde være unødvendig
+                self.fields[alias].foreign_key = fk # todo: burde være unødvendig
                 if 'view' in col:
-                    col['options'] = self.get_options(col)
+                    col.options = self.get_options(col)
             else:
                 fk = None
 
             if 'view' in col and 'column_view' not in col:
-                col['column_view'] = col['view']
+                col.column_view = col.view
             
             if 'column_view' in col:
-                selects[alias] = col['column_view']
-            elif col['element'] == 'textarea':
-                selects[alias] = "substr(" + col['ref'] + ', 1, 255)'
+                selects[alias] = col.column_view
+            elif col.element == 'textarea':
+                selects[alias] = "substr(" + col.ref + ', 1, 255)'
             else:
-                selects[alias] = col['ref']
+                selects[alias] = col.ref
 
         if hasattr(self, 'expansion_column'):
             # Get number of relations to same table for expanding row
             fk = self.get_parent_fk() # todo: make this function
-            rel_column = self.fields[fk['alias']]
+            rel_column = self.fields[fk.alias]
             wheres = []
 
-            for idx, colname in enumerate(fk['foreign']):
-                foreign = fk['foreign'][idx]
+            for idx, colname in enumerate(fk.foreign):
+                foreign = fk.foreign[idx]
                 wheres.append(colname + ' = ' + self.name + '.' + foreign)
 
             selects['count_children'] = """(
@@ -231,7 +232,7 @@ class Table:
 
             # Filters on highest level if not filtered by user
             if self.user_filtered == False:
-                self.add_condition(self.name + '.' + rel_column['alias']) + "is null" if 'default' not in rel_column else " = '" + rel_column['default'] + "'"
+                self.add_condition(self.name + '.' + rel_column.alias) + "is null" if 'default' not in rel_column else " = '" + rel_column.default + "'"
 
 
         # todo: Make select to get disabled status for actions
@@ -264,7 +265,7 @@ class Table:
 
         # todo: replace field.name with field.alias
 
-        data = {
+        data = Dict({
             'name': self.name,
             'records': recs,
             'count_records': self.count,
@@ -296,12 +297,12 @@ class Table:
             'expansion_column': None, # todo
             'relations': self.get_relations(),
             'saved_filters': [] # todo: self.get_saved_filters()
-        }
+        })
 
         return data
 
     def get_parent_fk(self):
-        return {}
+        return Dict()
 
     def get_joins(self):
         # todo: Funksjonen er for lang
@@ -315,17 +316,17 @@ class Table:
             # todo: Skal jeg kreve at fk['schema'] er satt i skjema?
             # todo: Omtrent samme kode har jeg i get_conditions
             #       så lag en funksjon
-            if 'schema' not in fk or fk['schema'] == self.db.schema:
-                fk['schema'] = self.db.schema
+            if 'schema' not in fk or fk.schema == self.db.schema:
+                fk.schema = self.db.schema
                 ref_schema = self.db.schema
                 ref_base = self.db
             else:
-                ref_schema = Schema(fk['schema'])
+                ref_schema = Schema(fk.schema)
                 ref_base_name = ref_schema.get_db_name()
                 ref_base = Database(ref_base_name)
             
             # Get view for reference table
-            table = Table(ref_base, fk['table'])
+            table = Table(ref_base, fk.table)
 
             # Check if user has permission to view table
             # todo: Har ingenting i denne funksjonen å gjøre
@@ -338,8 +339,8 @@ class Table:
             # Makes conditions for the ON statement in the join
             # todo: Prøv å bruke list comprehension isteden
             conditions = []
-            for idx, col in enumerate(fk['local']):
-                ref_field_name = fk['foreign'][idx]
+            for idx, col in enumerate(fk.local):
+                ref_field_name = fk.foreign[idx]
                 conditions.append(alias + '.' + ref_field_name + ' = ' + self.name + '.' + col)
             conditions_list = ' AND '.join(conditions)
 
@@ -348,16 +349,16 @@ class Table:
         return joins
 
     def get_sort_fields(self, selects):
-        sort_fields = {}
-        for sort in self.grid['sort_columns']:
+        sort_fields = Dict()
+        for sort in self.grid.sort_columns:
             # Split into field and sort order
             parts = sort.split(' ')
             key = parts[0]
             direction = 'asc' if len(parts) == 1 else parts[1]
-            sort_fields[key] = {'field': self.name + "." + key}
+            sort_fields[key].field = self.name + "." + key
             if key in selects:
-                sort_fields[key]['field'] = selects[key]
-            sort_fields[key]['order'] = direction
+                sort_fields[key].field = selects[key]
+            sort_fields[key].order = direction
         
         return sort_fields
 
@@ -369,11 +370,11 @@ class Table:
 
             for sort in sort_fields.values():
                 if self.db.system == 'mysql':
-                    order_by += "isnull(%s), %s %s, " % (sort['field'], sort['field'], sort['order'])
+                    order_by += "isnull(%s), %s %s, " % (sort.field, sort.field, sort.order)
                 elif self.db.system in ['oracle', 'postgres']:
-                    order_by += "%s %s, " % (sort['field'], sort['order'])
+                    order_by += "%s %s, " % (sort.field, sort.order)
                 elif self.db.system == 'sqlite':
-                    order_by += "%s is null, %s %s, " % (sort['field'], sort['field'], sort['order'])
+                    order_by += "%s is null, %s %s, " % (sort.field, sort.field, sort.order)
             
             for field in self.primary_key:
                 order_by += "%s.%s, " % (self.name, field)
@@ -414,14 +415,14 @@ class Table:
         form = {}
         for key, field in self.fields.items():
             if 'table' not in field:
-                field['table'] = self.name
+                field.table = self.name
         
-        form['items'] = [key for key, field in self.fields.items() if field['table'] == self.name]
+        form['items'] = [key for key, field in self.fields.items()]
 
         for key in self.relations:
             form['items'].append("relations." + key)
         
-        return form
+        return Dict(form)
 
     def get_relations(self): 
         # todo: Skal filtreres på permission
@@ -450,20 +451,20 @@ class Table:
         cursor = self.db.urd.cursor()
         rows = cursor.execute(sql, self.db.schema, tbl_name, user).fetchall()
 
-        permission = {
+        permission = Dict({
             'view': False,
             'add': False,
             'edit': False,
             'delete': False,
             'admin': False
-        }
+        })
 
         for row in rows:
-            if row.view_  : permission['view']   = True
-            if row.add_   : permission['add']    = True
-            if row.edit   : permission['edit']   = True
-            if row.delete_: permission['delete'] = True
-            if row.admin  : permission['admin']  = True
+            if row.view_  : permission.view   = True
+            if row.add_   : permission.add    = True
+            if row.edit   : permission.edit   = True
+            if row.delete_: permission.delete = True
+            if row.admin  : permission.admin  = True
 
         # todo: Kode hvis ingen permission er gitt. Merkelig
 
@@ -478,13 +479,13 @@ class Table:
                 # todo: Merkelig å gjenta nesten samme lista
                 #       Må iallfall kunne forenkle dette
                 if self.name in ['filter', 'format', 'role', 'role_permission', 'user_', 'user_role']:
-                    permission['view'] = 1
-                    permission['add'] = 1
-                    permission['edit'] = 1
-                    permission['delete'] = 1
+                    permission.view = 1
+                    permission.add = 1
+                    permission.edit = 1
+                    permission.delete = 1
 
-        if self.type == 'reference' and permission['admin'] == 0:
-            permission['view'] = 0
+        if self.type == 'reference' and permission.admin == 0:
+            permission.view = 0
 
         return permission
 

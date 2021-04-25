@@ -216,7 +216,7 @@ class Table:
 
         if hasattr(self, 'expansion_column'):
             # Get number of relations to same table for expanding row
-            fk = self.get_parent_fk() # todo: make this function
+            fk = self.get_parent_fk()
             rel_column = self.fields[fk.alias]
             wheres = []
 
@@ -302,7 +302,14 @@ class Table:
         return data
 
     def get_parent_fk(self):
-        return Dict()
+        # Find relation to child records
+        relations = [rel for rel in list(self.relations) if rel.name == self.name]
+        rel = relations[0]
+
+        fk = self.foreign_keys[rel.foreign_key]
+        fk.alias = rel.foreign_key
+
+        return fk
 
     def get_joins(self):
         # todo: Funksjonen er for lang

@@ -30,7 +30,7 @@ class Table:
     def get_view(self):
 
         if self.filter:
-            condition = 'where ' + self.filter # todo: replace vars
+            condition = 'where ' + self.db.expr.replace_vars(self.filter)
         else:
             condition = ''
         
@@ -92,7 +92,8 @@ class Table:
 
         # Conditions
         conditions = []
-        # todo: hvis fk.filter
+        if 'filter' in fk:
+            conditions.append("("+self.db.expr.replace_vars(fk.filter)+")")
 
         if ref_schema == 'urd' and 'schema_' in cand_tbl.fields:
             admin_schemas = "'" + "', '".join(self.db.get_user_admin_schemas()) + "'"
@@ -143,7 +144,7 @@ class Table:
         select = ', '.join(cols)
 
         sql = "select " + select
-        sql+= "  from " + self.name
+        sql+= "  from " + self.view + " " + self.name
         sql+= " " + join + ' ' + condition + ' ' + order
 
         cursor = self.db.cnxn.cursor()

@@ -2,6 +2,7 @@ import pyodbc
 import os
 from schema import Schema
 from config import config
+from expression import Expression
 
 class Database:
     def __init__(self, db_name):
@@ -17,6 +18,7 @@ class Database:
         self.label  = base.label
         self.schema = base.schema_
         self.system = base.system
+        self.expr   = Expression(self.system)
 
         schema = Schema(self.schema)
 

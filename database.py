@@ -84,10 +84,9 @@ class Database:
 
         return [row.schema_ for row in rows]
 
-    def filter_tables(self):
-        user = 'admin' # todo: autentisering
+    def view_rights(self, user):
+        """ Find the tables the user has permission to view"""
 
-        # Finds the tables the user has permission to view
         sql = """
         select table_, view_
         from role_permission r
@@ -97,7 +96,13 @@ class Database:
 
         cursor = self.urd.cursor()
         rows = cursor.execute(sql, user, self.schema).fetchall()
-        rights = {row.table_: row.view_ for row in rows}
+        return {row.table_: row.view_ for row in rows}
+
+
+    def filter_tables(self):
+        user = 'admin' # todo: autentisering
+
+        rights = self.view_rights(user)
 
         sql = """
         select table_, expression exp
@@ -106,6 +111,8 @@ class Database:
           and user_ in (?, 'urd')
           and standard = '1'
         """
+
+        cursor = self.urd.cursor( )
 
         rows = cursor.execute(sql, (self.schema, user)).fetchall()
         filters = {row.table_: row.exp for row in rows}

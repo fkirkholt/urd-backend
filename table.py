@@ -11,7 +11,7 @@ class Table:
         self.type = table.get('type', 'data')
         self.primary_key = table.get('primary_key', [])
         self.indexes = table.get('indexes', {})
-        self.foreign_keys = table.get('foreign_keys', [])
+        self.foreign_keys = Dict(table.get('foreign_keys', {}))
         self.fields = table.get('fields')
         self.filter = table.get('filter', None)
         self.view = self.get_view()
@@ -65,9 +65,7 @@ class Table:
 
         return view
     
-    def get_options(self, field, fields=None): # todo
-        fk = self.foreign_keys[field.alias]
-
+    def get_ref_table(self, fk):
         if 'schema' not in fk or fk.schema == self.db.schema:
             fk.schema = self.db.schema
             ref_schema = self.db.schema
@@ -76,8 +74,17 @@ class Table:
             ref_schema = Schema(fk.schema)
             ref_base_name = ref_schema.get_db_name()
             ref_base = Database(ref_base_name)
-        
-        cand_tbl = Table(ref_base, fk.table)
+
+        ref_tbl = Table(ref_base, fk.table)
+
+        return ref_tbl
+    
+    def get_options(self, field, fields=None):
+        print(field.alias)
+        print(self.foreign_keys)
+        fk = self.foreign_keys[field.alias]
+
+        cand_tbl = self.get_ref_table(fk)
 
         # List of fields
         kodefelter = [field.alias + '.' + name for name in fk.foreign]
@@ -95,7 +102,7 @@ class Table:
         if 'filter' in fk:
             conditions.append("("+self.db.expr.replace_vars(fk.filter)+")")
 
-        if ref_schema == 'urd' and 'schema_' in cand_tbl.fields:
+        if fk.schema == 'urd' and 'schema_' in cand_tbl.fields:
             admin_schemas = "'" + "', '".join(self.db.get_user_admin_schemas()) + "'"
             conditions.append("schema_ in (%s)" % admin_schemas)
         
@@ -107,8 +114,6 @@ class Table:
 
         condition = "where " + " AND ".join(conditions) if len(conditions) else ''
 
-        # todo: Satt inn for å få dette til å fungere
-        # jf. kommentaren under get_grid
         if not 'column_view' in field:
             field.column_view = field.view
 
@@ -313,46 +318,20 @@ class Table:
         return fk
 
     def get_joins(self):
-        # todo: Funksjonen er for lang
         joins = []
-        for alias, field in self.fields.items():
-            if alias not in self.foreign_keys or 'view' not in field:
+        print(self.name)
+        print(self.foreign_keys)
+        for key, fk in self.foreign_keys.items():
+            if key not in self.fields:
                 continue
 
-            fk = self.foreign_keys[alias]
+            table = self.get_ref_table(fk)
 
-            # todo: Skal jeg kreve at fk['schema'] er satt i skjema?
-            # todo: Omtrent samme kode har jeg i get_conditions
-            #       så lag en funksjon
-            if 'schema' not in fk or fk.schema == self.db.schema:
-                fk.schema = self.db.schema
-                ref_schema = self.db.schema
-                ref_base = self.db
-            else:
-                ref_schema = Schema(fk.schema)
-                ref_base_name = ref_schema.get_db_name()
-                ref_base = Database(ref_base_name)
-            
-            # Get view for reference table
-            table = Table(ref_base, fk.table)
+            # Get the ON statement in the join
+            ons = [key+'.'+fk.foreign[idx] + " = " + self.name + "." + col for idx, col in enumerate(fk.local)]
+            on_list = ' AND '.join(ons)
 
-            # Check if user has permission to view table
-            # todo: Har ingenting i denne funksjonen å gjøre
-            #       Finn ut hvor jeg skal flytte den
-            #       Har foreløpig kommentert ut koden
-            # permission = table.get_user_permission() # todo
-            # if permission['view'] == False:
-            #     field['expandable'] = False
-            
-            # Makes conditions for the ON statement in the join
-            # todo: Prøv å bruke list comprehension isteden
-            conditions = []
-            for idx, col in enumerate(fk.local):
-                ref_field_name = fk.foreign[idx]
-                conditions.append(alias + '.' + ref_field_name + ' = ' + self.name + '.' + col)
-            conditions_list = ' AND '.join(conditions)
-
-            joins.append("left join %s %s on %s" % (table.view, alias, conditions_list))
+            joins.append("left join %s %s on %s" % (table.view, key, on_list))
         
         return joins
 

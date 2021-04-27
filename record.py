@@ -46,9 +46,17 @@ class Record:
         for key, field in self.tbl.fields.items():
             # todo: Denne genererer feil for view-kolonner
             field.value = getattr(row, key)
+            field.alias = key
             if 'editable' not in field:
                 field.editable = permission.edit
             # todo: Trenger jeg å sette field['datatype'] til None?
+            if key in self.tbl.foreign_keys:
+                fk = self.tbl.foreign_keys[key]
+                ref_schema = Schema(fk.schema)
+                ref_tbl = ref_schema.tables[fk.table]
+                if (ref_tbl.type == 'data' and 'expandable' not in field) or 'view' not in field:
+                    field.expandable = True
+                field.foreign_key = fk
             fields[key] = field
         
         # Get display value of fk columns
@@ -81,7 +89,7 @@ class Record:
                 # todo: Is this necessary
                 if 'foreign_key' not in field: continue
 
-                # Don't load options if there's a reference to current table in condition
+                # Don't load options if there's a reference to current table in filter
                 searchable = False
                 if 'filter' in field.foreign_key:
                     pat = r"\b" + self.tbl.name + r"\."
@@ -94,6 +102,10 @@ class Record:
                     if 'column_view' not in field:
                         field.column_view = field.view
                     field.options = self.tbl.get_options(field, fields)
+                
+                permission = self.tbl.get_user_permission(self.tbl.name)
+                if permission.view == False:
+                    field.expandable = False
 
                 fields[key] = field
 
@@ -158,7 +170,7 @@ class Record:
                 val = rec.fields[ref_key].value if len(self.pk) else None
                 tbl_rel.add_condition("%s.%s = '%s'" % (rel.table, col, val))
             
-            if 'filter' in rel:
+            if rel.get('filter', None):
                 tbl_rel.add_condition(rel.filter)
             
             if (count):

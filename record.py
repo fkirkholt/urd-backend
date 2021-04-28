@@ -30,9 +30,9 @@ class Record:
         cond = ' and '.join(conditions)
 
         sql = "select " + select
-        sql+= "  from " + view + " " + self.tbl.name + "\n"
+        sql+= f"  from {view} {self.tbl.name}\n"
         sql+= join
-        sql+= " where %s" % cond 
+        sql+= f" where {cond}" 
 
         cursor = self.db.cnxn.cursor()
         row = cursor.execute(sql).fetchone()
@@ -67,7 +67,7 @@ class Record:
 
         for key, field in self.tbl.fields.items():
             if 'view' in field:
-                displays[key] = "(%s) as %s" % (field.view, key)
+                displays[key] = f"({field.view}) as {key}"
 
         if len(displays) > 0:
             select = ', '.join(displays.values())
@@ -76,7 +76,7 @@ class Record:
             sql = "select " + select + "\n"
             sql+= "  from " + view + " " + self.tbl.name + "\n"
             sql+= join + "\n"
-            sql+= " where %s" % cond
+            sql+= " where " + cond
 
             row = cursor.execute(sql).fetchone()
 
@@ -168,7 +168,7 @@ class Record:
                 ref_key = rel.ref_columns[idx]
 
                 val = rec.fields[ref_key].value if len(self.pk) else None
-                tbl_rel.add_condition("%s.%s = '%s'" % (rel.table, col, val))
+                tbl_rel.add_condition(f"{rel.table}.{col} = '{val}'")
             
             if rel.get('filter', None):
                 tbl_rel.add_condition(rel.filter)

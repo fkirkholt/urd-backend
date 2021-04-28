@@ -43,10 +43,10 @@ class Table:
                 col.name = key
 
             if 'source' in col:
-                cols.append("(%s) as %s" % (col.source, key))
+                cols.append(f"({col.source}) as {key}")
                 n += 1
             elif col.name != key:
-                cols.append("%s as %s" % (col.name, key))
+                cols.append(f"{col.name} as {key}")
                 n += 1
             else:
                 cols.append(col.name)
@@ -104,7 +104,7 @@ class Table:
 
         if fk.schema == 'urd' and 'schema_' in cand_tbl.fields:
             admin_schemas = "'" + "', '".join(self.db.get_user_admin_schemas()) + "'"
-            conditions.append("schema_ in (%s)" % admin_schemas)
+            conditions.append(f"schema_ in ({admin_schemas})")
         
         # Adds condition if this select depends on other selects
         if 'value' in field and len(fk.local) > 1:
@@ -230,11 +230,12 @@ class Table:
                 foreign = fk.foreign[idx]
                 wheres.append(colname + ' = ' + self.name + '.' + foreign)
 
-            selects['count_children'] = """(
+            where = ' and '.join(wheres)
+            selects['count_children'] = f"""(
                 select count(*)
-                from %s.%s child_table
-                where %s
-                )""" % (self.db.name, self.name, ' and '.join(wheres))
+                from {self.db.name}.{self.name} child_table
+                where {where}
+                )"""
 
             # Filters on highest level if not filtered by user
             if self.user_filtered == False:
@@ -331,7 +332,7 @@ class Table:
             ons = [key+'.'+fk.foreign[idx] + " = " + self.name + "." + col for idx, col in enumerate(fk.local)]
             on_list = ' AND '.join(ons)
 
-            joins.append("left join %s %s on %s" % (table.view, key, on_list))
+            joins.append(f"left join {table.view} {key} on {on_list}")
         
         return joins
 
@@ -357,14 +358,14 @@ class Table:
 
             for sort in sort_fields.values():
                 if self.db.system == 'mysql':
-                    order_by += "isnull(%s), %s %s, " % (sort.field, sort.field, sort.order)
+                    order_by += f"isnull({sort.field}), {sort.field} {sort.order}, "
                 elif self.db.system in ['oracle', 'postgres']:
-                    order_by += "%s %s, " % (sort.field, sort.order)
+                    order_by += f"{sort.field} {sort.order}, "
                 elif self.db.system == 'sqlite':
-                    order_by += "%s is null, %s %s, " % (sort.field, sort.field, sort.order)
+                    order_by += f"{sort.field} is null, {sort.field} {sort.order}, "
             
             for field in self.primary_key:
-                order_by += "%s.%s, " % (self.name, field)
+                order_by += f"{self.name}.{field}, "
 
             order_by = order_by[0:-2]
 
@@ -383,7 +384,7 @@ class Table:
         if len(cols):
             selects = []
             for col in cols:
-                selects.append("sum(%s) as %s" % (col, col))
+                selects.append(f"sum({col}) as {col}")
             select = ', '.join(selects)
 
             sql = "select " + select + "\n"
@@ -487,7 +488,7 @@ class Table:
     
     def get_record_count(self, condition, join=''):
         sql = "select count(*) \n"
-        sql+= "  from %s %s \n" % (self.view, self.name)
+        sql+= f"  from {self.view} {self.name} \n"
         sql+= join + "\n"
         sql+= condition
 

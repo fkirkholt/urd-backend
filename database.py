@@ -25,6 +25,7 @@ class Database:
         self.tables = schema.tables
         self.reports = schema.reports
         self.contents = schema.contents
+        self.config = schema.config
 
     def get_info(self):
 
@@ -35,7 +36,7 @@ class Database:
 
         q = """ 
         select count(*) from role_permission
-        where role_ in (select role_ from user_role where user = ?)
+        where role_ in (select role_ from user_role where user_ = ?)
         and admin = true
         """
 
@@ -59,7 +60,7 @@ class Database:
                 "reports": self.reports,
                 "contents": self.contents
             },
-            # "config": self.config, # todo: have we got this?
+            "config": self.config,
             "user": {
                 "name": 'Admin', # todo: Autentisering
                 "id": 'admin', # todo: Autentisering
@@ -143,3 +144,8 @@ class Database:
             tables[key] = table
         
         return tables
+
+    def query(self, sql, params=[]):
+        cursor = self.cnxn.cursor()
+        return cursor.execute(sql, params)
+

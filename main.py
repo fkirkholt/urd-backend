@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from schema import Schema
 from database import Database
 from table import Table
 from record import Record
@@ -53,3 +54,21 @@ def get_relations(base: str, table: str, primary_key: str, count: bool):
     pk = json.loads(primary_key)
     record = Record(db, table, pk)
     return {'data': record.get_relations(count, None)}
+
+@app.get('/urd/dialog_schema', response_class=HTMLResponse)
+def dialog_schema(request: Request):
+    return templates.TemplateResponse("update_schema.htm", {
+        "request": request
+    })
+
+@app.put('/urd/update_schema')
+async def update_schema(request: Request):
+    req = await request.json()
+    base = req['base']
+    config = json.loads(req['config'])
+    db = Database(base)
+    schema_name = db.schema
+    schema = Schema(schema_name)
+    schema.update(db, config)
+
+    # return {'sucess': False}

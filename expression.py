@@ -43,7 +43,7 @@ class Expression:
             elif type_ == "binary":
                 return "blob"
             else:
-                raise ValueError("Type {type_} not supported yet")
+                raise ValueError(f"Type {type_} not supported yet")
         elif self.platform == "sqlite":
             if type_ in ["string", "date"]:
                 return "text"
@@ -54,7 +54,7 @@ class Expression:
             elif type_ == "binary":
                 return "blob"
         else:
-            raise ValueError("Type conversion for {self.platform} not implemented")
+            raise ValueError(f"Type conversion for {self.platform} not implemented")
 
     def to_urd_type(self, type_):
         type_ = type_.lower()
@@ -70,7 +70,7 @@ class Expression:
             elif type_ == "blob":
                 return "binary"
             else:
-                raise ValueError("Type {type_} not supported yet")
+                raise ValueError(f"Type {type_} not supported yet")
         elif self.platform == "oracle":
             if type_ in ["char", "varchar2"]:
                 return "string"
@@ -79,9 +79,9 @@ class Expression:
             elif type_ in ["date", "timestamp"]:
                 return "date"
             else:
-                raise ValueError("Type {type_} not supported yet")
+                raise ValueError(f"Type {type_} not supported yet")
         else:
-            if type_ in ["varchar", "text"]:
+            if type_ in ["varchar", "text", "char", "bpchar"]:
                 return "string"
             elif type_ in ["integer", "int4"]:
                 return "integer"
@@ -92,7 +92,7 @@ class Expression:
             elif type_ in ["date", "timestamp"]:
                 return "date"
             else:
-                raise ValueError("Type {type_} not supported yet")
+                raise ValueError(f"Type {type_} not supported yet")
     
     def replace_vars(self, sql):
         return sql

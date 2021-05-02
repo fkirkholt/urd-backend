@@ -55,14 +55,18 @@ class Schema:
 
         # Build dict of table keys and remove tables that doesn't exist
         tbl_keys = Dict()
+        delete_tables = []
         for key, table in self.tables.items():
             tbl_keys[table.name] = key
             if table.name not in tables:
-                del self.tables[key]
+                delete_tables.append(key)
+        
+        for tbl_name in delete_tables:
+            del self.tables[tbl_name]
 
         terms = Dict()
-        if 'meta_terminology' in tables:
-            sql = "select * from meta_terminology"
+        if 'meta_term' in tables:
+            sql = "select * from meta_term"
             cursor.execute(sql)
             colnames = [column[0] for column in cursor.description]
             for row in cursor:
@@ -90,7 +94,7 @@ class Schema:
             pk = [row.column_name.lower() for row in cursor.primaryKeys(tbl_name)]
 
             if len(pk) == 0:
-                warnings.append("Tabell {tbl_name} mangler primærnøkkel")
+                warnings.append(f"Tabell {tbl_name} mangler primærnøkkel")
             
             term = None if tbl_name not in terms else terms[tbl_name]
             if tbl_key not in self.tables:
@@ -125,19 +129,29 @@ class Schema:
 
             index_names = []
 
+            indexes = Dict()
             for row in cursor.statistics(tbl_name):
-                name = row.index_name
+                name = row.index_name.lower()
 
-                if name not in table.indexes:
-                    table.indexes[name] = Dict({
+                if name not in indexes:
+                    indexes[name] = Dict({
                         'name': name,
                         'unique': not row.non_unique,
                         'columns': []
                     })
-                if name not in index_names:
-                    index_names.append(name)
                 
-                table.indexes[name].columns.append(row.column_name)
+                indexes[name].columns.append(row.column_name)
+            
+            for key, index in indexes.items():
+                if index.columns == table.primary_key: 
+                    index.name = tbl_name + "_pkey"
+                elif not index.name.startswith(tbl_name):
+                    index.name = tbl_name + "_" + "_".join(index.columns)
+                    index.name = index.name.replace("__", "_")
+
+                if index.name not in index_names:
+                    index_names.append(index.name)
+                table.indexes[index.name] = index
             
             grid_idx = table.indexes.get(tbl_name + '_grid_idx', None)
 
@@ -156,9 +170,12 @@ class Schema:
                 sum_cols = []
             
             # Remove dropped indexes
+            remove_index = []
             for key, index in table.indexes.items():
                 if index.name not in index_names:
-                    del table.indexes[key]
+                    remove_index.append(key)
+            for key in remove_index:
+                del table.indexes[key]
 
             # Update foreign keys
 
@@ -195,7 +212,7 @@ class Schema:
                 if fk.table in tables and fk_table_alias not in self.tables:
                     self.tables[fk_table_alias] = Dict({
                         'name': fk.table,
-                        'relations': []
+                        'relations': {}
                     })
                 
                 # Check if relation defines this as an extension table
@@ -218,7 +235,7 @@ class Schema:
                 # Find label for has-many relations
                 if config.urd_structure and fk_index:
                     lbl = re.sub(r"^(fk_|idx_)", "", fk_index.name)
-                    lbl = re.sub(f"({fk.table})"+r"(_fk|_idx)?$", "", lbl)
+                    lbl = re.sub(f"(_{fk.table})"+r"(_fk|_idx)?$", "", lbl)
                     local = '_'.join(fk.local)
                     lbl = re.sub("^"+local+"$", "", lbl)
                     replace = "" if fk.table == local else f" ({local})"
@@ -253,7 +270,7 @@ class Schema:
                         'foreign_key': alias,
                         'label': lbl,
                         'filter': None if filter not in rel else rel.filter,
-                        'hidden': True if (not index_exists and config.urd_structure) or table.get('hidden', False) or rel.get('hidden', False) else False
+                         'hidden': True if (not index_exists and config.urd_structure) or table.get('hidden', False) or rel.get('hidden', False) else False
                     })
 
             # Count table rows
@@ -290,6 +307,7 @@ class Schema:
                 if cname in table.fields:
                     alias = cname
                 else:
+                    alias = cname # default value if not found
                     for key, field in table.fields.items():
                         if field.name == cname:
                             alias = key
@@ -359,7 +377,7 @@ class Schema:
                 
                 if hidden:
                     urd_col.hidden = True
-                
+
                 if not alias:
                     table.fields[cname] = urd_col
                 else:
@@ -597,7 +615,7 @@ class Schema:
                     ref_tbl = self.tables[fk.table]
                 
                 for index in ref_tbl.indexes.values():
-                    if not index.primary and index.unique:
+                    if index.columns != table.pk and index.unique:
                         cols = [key+"."+col for col in index.columns]
                         field.view = " || ".join(cols)
                         break

@@ -270,7 +270,7 @@ class Schema:
                         'foreign_key': alias,
                         'label': lbl,
                         'filter': None if filter not in rel else rel.filter,
-                         'hidden': True if (not index_exists and config.urd_structure) or table.get('hidden', False) or rel.get('hidden', False) else False
+                        'hidden': True if (not index_exists and config.urd_structure) or table.get('hidden', False) or rel.get('hidden', False) else False
                     })
 
             # Count table rows
@@ -600,7 +600,9 @@ class Schema:
             for key, fk in table.foreign_keys.items():
                 if fk.table not in self.tables: continue
 
-                if fk.table != table.name and table.fields[key].hidden:
+                # Not top level if has foreign keys to other table
+                # that is not a reference table
+                if fk.table != table.name and not table.fields[key].hidden:
                     fk_table = self.tables[fk.table]
                     if fk_table.type != "reference":
                         top_level = False

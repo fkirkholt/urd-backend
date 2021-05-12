@@ -91,6 +91,8 @@ class Expression:
                 return "binary"
             elif type_ in ["date", "timestamp"]:
                 return "date"
+            elif type_ in ["bool"]:
+                return "boolean"
             else:
                 raise ValueError(f"Type {type_} not supported yet")
     

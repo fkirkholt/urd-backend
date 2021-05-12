@@ -9,11 +9,12 @@ from record import Record
 import json
 import os
 from config import config
+from addict import Dict
 
 app = FastAPI()
 
 # todo: Legg dette en annen plass
-# cnxnstr = 'Driver={PostgreSQL Unicode};Server=localhost;Port=5432;Database=urd;Uid=urd;Pwd=urd;'
+# cnxnstr = 'Driver={PostgreSQL Unicdaode};Server=localhost;Port=5432;Database=urd;Uid=urd;Pwd=urd;'
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -29,7 +30,9 @@ def home(request: Request):
 @app.get("/database")
 def db_info(base: str):
     db = Database(base)
-    return {'data': db.get_info()}
+    info = db.get_info()
+    json.dumps(info)
+    return {'data': info}
 
 @app.get("/table")
 def get_table(base: str, table: str, sort: str = None, limit: int = 30, offset: int = 0):
@@ -37,23 +40,44 @@ def get_table(base: str, table: str, sort: str = None, limit: int = 30, offset: 
     table = Table(db, table)
     table.limit  = limit
     table.offset = offset
-    if sort:
-        table.grid['sort_columns'] = json.loads(sort)
+    # todo: handle sort
     return {'data': table.get_grid()}
 
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str):
     db = Database(base)
+    tbl = Table(db, table)
     pk = json.loads(primary_key)
-    record = Record(db, table, pk)
+    record = Record(db, tbl, pk)
     return {'data': record.get()}
 
 @app.get("/relations")
-def get_relations(base: str, table: str, primary_key: str, count: bool):
+def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None, types: str = None):
     db = Database(base)
+    tbl = Table(db, table)
     pk = json.loads(primary_key)
-    record = Record(db, table, pk)
-    return {'data': record.get_relations(count, None)}
+    types = json.loads(types)
+    record = Record(db, tbl, pk)
+    return {'data': record.get_relations(count, alias, types)}
+
+@app.put("/table")
+async def save_table(request: Request):
+    req = await request.json()
+    base = req['base_name']
+    db = Database(base)
+    tbl = Table(db, req['table_name'])
+    return {'data': tbl.save(req['records'])}
+
+@app.get("/select")
+async def get_select(request: Request):
+    # todo: skal ikke behøve alias
+    req = Dict({item[0]: item[1]
+                for item in request.query_params.multi_items()})
+    # print(request_query_params)
+    db = Database(req.schema)
+    tbl = Table(db, req.table)
+    data = tbl.get_select(req)
+    return data
 
 @app.get('/urd/dialog_schema', response_class=HTMLResponse)
 def dialog_schema(request: Request):

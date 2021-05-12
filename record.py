@@ -1,25 +1,22 @@
-from table import Table
 from database import Database
-from schema import Schema
 import re
 from addict import Dict
+import json
+from datetime import datetime
+import time
 
 class Record:
-    def __init__(self, db, tbl_name, pk):
+    def __init__(self, db, tbl, pk):
         self.db = db
-        self.tbl = Table(self.db, tbl_name)
+        self.tbl = tbl
         self.pk = pk
 
     def get(self):
-        # relations get parsed and values added to
-        # $this -> tbl -> selects and $this -> tbl -> joins
-
         joins = self.tbl.get_joins()
         view  = self.tbl.get_view()
 
         # Get values for the table fields
         # -------------------------------
-        # todo: Vurder å legge dette til egen funksjon
         
         join = "\n".join(joins)
 
@@ -37,25 +34,24 @@ class Record:
         cursor = self.db.cnxn.cursor()
         row = cursor.execute(sql).fetchone()
 
+        new = True if not row else False
+
         # Build array over fields, with value and other properties
         # todo: Hvofor parameter self.tbl.name?
         # permission = self.tbl.get_user_permission(self.tbl.name)
         permission = Dict({"edit": True}) # todo: bruk funksjon over
 
         fields = {}
-        for key, field in self.tbl.fields.items():
+
+        for key, field in self.tbl.get_fields().items():
             # todo: Denne genererer feil for view-kolonner
-            field.value = getattr(row, key)
+            field.value = getattr(row, key, None)
             field.alias = key
             if 'editable' not in field:
                 field.editable = permission.edit
             # todo: Trenger jeg å sette field['datatype'] til None?
             if key in self.tbl.foreign_keys:
                 fk = self.tbl.foreign_keys[key]
-                ref_schema = Schema(fk.schema)
-                ref_tbl = ref_schema.tables[fk.table]
-                if (ref_tbl.type == 'data' and 'expandable' not in field) or 'view' not in field:
-                    field.expandable = True
                 field.foreign_key = fk
             fields[key] = field
         
@@ -69,9 +65,8 @@ class Record:
             if 'view' in field:
                 displays[key] = f"({field.view}) as {key}"
 
-        if len(displays) > 0:
+        if row and len(displays) > 0:
             select = ', '.join(displays.values())
-            print(select)
 
             sql = "select " + select + "\n"
             sql+= "  from " + view + " " + self.tbl.name + "\n"
@@ -121,54 +116,65 @@ class Record:
             'base_name': self.db.name,
             'table_name': self.tbl.name,
             'primary_key': self.pk,
-            'fields': fields
+            'fields': fields,
+            'new': new
         })
 
-    def get_relations(self, count, rel_alias):
-        # todo: Dokumenter parametre
+    def get_relations(self, count = False, alias: str = None, types: list = None):
+        """
+        Get all back references to record
+
+        Params:
+        - count: return just number of records
+        - alias: return only relation with this alias
+        - types: set condition for showing relation based on type
+        """
         # todo: Altfor lang og rotete funksjon
-        # Don't try to get record for new records that's not saved
-        print(set(self.pk))
-        if hasattr(self, 'pk') and len(set(self.pk)) > 0:
-            rec = self.get()
-        else: return []
+        from table import Table
+        
+        # Don't get relations for new records that's not saved
+        if not hasattr(self, 'pk') or len(set(self.pk)) == 0:
+            return []
+
+        rec_values = self.get_values()
         
         relations = {}
 
-        if not hasattr(self.tbl, 'relations'): return []
+        for key, rel in self.tbl.get_relations().items():
+            if alias and alias != key: continue
 
-        for key, rel in self.tbl.relations.items():
-            if rel_alias and rel_alias != key: continue
-
-            if 'schema' not in rel:
-                rel.schema = self.db.schema
-            
-            if rel.schema != self.db.schema:
-                rel.db_name = Schema(rel.schema).get_db_name()
-            else:
-                rel.db_name = self.db.name
-
-            if 'table' not in rel: rel.table = key
-
-            db = Database(rel.db_name)
+            db = Database(rel.base)
             tbl_rel = Table(db, rel.table)
 
             permission = tbl_rel.get_user_permission(tbl_rel.name)
-
             if not permission.view: continue
 
-            fk = rel.foreign_key
-            # todo: Trenger disse å være attributter til rel?
-            #       Kan de ikke være vanlige variabler isteden?
-            rel.fk_columns = tbl_rel.foreign_keys[fk].local
-            rel.ref_columns = tbl_rel.foreign_keys[fk].foreign
+            tbl_rel.fields = tbl_rel.get_fields()
+            tbl_rel.pkey = tbl_rel.get_primary_key()
+
+            # If foreign key columns contains primary key
+            if (set(tbl_rel.pkey) <= set(rel.foreign)):
+                rel.type = '1:1'
+            else:
+                rel.type = '1:M'
+
+            parts = tbl_rel.name.split("_")
+            suffix = parts[-1]
+            if (len(types) and suffix in types):
+                show_if = {'type_': suffix}
+            else:
+                show_if = None
+
+            pk = {}
 
             # Add condition to fetch only rows that link to record
-            for idx, col in enumerate(rel.fk_columns):
-                ref_key = rel.ref_columns[idx]
+            for idx, col in enumerate(rel.foreign):
+                ref_key = rel.local[idx]
 
-                val = rec.fields[ref_key].value if len(self.pk) else None
+                val = rec_values[ref_key] if len(self.pk) else None
                 tbl_rel.add_condition(f"{rel.table}.{col} = '{val}'")
+
+                pk[col] = val
             
             if rel.get('filter', None):
                 tbl_rel.add_condition(rel.filter)
@@ -191,8 +197,11 @@ class Record:
                     'count_records': count_records,
                     'name': rel.table,
                     'conditions': conditions,
-                    'base_name': rel.db_name
-                })     
+                    'base_name': rel.db_name,
+                    'relationship': rel.type
+                })
+                if show_if:
+                    relation.show_if = show_if  
             else:
                 # todo: Are these necessary?
                 tbl_rel.limit = 500
@@ -207,14 +216,160 @@ class Record:
 
                 # Find condition for relation
                 # todo: Har håndtert at pk ikke er satt i php-koden
-                values = [rec.fields[key] for key in rel.ref_columns]
+                values = [rec_values[key] for key in rel.local]
 
-                for idx, col in enumerate(rel.fk_columns):
+                for idx, col in enumerate(rel.foreign):
                     relation.fields[col].default = values[idx]
                     relation.fields[col].defines_relation = True
+
+                if rel.type == "1:1":
+                    rec = Record(self.db, tbl_rel, pk)
+                    relation.records = [rec.get()]
+                    relation.relationship == "1:1"
+                else:
+                    relation.relationship == "1:M"
                 
             relations[key] = relation
 
         return relations
+
+    def get_values(self):
+        conds = [f"{key} = ?" for key in self.pk]
+        cond = " and ".join(conds)
+        params = [val for val in self.pk.values()]
+
+        sql = f"""
+        select * from {self.tbl.name}\n
+        where {cond}
+        """
+
+        cursor = self.db.cnxn.cursor()
+        row = cursor.execute(sql, params).fetchone()
+        colnames = [col[0] for col in cursor.description]
+
+        return Dict(zip(colnames, row))
+
+    def get_children(self):
+        rec = self.get()
+
+        relations = self.tbl.get_relations()
+        rel = [rel for rel in relations if rel.table == self.tbl.name][0]
+
+        for idx, colname in enumerate(rel.foreign):
+            foreign = rel.local[idx]
+            value = rec.fields[foreign].value
+            self.tbl.add_condition(f"{rel.table}.{colname} = '{value}'")
+        
+        relation = self.tbl.get_grid()
+
+        return relation['records']
+    
+    def insert(self, values):
+        print(values)
+        fields = self.tbl.get_fields()
+
+        # todo: Get values for auto and auto_update fields
+
+        # Get autoinc values for compound primary keys
+        pkey = self.tbl.get_primary_key()
+        inc_col = pkey[-1]
+        if (
+            inc_col not in values and
+            len(pkey) > 1 and
+            fields[inc_col].extra == "auto_increment"
+        ):
+            s = slice(0, len(pkey) - 1)
+            cols = pkey[s]
+
+            conditions = []
+            for col in cols:
+                conditions.append(f"{col} = {values[col]}")
+            
+            sql = f"select case when max({inc_col}) is null then 1 else max({inc_col}) +1 end from {self.tbl.name} where " + " and ".join(conditions)
+
+            values[inc_col] = self.db.query(sql).fetchval()
+            self.pk[inc_col] = values[inc_col]
+
+        # Array of values to be inserted
+        inserts = {}
+
+        for key, value in values.items():
+
+            if value == "":
+                value = None
+
+            if str(value).upper() in ['CURRENT_TIMESTAMP']:
+                value = datetime.now()
+
+            inserts[key] = value
+
+        # todo: Vet ikke om jeg trenger å håndtere autoinc igjen
+
+        sql = f"""
+        insert into {self.tbl.name} ({','.join(inserts.keys())})
+        values ({', '.join(["?" for key in inserts])})
+        """
+
+        result = self.db.query(sql, list(inserts.values())).commit()
+
+        return self.pk
+
+    def update(self, values):
+        # todo: get values for auto update fields
+
+        set_values = {}
+
+        for key, value in values.items():
+            if value == "":
+                value = None
+            
+            set_values[key] = value
+        
+        sets = [f"{key} = ?" for key, val in set_values.items()]
+        set_str = ",\n".join(sets)
+        params = set_values.values()
+
+        wheres = [f"{key} = ?" for key in self.pk]
+        where_str = " and ".join(wheres)
+        params = list(params) + list(self.pk.values())
+
+        sql = f"""
+        update {self.tbl.name}\n
+        set {set_str}\n
+        where {where_str}
+        """
+
+        print(sql)
+        print(params)
+
+        result = self.db.query(sql, params).commit()
+
+        # Update primary key
+        for key, value in values.items():
+            if key in self.pk:
+                self.pk[key] = value
+
+        return result
+
+    def delete(self):
+        """ Deletes a record.
+
+        Deletion of subordinate records are handled by the database
+        with ON DELETE CASCADE on the foreign key
+        """
+
+        wheres = [f"{key} = ?" for key in self.pk]
+        where_str = " and ".join(wheres)
+
+        sql = f"""
+        delete from {self.tbl.name}
+        where {where_str}
+        """
+
+        result = self.db.query(sql, list(self.pk.values())).commit()
+
+        return result
+
+    # todo: def get_file_path
 
 

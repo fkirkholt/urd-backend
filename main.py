@@ -74,7 +74,7 @@ async def get_select(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
     # print(request_query_params)
-    db = Database(req.schema)
+    db = Database(req.base)
     tbl = Table(db, req.table)
     data = tbl.get_select(req)
     return data

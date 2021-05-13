@@ -58,7 +58,7 @@ class Table:
 
         return self.indexes
 
-    def get_foreign_keys(self):
+    def get_fkeys(self):
         if not hasattr(self, 'foreign_keys'):
             self.init_foreign_keys()
 
@@ -68,31 +68,29 @@ class Table:
         if not hasattr(self, 'foreign_keys'):
             self.init_foreign_keys()
 
-        print(self.foreign_keys)
-        print(key)
         return self.foreign_keys[key]
 
-    def get_fields(self):
+    def get_fields(self, get_options=False):
         if not hasattr(self, 'fields'):
-            self.init_fields()
+            self.init_fields(get_options)
 
         return self.fields
 
     
     def get_options(self, field, fields=None):
 
-        fk = self.get_fkey(field.aias)
+        fk = self.get_fkey(field.name)
         cand_tbl = self.get_db_table(fk.base, fk.table)
 
         # List of fields
-        kodefelter = [field.alias + '.' + name for name in fk.foreign]
+        kodefelter = [field.name + '.' + name for name in fk.foreign]
 
         # Field that holds the value of the options
         value_field = kodefelter[-1]
 
         # Sorting
         cand_sort_columns = cand_tbl.get_sort_columns()
-        sort_fields = [field.alias + '.' + col for col in cand_sort_columns]
+        sort_fields = [field.name + '.' + col for col in cand_sort_columns]
 
         order = "order by " + ', '.join(sort_fields) if len(sort_fields) else ''
 
@@ -119,7 +117,7 @@ class Table:
         sql = "select " + value_field + " as value, "
         sql+= "(" + field.view + ") as label, "
         sql+= "(" + field.column_view + ") as coltext "
-        sql+= "from " + cand_tbl.get_view() + " " + field.alias + "\n"
+        sql+= "from " + cand_tbl.get_view() + " " + field.name + "\n"
         sql+= condition + "\n" + order
 
         cursor = self.db.cnxn.cursor()
@@ -232,8 +230,8 @@ class Table:
             # todo: Behøver selects å være dict? Kan det ikke være list? Det forenkler vel koden litt.
         
         primary_key = self.get_primary_key()
-        foreign_keys = self.get_foreign_keys()
-        fields = self.get_fields()
+        foreign_keys = self.get_fkeys()
+        fields = self.get_fields(get_options=True)
 
         grid = Dict({
             'columns': self.get_grid_columns(),
@@ -292,8 +290,7 @@ class Table:
 
         # todo: Make select to get disabled status for actions
 
-        joins = self.get_joins() # todo: Make function
-        join = '\n'.join(joins)
+        join = self.get_join()
 
         # todo: Find selected index
 
@@ -369,15 +366,15 @@ class Table:
         relations = self.get_relations()
         rel = [rel for rel in list(relations) if rel.name == self.name][0]
 
-        foreign_keys = self.get_foreign_keys()
+        foreign_keys = self.get_fkeys()
         fk = foreign_keys[rel.foreign_key]
         fk.alias = rel.foreign_key
 
         return fk
 
-    def get_joins(self):
+    def get_join(self):
         joins = []
-        foreign_keys = self.get_foreign_keys()
+        foreign_keys = self.get_fkeys()
         fields = self.get_fields()
         for key, fk in foreign_keys.items():
             if key not in fields:
@@ -391,7 +388,7 @@ class Table:
 
             joins.append(f"left join {table.get_view()} {key} on {on_list}")
         
-        return joins
+        return "\n".join(joins)
 
     def get_sort_fields(self, selects):
         sort_fields = Dict()
@@ -678,8 +675,6 @@ class Table:
         order by {view}
         """
 
-        print(sql)
-
         rows = self.db.query(sql).fetchmany(int(req.limit))
 
         result = []
@@ -715,8 +710,6 @@ class Table:
             elif rec.method == "put":
                 if rec['values']:
                     res = record.update(rec['values'])
-                    print('res:')
-                    print(res)
 
             # todo: Log to log table
 
@@ -771,11 +764,9 @@ class Table:
 
         self.foreign_keys = foreign_keys
 
-        print(foreign_keys)
-
-    def init_fields(self):
+    def init_fields(self, get_options):
         fields = Dict()
-        foreign_keys = self.get_foreign_keys()
+        foreign_keys = self.get_fkeys()
         cursor = self.db.cnxn.cursor()
         for col in cursor.columns(table=self.name):
             cname = col.column_name
@@ -833,6 +824,9 @@ class Table:
                         cols = [cname+"."+col for col in index.columns]
                         urd_col.view = " || ".join(cols)
                         break
+
+                if get_options and 'view' in urd_col:
+                    urd_col.options = self.get_options(urd_col)
             
             if col.column_def and not col.auto_increment:
                 def_vals = col.column_def.split('::')

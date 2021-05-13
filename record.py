@@ -12,104 +12,21 @@ class Record:
         self.pk = pk
 
     def get(self):
-        joins = self.tbl.get_joins()
-        view  = self.tbl.get_view()
+        values = self.get_values()
+        displays = self.get_display_values()
 
-        # Get values for the table fields
-        # -------------------------------
-        
-        join = "\n".join(joins)
-
-        selects = [self.tbl.name + '.' + key for key in self.tbl.fields]
-        select = ", ".join(selects)
-
-        conditions = [self.tbl.name+'.'+key+" = '"+str(value)+"'" for key, value in self.pk.items()]
-        cond = ' and '.join(conditions)
-
-        sql = "select " + select
-        sql+= f"  from {view} {self.tbl.name}\n"
-        sql+= join
-        sql+= f" where {cond}" 
-
-        cursor = self.db.cnxn.cursor()
-        row = cursor.execute(sql).fetchone()
-
-        new = True if not row else False
-
-        # Build array over fields, with value and other properties
-        # todo: Hvofor parameter self.tbl.name?
-        # permission = self.tbl.get_user_permission(self.tbl.name)
-        permission = Dict({"edit": True}) # todo: bruk funksjon over
+        new = True if not values else False
 
         fields = {}
+        tbl_fields = self.tbl.get_fields(get_options=True)
 
-        for key, field in self.tbl.get_fields().items():
-            # todo: Denne genererer feil for view-kolonner
-            field.value = getattr(row, key, None)
-            field.alias = key
-            if 'editable' not in field:
-                field.editable = permission.edit
-            # todo: Trenger jeg å sette field['datatype'] til None?
-            if key in self.tbl.foreign_keys:
-                fk = self.tbl.foreign_keys[key]
-                field.foreign_key = fk
-            fields[key] = field
-        
-        # Get display value of fk columns
-        # ---------------------------------------
-        # todo: Vurder å legge dette til egen funksjon
+        for key, field in tbl_fields.items():
+            field.value = getattr(values, key, None)
+            field.text = displays.get(key, None)
+            # todo: editable
+            field.editable = True
+            field.alias = field.name
 
-        displays = {}
-
-        for key, field in self.tbl.fields.items():
-            if 'view' in field:
-                displays[key] = f"({field.view}) as {key}"
-
-        if row and len(displays) > 0:
-            select = ', '.join(displays.values())
-
-            sql = "select " + select + "\n"
-            sql+= "  from " + view + " " + self.tbl.name + "\n"
-            sql+= join + "\n"
-            sql+= " where " + cond
-
-            row = cursor.execute(sql).fetchone()
-
-            colnames = [column[0] for column in cursor.description]
-            row = dict(zip(colnames, row))
-            for key, value in row.items():
-                field = fields[key]
-                field.text = value
-
-                # todo: Is this necessary
-                if 'foreign_key' not in field: continue
-
-                # Don't load options if there's a reference to current table in filter
-                searchable = False
-                if 'filter' in field.foreign_key:
-                    pat = r"\b" + self.tbl.name + r"\."
-                    if re.search(pat, field.foreign_key.filter):
-                        searchable = True
-
-                if searchable: continue
-
-                if 'view' in field:
-                    if 'column_view' not in field:
-                        field.column_view = field.view
-                    field.options = self.tbl.get_options(field, fields)
-                
-                permission = self.tbl.get_user_permission(self.tbl.name)
-                if permission.view == False:
-                    field.expandable = False
-
-                fields[key] = field
-
-        # Don't let $fields be reference to self.tbl['fields']
-        # todo: json encode og decode
-
-        for key, field in fields.items():
-            field['name'] = key
-            # del field['alias']
             fields[key] = field
 
         return Dict({
@@ -119,7 +36,7 @@ class Record:
             'fields': fields,
             'new': new
         })
-
+ 
     def get_relations(self, count = False, alias: str = None, types: list = None):
         """
         Get all back references to record
@@ -149,7 +66,6 @@ class Record:
             permission = tbl_rel.get_user_permission(tbl_rel.name)
             if not permission.view: continue
 
-            tbl_rel.fields = tbl_rel.get_fields()
             tbl_rel.pkey = tbl_rel.get_primary_key()
 
             # If foreign key columns contains primary key
@@ -197,7 +113,7 @@ class Record:
                     'count_records': count_records,
                     'name': rel.table,
                     'conditions': conditions,
-                    'base_name': rel.db_name,
+                    'base_name': rel.base,
                     'relationship': rel.type
                 })
                 if show_if:
@@ -249,6 +165,35 @@ class Record:
 
         return Dict(zip(colnames, row))
 
+    def get_display_values(self):
+        displays = {}
+        view  = self.tbl.get_view()
+        join = self.tbl.get_join()
+
+        for key, field in self.tbl.get_fields().items():
+            if 'view' in field:
+                displays[key] = f"({field.view}) as {key}"
+
+        if len(displays) == 0:
+            return None
+        
+        select = ', '.join(displays.values())
+
+        conds = [f"{self.tbl.name}.{key} = ?" for key in self.pk]
+        cond = " and ".join(conds)
+        params = [val for val in self.pk.values()]
+
+        sql = "select " + select + "\n"
+        sql += "  from " + view + " " + self.tbl.name + "\n"
+        sql += join + "\n"
+        sql += " where " + cond
+
+        cursor = self.db.cnxn.cursor()
+        row = cursor.execute(sql, params).fetchone()
+        colnames = [column[0] for column in cursor.description]
+    
+        return Dict(zip(colnames, row))
+
     def get_children(self):
         rec = self.get()
 
@@ -265,7 +210,6 @@ class Record:
         return relation['records']
     
     def insert(self, values):
-        print(values)
         fields = self.tbl.get_fields()
 
         # todo: Get values for auto and auto_update fields
@@ -338,9 +282,6 @@ class Record:
         set {set_str}\n
         where {where_str}
         """
-
-        print(sql)
-        print(params)
 
         result = self.db.query(sql, params).commit()
 

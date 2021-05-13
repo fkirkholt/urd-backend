@@ -169,7 +169,7 @@ class Record:
 
     def get_display_values(self):
         displays = {}
-        view  = self.tbl.get_view()
+
         join = self.tbl.get_join()
 
         for key, field in self.tbl.get_fields().items():
@@ -186,7 +186,7 @@ class Record:
         params = [val for val in self.pk.values()]
 
         sql = "select " + select + "\n"
-        sql += "  from " + view + " " + self.tbl.name + "\n"
+        sql += "  from " + self.tbl.name + "\n"
         sql += join + "\n"
         sql += " where " + cond
 

@@ -117,7 +117,7 @@ class Table:
         sql = "select " + value_field + " as value, "
         sql+= "(" + field.view + ") as label, "
         sql+= "(" + field.column_view + ") as coltext "
-        sql+= "from " + cand_tbl.get_view() + " " + field.name + "\n"
+        sql+= "from " + cand_tbl.name + " " + field.name + "\n"
         sql+= condition + "\n" + order
 
         cursor = self.db.cnxn.cursor()
@@ -147,7 +147,7 @@ class Table:
         select = ', '.join(cols)
 
         sql = "select " + select
-        sql+= "  from " + self.get_view() + " " + self.name
+        sql+= "  from " + self.name
         sql+= " " + join + ' ' + condition + ' ' + order
 
         cursor = self.db.cnxn.cursor()
@@ -169,7 +169,7 @@ class Table:
         select = ', '.join(selects.values())
 
         sql = "select " + select
-        sql+= "  from " + self.get_view() + ' ' + self.name
+        sql+= "  from " + self.name
         sql+= " " + join + ' ' + condition + ' ' + order
 
         cursor = self.db.cnxn.cursor()
@@ -386,8 +386,8 @@ class Table:
             ons = [key+'.'+fk.foreign[idx] + " = " + self.name + "." + col for idx, col in enumerate(fk.local)]
             on_list = ' AND '.join(ons)
 
-            joins.append(f"left join {table.get_view()} {key} on {on_list}")
-        
+            joins.append(f"left join {table.name} {key} on {on_list}")
+
         return "\n".join(joins)
 
     def get_sort_fields(self, selects):
@@ -441,7 +441,7 @@ class Table:
             select = ', '.join(selects)
 
             sql = "select " + select + "\n"
-            sql+= f"from {self.get_view()} {self.name}\n"
+            sql+= f"from {self.name}\n"
             sql+= join + "\n"
             sql+= condition
 
@@ -631,7 +631,7 @@ class Table:
     
     def get_record_count(self, condition, join=''):
         sql = "select count(*) \n"
-        sql+= f"  from {self.get_view()} {self.name} \n"
+        sql+= f"  from {self.name} \n"
         sql+= join + "\n"
         sql+= condition
 
@@ -665,12 +665,11 @@ class Table:
         cond = " and ".join(conds) if len(conds) else col + "IS NOT NULL"
 
         val_col = req.alias + "." + col
-        tbl_view = self.get_view()
 
         sql = f"""
         select distinct {val_col} as value, {view} as label,
         {col_view} as coltext\n
-        from {tbl_view} {req.alias}\n
+        from {self.name} {req.alias}\n
         where {cond}\n
         order by {view}
         """

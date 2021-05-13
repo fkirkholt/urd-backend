@@ -18,7 +18,7 @@ class Record:
         new = True if not values else False
 
         fields = {}
-        tbl_fields = self.tbl.get_fields(get_options=True)
+        tbl_fields = self.tbl.get_fields()
 
         for key, field in tbl_fields.items():
             field.value = getattr(values, key, None)

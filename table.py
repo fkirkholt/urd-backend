@@ -70,9 +70,9 @@ class Table:
 
         return self.foreign_keys[key]
 
-    def get_fields(self, get_options=False):
+    def get_fields(self):
         if not hasattr(self, 'fields'):
-            self.init_fields(get_options)
+            self.init_fields()
 
         return self.fields
 
@@ -764,7 +764,7 @@ class Table:
 
         self.foreign_keys = foreign_keys
 
-    def init_fields(self, get_options):
+    def init_fields(self):
         fields = Dict()
         foreign_keys = self.get_fkeys()
         cursor = self.db.cnxn.cursor()
@@ -825,7 +825,7 @@ class Table:
                         urd_col.view = " || ".join(cols)
                         break
 
-                if get_options and 'view' in urd_col:
+                if 'view' in urd_col:
                     urd_col.options = self.get_options(urd_col)
             
             if col.column_def and not col.auto_increment:

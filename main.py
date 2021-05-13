@@ -56,7 +56,8 @@ def get_relations(base: str, table: str, primary_key: str, count: bool, alias: s
     db = Database(base)
     tbl = Table(db, table)
     pk = json.loads(primary_key)
-    types = json.loads(types)
+    if types:
+        types = json.loads(types)
     record = Record(db, tbl, pk)
     return {'data': record.get_relations(count, alias, types)}
 

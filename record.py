@@ -48,12 +48,11 @@ class Record:
         """
         # todo: Altfor lang og rotete funksjon
         from table import Table
-        
-        # Don't get relations for new records that's not saved
-        if not hasattr(self, 'pk') or len(set(self.pk)) == 0:
-            return []
 
-        rec_values = self.get_values()
+
+        # Don't get values for new records that's not saved
+        if hasattr(self, 'pk') and len(set(self.pk)):
+            rec_values = self.get_values()               
         
         relations = {}
 
@@ -76,7 +75,7 @@ class Record:
 
             parts = tbl_rel.name.split("_")
             suffix = parts[-1]
-            if (len(types) and suffix in types):
+            if types and (len(types) and suffix in types):
                 show_if = {'type_': suffix}
             else:
                 show_if = None
@@ -87,14 +86,14 @@ class Record:
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.local[idx]
 
-                val = rec_values[ref_key] if len(self.pk) else None
+                val = None if len(self.pk) == 0 else rec_values[ref_key]
                 tbl_rel.add_condition(f"{rel.table}.{col} = '{val}'")
 
                 pk[col] = val
             
             if rel.get('filter', None):
                 tbl_rel.add_condition(rel.filter)
-            
+
             if (count):
                 # todo: Burde vel være unødvendig med egen kode for å telle. Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
 
@@ -108,7 +107,10 @@ class Record:
 
                 conditions = tbl_rel.get_conditions()
                 condition = "where " + (" and ".join(conditions)) if len(conditions) else ""
-                count_records = tbl_rel.get_record_count(condition)
+                if (len(self.pk)):
+                    count_records = tbl_rel.get_record_count(condition)
+                else:
+                    count_records = 0
                 relation = Dict({
                     'count_records': count_records,
                     'name': rel.table,
@@ -175,7 +177,7 @@ class Record:
                 displays[key] = f"({field.view}) as {key}"
 
         if len(displays) == 0:
-            return None
+            return Dict()
         
         select = ', '.join(displays.values())
 

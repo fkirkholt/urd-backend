@@ -83,7 +83,7 @@ class Expression:
         else:
             if type_ in ["varchar", "text", "char", "bpchar"]:
                 return "string"
-            elif type_ in ["integer", "int4"]:
+            elif type_ in ["integer", "int4", "int8"]:
                 return "integer"
             elif type_ in ["numeric", "float8"]:
                 return "float"

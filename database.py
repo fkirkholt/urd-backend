@@ -151,7 +151,7 @@ class Database:
             table = Dict({
                 'name': tbl_name,
                 'icon': None,
-                'label': None,
+                'label': self.get_label(tbl_name),
                 'primary_key': pk,
                 'description': tbl.remarks,
                 'hidden': False

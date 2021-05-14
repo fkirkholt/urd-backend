@@ -231,7 +231,7 @@ class Table:
         
         primary_key = self.get_primary_key()
         foreign_keys = self.get_fkeys()
-        fields = self.get_fields(get_options=True)
+        fields = self.get_fields()
 
         grid = Dict({
             'columns': self.get_grid_columns(),
@@ -347,7 +347,7 @@ class Table:
             'type': self.get_type(),
             'primary_key': primary_key,
             'foreign_keys': foreign_keys,
-            'label': self.name.title() if not getattr(self, 'label', None) else self.label,
+            'label': self.db.get_label(self.name),
             'actions': getattr(self, 'actions', []),
             'limit': self.limit,
             'offset': self.offset,
@@ -653,8 +653,8 @@ class Table:
         else:
             col = self.get_primary_key()[-1]
 
-        view = col if not 'view' in req else req.view
-        col_view = col if not 'column_view' in req else req.column_view
+        view = req.get('view') or col
+        col_view = req.get('column_view') or col
 
         conds = req.condition.split(" and ") if req.condition else []
         # ignore case

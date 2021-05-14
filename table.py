@@ -10,6 +10,7 @@ class Table:
         self.offset = 0
         self.limit = 30
         self.conditions = []
+        self.params = []
         self.client_conditions = []
         self.user_filtered = False
 
@@ -136,7 +137,7 @@ class Table:
         return result
 
 
-    def get_values(self, selects, join, condition, order):
+    def get_values(self, selects, join, order):
         # todo: hent join selv, og kanskje flere
         cols = []
         fields = self.get_fields()
@@ -145,13 +146,17 @@ class Table:
                 cols.append(self.name + '.' + key)
 
         select = ', '.join(cols)
+        cond = self.get_conds()
+        params = self.params
 
         sql = "select " + select
         sql+= "  from " + self.name
-        sql+= " " + join + ' ' + condition + ' ' + order
+        sql+= " " + join + "\n"
+        sql+= "" if not cond else "where " + cond +"\n"
+        sql+= order
 
         cursor = self.db.cnxn.cursor()
-        cursor.execute(sql)
+        cursor.execute(sql, params)
         cursor.skip(self.offset)
         rows = cursor.fetchmany(self.limit)
 
@@ -162,18 +167,23 @@ class Table:
 
         return result
 
-    def get_display_values(self, selects, join, condition, order):
+    def get_display_values(self, selects, join, order):
         for key, value in selects.items():
             selects[key] = value + ' as ' + key
         
         select = ', '.join(selects.values())
 
+        conds = self.get_conds()
+        params = self.params
+
         sql = "select " + select
         sql+= "  from " + self.name
-        sql+= " " + join + ' ' + condition + ' ' + order
+        sql+= " " + join + "\n" 
+        sql+= "" if not conds else "where " + conds 
+        sql+= order
 
         cursor = self.db.cnxn.cursor()
-        self.count = cursor.execute(sql).rowcount
+        self.count = cursor.execute(sql, params).rowcount
         cursor.skip(self.offset)
         rows = cursor.fetchmany(self.limit)
 
@@ -285,7 +295,9 @@ class Table:
 
             # Filters on highest level if not filtered by user
             if self.user_filtered == False:
-                self.add_condition(self.name + '.' + rel_column.alias) + "is null" if 'default' not in rel_column else " = '" + rel_column.default + "'"
+                expr = self.name + '.' + rel_column.name
+                val = rel_column.get('default', None)
+                self.add_cond(expr, "=", val)
 
 
         # todo: Make select to get disabled status for actions
@@ -296,15 +308,9 @@ class Table:
 
         order_by = self.make_order_by(selects)
 
-        # todo: kall fra get_values og get_display_values isteden
-        #       og bruk parameterisert spørring
-        conditions = self.get_conditions()
-        condition = ''
-        if len(conditions):
-            condition = 'where ' + ' and '.join(conditions)
 
-        display_values = self.get_display_values(selects, join, condition, order_by)
-        values = self.get_values(selects, join, condition, order_by)
+        display_values = self.get_display_values(selects, join, order_by)
+        values = self.get_values(selects, join, order_by)
 
         recs = []
         for row in display_values:
@@ -315,7 +321,7 @@ class Table:
             recs[index]['primary_key'] = {key: row[key] for key in primary_key}
         # todo: row formats
 
-        sums = self.get_sums(join, condition)
+        sums = self.get_sums(join)
 
         # todo: Don't let fields be reference to fields
         # todo: Burde ikke være nødvendig
@@ -429,10 +435,12 @@ class Table:
 
         return order_by
 
-    def get_sums(self, join, condition):
+    def get_sums(self, join):
         sums = []
 
         cols = self.get_summation_columns()
+        cond = self.get_conds()
+        params = self.params
 
         if len(cols):
             selects = []
@@ -443,10 +451,10 @@ class Table:
             sql = "select " + select + "\n"
             sql+= f"from {self.name}\n"
             sql+= join + "\n"
-            sql+= condition
+            sql+= "" if not cond else "where " + cond
 
             cursor = self.db.cnxn.cursor()
-            row = cursor.execute(sql).fetchone()
+            row = cursor.execute(sql, params).fetchone()
             cols = [col[0] for col in cursor.description]
             sums = dict(zip(cols, row))
 
@@ -605,7 +613,7 @@ class Table:
             if len(admin_schemas):
                 # todo: definer listen med navn som beskriver hva dette er
                 if self.name in ['filter', 'format', 'role', 'role_permission', 'user_role']:
-                    self.add_condition(self.name + ".schema_ in ('" + "','".join(admin_schemas) + "')", False)
+                    self.add_cond(self.name + ".schema_ in ('" + "','".join(admin_schemas) + "')")
 
                 # todo: Merkelig å gjenta nesten samme lista
                 #       Må iallfall kunne forenkle dette
@@ -620,23 +628,34 @@ class Table:
 
         return permission
 
-    def add_condition(self, condition, client=True):
-        self.conditions.append(condition)
+    def add_cond(self, expr, operator="=", value=None):
+        if value is None:
+            self.conditions.append(expr)
+        else:
+            self.conditions.append(f"{expr} {operator} ?")
+            self.params.append(value)
+            self.client_conditions.append(f"{expr} {operator} {value}")
+        # todo: Handle "in" operator
 
-        if (client):
-            self.client_conditions.append(condition)
+    def get_conds(self):
+        return " and ".join(self.conditions)
 
     def get_conditions(self):
+        return self.conditions
+
+    def get_client_conditions(self):
         return self.client_conditions
     
-    def get_record_count(self, condition, join=''):
+    def get_record_count(self, join=''):
+        cond = self.get_conds()
+        params = self.params
         sql = "select count(*) \n"
         sql+= f"  from {self.name} \n"
         sql+= join + "\n"
-        sql+= condition
+        sql+= "" if not cond else "where " + cond
 
         cursor = self.db.cnxn.cursor()
-        count = cursor.execute(sql).fetchval()
+        count = cursor.execute(sql, params).fetchval()
         
         return count
 

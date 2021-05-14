@@ -87,12 +87,12 @@ class Record:
                 ref_key = rel.local[idx]
 
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                tbl_rel.add_condition(f"{rel.table}.{col} = '{val}'")
+                tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
 
                 pk[col] = val
             
             if rel.get('filter', None):
-                tbl_rel.add_condition(rel.filter)
+                tbl_rel.add_cond(rel.filter)
 
             if (count):
                 # todo: Burde vel være unødvendig med egen kode for å telle. Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
@@ -103,18 +103,17 @@ class Record:
                 if hasattr(tbl_rel, 'expansion_column') and tbl_rel.name != self.tbl.name:
                     fk = tbl_rel.get_parent_fk()
                     parent_col = tbl_rel.fields[fk.alias]
-                    tbl_rel.add_condition(tbl_rel.name+'.'+parent_col.alias + (" = " + parent_col.default if 'default' in parent_col else " IS NULL"))
+                    
+                    tbl_rel.add_cond(tbl_rel.name+'.'+parent_col.alias, "=", parent_col.get('default'))
 
-                conditions = tbl_rel.get_conditions()
-                condition = "where " + (" and ".join(conditions)) if len(conditions) else ""
                 if (len(self.pk)):
-                    count_records = tbl_rel.get_record_count(condition)
+                    count_records = tbl_rel.get_record_count()
                 else:
                     count_records = 0
                 relation = Dict({
                     'count_records': count_records,
                     'name': rel.table,
-                    'conditions': conditions,
+                    'conditions': tbl_rel.get_client_conditions(),
                     'base_name': rel.base,
                     'relationship': rel.type
                 })
@@ -211,7 +210,7 @@ class Record:
         for idx, colname in enumerate(rel.foreign):
             foreign = rel.local[idx]
             value = rec.fields[foreign].value
-            self.tbl.add_condition(f"{rel.table}.{colname} = '{value}'")
+            self.tbl.add_cond(f"{rel.table}.{colname}", "=", value)
         
         relation = self.tbl.get_grid()
 

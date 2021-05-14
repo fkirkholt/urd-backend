@@ -36,7 +36,7 @@ class Record:
             'fields': fields,
             'new': new
         })
- 
+
     def get_relations(self, count = False, alias: str = None, types: list = None):
         """
         Get all back references to record
@@ -49,10 +49,9 @@ class Record:
         # todo: Altfor lang og rotete funksjon
         from table import Table
 
-
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
-            rec_values = self.get_values()               
+            rec_values = self.get_values()      
         
         relations = {}
 
@@ -62,8 +61,9 @@ class Record:
             db = Database(rel.base)
             tbl_rel = Table(db, rel.table)
 
-            permission = tbl_rel.get_user_permission(tbl_rel.name)
-            if not permission.view: continue
+            # todo: too slow
+            # permission = tbl_rel.get_user_permission(tbl_rel.name)
+            # if not permission.view: continue
 
             tbl_rel.pkey = tbl_rel.get_primary_key()
 
@@ -118,7 +118,7 @@ class Record:
                     'relationship': rel.type
                 })
                 if show_if:
-                    relation.show_if = show_if  
+                    relation.show_if = show_if
             else:
                 # todo: Are these necessary?
                 tbl_rel.limit = 500

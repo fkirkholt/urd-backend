@@ -785,6 +785,7 @@ class Table:
     def init_fields(self):
         fields = Dict()
         foreign_keys = self.get_fkeys()
+        pkey = self.get_primary_key()
         cursor = self.db.cnxn.cursor()
         for col in cursor.columns(table=self.name):
             cname = col.column_name
@@ -845,6 +846,8 @@ class Table:
 
                 if 'view' in urd_col:
                     urd_col.options = self.get_options(urd_col)
+            if (type_ == 'integer' and cname == pkey[-1] and cname not in foreign_keys):
+                urd_col.extra = "auto_increment"
             
             if col.column_def and not col.auto_increment:
                 def_vals = col.column_def.split('::')

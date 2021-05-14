@@ -21,7 +21,7 @@ class Record:
         tbl_fields = self.tbl.get_fields()
 
         for key, field in tbl_fields.items():
-            field.value = getattr(values, key, None)
+            field.value = values.get(key, None)
             field.text = displays.get(key, None)
             # todo: editable
             field.editable = True
@@ -134,7 +134,7 @@ class Record:
 
                 # Find condition for relation
                 # todo: Har håndtert at pk ikke er satt i php-koden
-                values = [rec_values[key] for key in rel.local]
+                values = [None if len(self.pk) == 0 else  rec_values[key] for key in rel.local]
 
                 for idx, col in enumerate(rel.foreign):
                     relation.fields[col].default = values[idx]
@@ -165,6 +165,9 @@ class Record:
         row = cursor.execute(sql, params).fetchone()
         colnames = [col[0] for col in cursor.description]
 
+        if not row:
+            return Dict()
+
         return Dict(zip(colnames, row))
 
     def get_display_values(self):
@@ -193,6 +196,9 @@ class Record:
         cursor = self.db.cnxn.cursor()
         row = cursor.execute(sql, params).fetchone()
         colnames = [column[0] for column in cursor.description]
+
+        if not row:
+            return Dict()
     
         return Dict(zip(colnames, row))
 

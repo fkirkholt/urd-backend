@@ -541,6 +541,11 @@ class Table:
 
         return form
 
+    def get_relation(self, alias):
+        if not hasattr(self, 'relations'):
+            self.init_relations()
+
+        return self.relations[alias]
 
     def get_relations(self): 
         # todo: Skal filtreres på permission
@@ -740,7 +745,7 @@ class Table:
                     result.selected = pk
                 
                 # Insert value for primary key also in the relations
-                for rel in self.get_relations.values():
+                for rel in self.get_relations().values():
                     for rel_rec in rel.records.values():
                         for idx, colname in enumerate(rel.local):
                             if colname not in rel_rec.values:

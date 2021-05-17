@@ -61,7 +61,11 @@ def get_relations(base: str, table: str, primary_key: str, count: bool, alias: s
     if types:
         types = json.loads(types)
     record = Record(db, tbl, pk)
-    return {'data': record.get_relations(count, alias, types)}
+    if count:
+        return {'data': record.get_relation_count(types)}
+    else:
+        relation = record.get_relation(alias)
+        return {'data': {alias: relation}}
 
 @app.put("/table")
 async def save_table(request: Request):

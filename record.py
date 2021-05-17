@@ -37,6 +37,97 @@ class Record:
             'new': new
         })
 
+    def get_relation_count(self, types: list = None):
+        from table import Table
+        relations = {}
+        for key, rel in self.tbl.get_relations().items():
+            db = Database(rel.base)
+            tbl_rel = Table(db, rel.table)
+
+            # todo: filtrate on highest level
+
+            # Don't get values for new records that's not saved
+            if hasattr(self, 'pk') and len(set(self.pk)):
+                rec_values = self.get_values()
+
+            # Add condition to fetch only rows that link to record
+            for idx, col in enumerate(rel.foreign):
+                ref_key = rel.local[idx]
+
+                val = None if len(self.pk) == 0 else rec_values[ref_key]
+                tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
+
+            if (len(self.pk)):
+                count_records = tbl_rel.get_record_count()
+            else:
+                count_records = 0
+            
+            relation = Dict({
+                'count_records': count_records,
+                'name': rel.table,
+                'conditions': tbl_rel.get_client_conditions(),
+                'base_name': rel.base,
+                'relationship': rel.type
+            })
+            
+            parts = tbl_rel.name.split("_")
+            suffix = parts[-1]
+            if types and (len(types) and suffix in types):
+                show_if = {'type_': suffix}
+            else:
+                show_if = None
+
+            if show_if:
+                relation.show_if = show_if
+
+            relations[key] = relation
+
+        return relations
+
+    def get_relation(self, alias: str):
+        from table import Table
+        rel = self.tbl.get_relation(alias)
+        db = Database(rel.base)
+        tbl_rel = Table(db, rel.table)
+        tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
+        
+        # todo: filter
+
+        relation = tbl_rel.get_grid()
+
+        # Don't get values for new records that's not saved
+        if hasattr(self, 'pk') and len(set(self.pk)):
+            rec_values = self.get_values()
+
+        values = [None if len(self.pk) == 0 else rec_values[key]
+                  for key in rel.local]
+        
+        for idx, col in enumerate(rel.foreign):
+            relation.fields[col].default = values[idx]
+            relation.fields[col].defines_relation = True
+
+        pk = {}
+        # Add condition to fetch only rows that link to record
+        # todo: Hvorfor er dette nødvendig her og ikke for
+        #       telling av relasjoner?
+        for idx, col in enumerate(rel.foreign):
+            ref_key = rel.local[idx]
+            val = None if len(self.pk) == 0 else rec_values[ref_key]
+            tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
+            pk[col] = val
+
+        tbl_rel.pkey = tbl_rel.get_primary_key()
+
+        # If foreign key columns contains primary key
+        if (set(tbl_rel.pkey) <= set(rel.foreign)):
+            rec = Record(self.db, tbl_rel, pk)
+            relation.records = [rec.get()]
+            relation.relationship == "1:1"
+        else:
+            relation.relationship == "1:M"
+            
+        return relation
+
     def get_relations(self, count = False, alias: str = None, types: list = None):
         """
         Get all back references to record
@@ -233,12 +324,16 @@ class Record:
             cols = pkey[s]
 
             conditions = []
+            params = []
             for col in cols:
-                conditions.append(f"{col} = {values[col]}")
+                conditions.append(f"{col} = ?")
+                params.append(values[col])
             
             sql = f"select case when max({inc_col}) is null then 1 else max({inc_col}) +1 end from {self.tbl.name} where " + " and ".join(conditions)
 
-            values[inc_col] = self.db.query(sql).fetchval()
+            print(sql)
+
+            values[inc_col] = self.db.query(sql, params).fetchval()
             self.pk[inc_col] = values[inc_col]
 
         # Array of values to be inserted

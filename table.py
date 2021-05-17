@@ -1,6 +1,7 @@
 import json
 from addict import Dict
 from record import Record
+import re
 
 class Table:
     def __init__(self, db, tbl_name):
@@ -179,7 +180,7 @@ class Table:
         sql = "select " + select
         sql+= "  from " + self.name
         sql+= " " + join + "\n" 
-        sql+= "" if not conds else "where " + conds 
+        sql+= "" if not conds else "where " + conds + "\n"
         sql+= order
 
         cursor = self.db.cnxn.cursor()
@@ -628,9 +629,30 @@ class Table:
 
         return permission
 
+    def set_search_cond(self, query):
+        filters = query.split(" AND ")
+        for filter in filters:
+            print('filter', filter)
+            parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|IS NULL|IS NOT NULL)\s*", filter, 2)
+            print('parts', parts)
+            field = parts[0]
+            if "." not in field:
+                field = self.name + "." + field
+            operator = parts[1].strip()
+            value = parts[2].replace("*", "%")
+            if operator == "IN":
+                value = "('" + value.strip().split(",").join("','") + "')"
+            value = value.strip()
+            if value == "":
+                value = None
+            self.add_cond(field, operator, value)
+
     def add_cond(self, expr, operator="=", value=None):
         if value is None:
-            self.conditions.append(expr)
+            if operator in ["IS NULL", "IS NOT NULL"]:
+                self.conditions.append(f"{expr} {operator}")
+            else:
+                self.conditions.append(expr)
         else:
             self.conditions.append(f"{expr} {operator} ?")
             self.params.append(value)

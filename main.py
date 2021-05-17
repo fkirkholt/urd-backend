@@ -35,11 +35,13 @@ def db_info(base: str):
     return {'data': info}
 
 @app.get("/table")
-def get_table(base: str, table: str, sort: str = None, limit: int = 30, offset: int = 0):
+def get_table(base: str, table: str, sort: str = None, limit: int = 30, offset: int = 0, filter: str = None):
     db = Database(base)
     table = Table(db, table)
     table.limit  = limit
     table.offset = offset
+    if filter:
+        table.set_search_cond(filter)
     # todo: handle sort
     return {'data': table.get_grid()}
 

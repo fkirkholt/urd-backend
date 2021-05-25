@@ -490,29 +490,37 @@ class Table:
             col_groups[group].append(field.name)
 
         for group_name, col_names in col_groups.items():
-            for group_name, col_names in col_groups.items():
-                if len(col_names) == 1:
-                    label = self.db.get_label(col_names[0])
-                    form['items'][label] = col_names[0]
-                else:
-                    inline = False
-                    colnames = Dict()  # todo: tullete med colnames og col_names
-                    for colname in col_names:
-                        # removes group name prefix from column name and use the rest as label
-                        rest = colname.replace(group_name+"_", "")
-                        label = self.db.get_label(rest)
+            if len(col_names) == 1:
+                label = self.db.get_label(col_names[0])
+                form['items'][label] = col_names[0]
+            else:
+                inline = False
+                colnames = Dict()  # todo: tullete med colnames og col_names
+                sum_size = 0
+                for colname in col_names:
+                    # removes group name prefix from column name and use the rest as label
+                    rest = colname.replace(group_name+"_", "")
+                    label = self.db.get_label(rest)
 
-                        colnames[label] = colname
+                    colnames[label] = colname
 
-                        if 'separator' in fields[colname]:
-                            inline = True
+                    field = fields[colname]
+                    if 'size' in field:
+                        sum_size += field.size
+                    elif field.datatype == "date":
+                        sum_size += 10
+                    elif field.datatype == "integer":
+                        sum_size += 10
 
-                    group_label = self.db.get_label(group_name)
-                    
-                    form['items'][group_label] = Dict({
-                        'inline': inline,
-                        'items': colnames  # todo vurder 'subitems'
-                    })
+                if sum_size < 50:
+                    inline = True
+
+                group_label = self.db.get_label(group_name)
+                
+                form['items'][group_label] = Dict({
+                    'inline': inline,
+                    'items': colnames  # todo vurder 'subitems'
+                })
 
         # Add relations to form
         relations = self.get_relations()

@@ -24,7 +24,8 @@ class Record:
             field.value = values.get(key, None)
             field.text = displays.get(key, None)
             # todo: editable
-            field.editable = True
+            if not 'editable' in field:
+                field.editable = True
             field.alias = field.name
 
             fields[key] = field
@@ -361,9 +362,11 @@ class Record:
         return self.pk
 
     def update(self, values):
-        # todo: get values for auto update fields
-
         set_values = {}
+        # todo: get values for auto update fields
+        for field in self.tbl.get_fields().values():
+            if field.get('extra', None) == "auto_update":
+                 set_values[field.name] = self.db.expr.replace_vars(field.default)
 
         for key, value in values.items():
             if value == "":

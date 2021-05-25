@@ -813,6 +813,7 @@ class Table:
         fields = Dict()
         foreign_keys = self.get_fkeys()
         pkey = self.get_primary_key()
+        indexes = self.get_indexes()
         cursor = self.db.cnxn.cursor()
         for col in cursor.columns(table=self.name):
             cname = col.column_name
@@ -883,9 +884,20 @@ class Table:
 
                 # todo: Sjekk om jeg trenger å endre current_timestamp()
 
-                urd_col.default = default
+                urd_col.default = self.db.expr.replace_vars(default)
 
             fields[cname] = urd_col
+
+        updated_idx = indexes.get(self.name + "_updated_idx", None)
+        if updated_idx:
+            for col in updated_idx.columns:
+                fields[col].extra = "auto_update"
+                fields[col].editable = False
+        created_idx = indexes.get(self.name + "_created_idx", None)
+        if created_idx:
+            for col in created_idx.columns:
+                fields[col].extra = "auto"
+                fields[col].editable = False
 
         self.fields = fields
 

@@ -1,4 +1,5 @@
 import re
+from datetime import date
 
 class Expression:
     def __init__(self, platform):
@@ -97,6 +98,12 @@ class Expression:
                 raise ValueError(f"Type {type_} not supported yet")
     
     def replace_vars(self, sql):
+        # todo: Get user from logged in user
+        sql = sql.replace("$user_name", "Admin")
+
+        if "current_date" in sql.lower():
+            sql = date.today().strftime("%Y-%m-%d")
+
         return sql
         # todo:t Må ha autentisering på plass før denne kan lages
             

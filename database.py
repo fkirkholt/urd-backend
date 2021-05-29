@@ -150,9 +150,6 @@ class Database:
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
         
         for tbl in rows:
-            print('table_cat', tbl.table_cat)
-            print('table_schem', tbl.table_schem)
-
             tbl_name = tbl.table_name
             pkeys = cursor.primaryKeys(table=tbl_name, catalog=self.cat, schema=self.schema)
             pk = [row.column_name for row in pkeys]
@@ -369,6 +366,16 @@ class Database:
                 placed = False
 
                 contents = self.get_content_items(table_alias, sub_tables, contents)
+            else:
+                label = self.get_label(group_name)
+                if label == "Ref":
+                    label = "Oppslagstabeller"
+
+                contents[label] = {
+                    'class_label': "b",
+                    'class_content': "ml3",
+                    'subitems': table_names
+                }
         
         return contents
 

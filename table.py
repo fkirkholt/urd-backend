@@ -887,10 +887,13 @@ class Table:
                 fk = foreign_keys[cname]
                 urd_col.foreign_key = fk
                 ref_tbl = Table(self.db, fk.table)
-                ref_tbl.pk = ref_tbl.get_primary_key()
+                ref_pk = ref_tbl.get_primary_key()
+
+                if (ref_tbl.get_type() == "data"):
+                    urd_col.expandable = True
 
                 for index in ref_tbl.get_indexes().values():
-                    if index.columns != ref_tbl.pk and index.unique:
+                    if index.columns != ref_pk and index.unique:
                         cols = [cname+"."+col for col in index.columns]
                         urd_col.view = " || ".join(cols)
                         break

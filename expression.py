@@ -77,8 +77,10 @@ class Expression:
                 return "string"
             elif type_ == "number":
                 return "integer"
-            elif type_ in ["date", "timestamp"]:
+            elif type_ in ["date", "timestamp", "timestamp(6)"]:
                 return "date"
+            elif type_ in ["decimal"]:
+                return "float"
             else:
                 raise ValueError(f"Type {type_} not supported yet")
         else:

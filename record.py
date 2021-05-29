@@ -248,10 +248,9 @@ class Record:
         params = [val for val in self.pk.values()]
 
         sql = f"""
-        select * from {self.tbl.name}\n
+        select * from {self.db.schema or self.db.cat}.{self.tbl.name}\n
         where {cond}
         """
-
         cursor = self.db.cnxn.cursor()
         row = cursor.execute(sql, params).fetchone()
         colnames = [col[0] for col in cursor.description]

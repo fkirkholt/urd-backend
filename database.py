@@ -18,6 +18,11 @@ class Database:
         self.alias  = base.alias
         self.label  = base.label
         self.schema = base.schema_
+        if base.system == 'mysql':
+            self.cat = base.name
+            self.schema = None
+        else:
+            self.cat = None
         self.system = base.system
         self.expr   = Expression(self.system)
 
@@ -142,11 +147,15 @@ class Database:
         cursor = self.cnxn.cursor()
         tables = Dict()
 
-        rows = cursor.tables().fetchall()
+        rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
         
         for tbl in rows:
+            print('table_cat', tbl.table_cat)
+            print('table_schem', tbl.table_schem)
+
             tbl_name = tbl.table_name
-            pk = [row.column_name for row in cursor.primaryKeys(tbl_name)]
+            pkeys = cursor.primaryKeys(table=tbl_name, catalog=self.cat, schema=self.schema)
+            pk = [row.column_name for row in pkeys]
 
             table = Dict({
                 'name': tbl_name,
@@ -174,7 +183,7 @@ class Database:
     def get_fields(self, table):
         fields = Dict()
         cursor = self.cnxn.cursor()
-        for col in cursor.columns(table=table.name):
+        for col in cursor.columns(table=table.name, catalog=self.cat, schema=self.schema):
             cname = col.column_name
             type_ = self.expr.to_urd_type(col.type_name)
             urd_col = Dict({
@@ -285,9 +294,10 @@ class Database:
         for tbl_key, table in self.tables.items():
 
             # todo: Legg til get_table_type isteden
-            last_pk_col = table.primary_key[-1]
-            if last_pk_col in table.foreign_keys: # todo extends
-                table.type = "xref"
+            if len(table.primary_key):
+                last_pk_col = table.primary_key[-1]
+                if last_pk_col in table.foreign_keys: # todo extends
+                    table.type = "xref"
 
             for colname in table.primary_key:
                 if colname in table.foreign_keys:

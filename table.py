@@ -7,6 +7,8 @@ class Table:
     def __init__(self, db, tbl_name):
         self.db = db
         self.name = tbl_name
+        self.cat = self.db.cat
+        self.schema = self.db.schema
         self.label = tbl_name # todo
         self.offset = 0
         self.limit = 30
@@ -151,7 +153,7 @@ class Table:
         params = self.params
 
         sql = "select " + select
-        sql+= "  from " + self.name
+        sql+= "  from " + (self.schema or self.cat) + "." + self.name
         sql+= " " + join + "\n"
         sql+= "" if not cond else "where " + cond +"\n"
         sql+= order
@@ -177,8 +179,9 @@ class Table:
         conds = self.get_conds()
         params = self.params
 
+
         sql = "select " + select
-        sql+= "  from " + self.name
+        sql+= "  from " + (self.schema or self.cat) + "." + self.name
         sql+= " " + join + "\n" 
         sql+= "" if not conds else "where " + conds + "\n"
         sql+= order
@@ -198,7 +201,9 @@ class Table:
 
     def get_primary_key(self):
         cursor = self.db.cnxn.cursor()
-        return [row.column_name for row in cursor.primaryKeys(self.name)]
+        pkeys = cursor.primaryKeys(table=self.name, catalog=self.cat,
+                                   schema=self.schema)
+        return [row.column_name for row in pkeys]
 
     def get_grid_columns(self):
         indexes = self.get_indexes()
@@ -413,10 +418,13 @@ class Table:
 
 
     def make_order_by(self, selects):
-        primary_key = self.get_primary_key()
+        pkey = self.get_primary_key()
 
         order_by = "order by "
         sort_fields = self.get_sort_fields(selects)
+
+        if (len(pkey) == 0 and len(sort_fields) == 0):
+            return ""
 
         for sort in sort_fields.values():
             if self.db.system == 'mysql':
@@ -426,7 +434,7 @@ class Table:
             elif self.db.system == 'sqlite':
                 order_by += f"{sort.field} is null, {sort.field} {sort.order}, "
         
-        for field in primary_key:
+        for field in pkey:
             order_by += f"{self.name}.{field}, "
 
         order_by = order_by[0:-2]
@@ -795,7 +803,9 @@ class Table:
         foreign_keys = Dict()
         keys = {}
 
-        for row in cursor.foreignKeys(foreignTable=self.name):
+        for row in cursor.foreignKeys(foreignTable=self.name,
+                                      foreignCatalog=self.cat,
+                                      foreignSchema=self.schema):
             name = row.fk_name
             if name not in keys:
                 keys[name] = Dict({
@@ -823,7 +833,12 @@ class Table:
         pkey = self.get_primary_key()
         indexes = self.get_indexes()
         cursor = self.db.cnxn.cursor()
-        for col in cursor.columns(table=self.name):
+        for col in cursor.columns(table=self.name, catalog=self.cat,
+                                  schema=self.schema):
+            colnames = [column[0] for column in col.cursor_description]
+            col = Dict(zip(colnames, col))
+            if ('column_size' in col or 'display_size' in col):
+                col.column_size = col.get('column_size', col.display_size)
             cname = col.column_name
             type_ = self.db.expr.to_urd_type(col.type_name)
             
@@ -848,7 +863,7 @@ class Table:
             elif cname in foreign_keys:
                 element = 'select'
                 options = []
-            elif type_ == 'binary' or (type_ == 'string' and (col.display_size > 255)):
+            elif type_ == 'binary' or (type_ == 'string' and (col.column_size > 255)):
                 element = "textarea"
             else:
                 element = "input[type=text]"
@@ -862,9 +877,9 @@ class Table:
                 'description': None # todo
             })
 
-            if type_ not in ["boolean", "date"]:
-                urd_col.size = col.display_size
-            if col.auto_increment:
+            if 'column_size' in col:
+                urd_col.size = col.column_size
+            if col.get('auto_increment', None):
                 urd_col.extra = "auto_increment"
             if element == "select" and len(options):
                 urd_col.options = options
@@ -882,7 +897,7 @@ class Table:
 
                 if 'view' in urd_col:
                     urd_col.options = self.get_options(urd_col)
-            if (type_ == 'integer' and cname == pkey[-1] and cname not in foreign_keys):
+            if (type_ == 'integer' and len(pkey) and cname == pkey[-1] and cname not in foreign_keys):
                 urd_col.extra = "auto_increment"
             
             if col.column_def and not col.auto_increment:
@@ -955,7 +970,8 @@ class Table:
         cursor = self.db.cnxn.cursor()
         indexes = Dict()
 
-        for row in cursor.statistics(self.name):
+        for row in cursor.statistics(table=self.name, catalog=self.cat,
+                                     schema=self.schema):
             name = row.index_name
 
             if name not in indexes:
@@ -973,7 +989,8 @@ class Table:
         cursor = self.db.cnxn.cursor()
         relations = Dict()
 
-        for row in cursor.foreignKeys(table=self.name):
+        for row in cursor.foreignKeys(table=self.name, catalog=self.cat,
+                                      schema=self.schema):
             name = row.fk_name
             if name not in relations:
                 relations[name] = Dict({

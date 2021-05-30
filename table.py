@@ -170,12 +170,28 @@ class Table:
 
         return result
 
-    def get_display_values(self, selects, join, order):
+    def get_rowcount(self):
+        conds = self.get_conds()
+        join = self.get_join()
+
+        sql  = "select count(*)\n"
+        sql += f"from {self.schema or self.cat}.{self.name}\n"
+        sql += join + "\n"
+        sql += "" if not conds else f"where {conds}\n"
+
+        print('rowcount', sql)
+        print('params:', self.params)
+        cursor = self.db.cnxn.cursor()
+        count = cursor.execute(sql, self.params).fetchval()
+
+        return count
+
+    def get_display_values(self, selects, order):
         for key, value in selects.items():
             selects[key] = value + ' as ' + key
         
         select = ', '.join(selects.values())
-
+        join = self.get_join()
         conds = self.get_conds()
         params = self.params
 
@@ -187,7 +203,7 @@ class Table:
         sql+= order
 
         cursor = self.db.cnxn.cursor()
-        self.count = cursor.execute(sql, params).rowcount
+        cursor.execute(sql, params)
         cursor.skip(self.offset)
         rows = cursor.fetchmany(self.limit)
 
@@ -340,7 +356,7 @@ class Table:
         data = Dict({
             'name': self.name,
             'records': recs,
-            'count_records': self.count,
+            'count_records': self.get_rowcount(),
             'fields': fields,
             'grid': {
                 'columns': grid.columns,

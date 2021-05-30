@@ -9,13 +9,14 @@ class Table:
         self.name = tbl_name
         self.cat = self.db.cat
         self.schema = self.db.schema
-        self.label = tbl_name # todo
+        self.label = tbl_name #TODO
         self.offset = 0
         self.limit = 30
         self.conditions = []
         self.params = []
         self.client_conditions = []
         self.user_filtered = False
+        self.join = None
 
     def get_view(self):
         if not hasattr(self, 'view'):
@@ -46,7 +47,7 @@ class Table:
 
         return self.type
 
-        # todo: Flere sjekker, særlig hvis ikke urd-struktur
+        #TODO: Flere sjekker, særlig hvis ikke urd-struktur
 
     
     def get_db_table(self, base, table):
@@ -140,8 +141,8 @@ class Table:
         return result
 
 
-    def get_values(self, selects, join, order):
-        # todo: hent join selv, og kanskje flere
+    def get_values(self, selects, order):
+        #TODO: hent join selv, og kanskje flere
         cols = []
         fields = self.get_fields()
         for key in selects.keys():
@@ -149,6 +150,7 @@ class Table:
                 cols.append(self.name + '.' + key)
 
         select = ', '.join(cols)
+        join = self.get_join()
         cond = self.get_conds()
         params = self.params
 
@@ -207,7 +209,7 @@ class Table:
         cursor.skip(self.offset)
         rows = cursor.fetchmany(self.limit)
 
-        # todo: Vurder å legge det under til en funksjon
+        #TODO: Vurder å legge det under til en funksjon
         result = []
         colnames = [column[0] for column in cursor.description]
         for row in rows:
@@ -231,7 +233,7 @@ class Table:
             for key, field in self.get_fields().items():
                 # Don't show hdden columns
                 if field.name[0:1] == '_': continue
-                # todo: Don't show autoinc columns
+                #TODO: Don't show autoinc columns
                 columns.append(key)
                 if len(columns) == 5: break
         
@@ -259,9 +261,9 @@ class Table:
 
     def get_grid(self):
         selects = {} # dict of select expressions
-            # todo: Behøver selects å være dict? Kan det ikke være list? Det forenkler vel koden litt.
+            #TODO: Behøver selects å være dict? Kan det ikke være list? Det forenkler vel koden litt.
         
-        primary_key = self.get_primary_key()
+        pkey = self.get_primary_key()
         foreign_keys = self.get_fkeys()
         fields = self.get_fields()
 
@@ -271,7 +273,7 @@ class Table:
             'summation_columns': self.get_summation_columns()
         })
 
-        for col in primary_key:
+        for col in pkey:
             selects[col] = self.name + '.' + col
 
         for alias in grid.columns:
@@ -322,17 +324,14 @@ class Table:
                 self.add_cond(expr, "=", val)
 
 
-        # todo: Make select to get disabled status for actions
-
-        join = self.get_join()
-
-        # todo: Find selected index
+        #TODO: Make select to get disabled status for actions
+        #TODO: Find selected index
 
         order_by = self.make_order_by(selects)
 
 
-        display_values = self.get_display_values(selects, join, order_by)
-        values = self.get_values(selects, join, order_by)
+        display_values = self.get_display_values(selects, order_by)
+        values = self.get_values(selects, order_by)
 
         recs = []
         for row in display_values:
@@ -340,16 +339,16 @@ class Table:
         
         for index, row in enumerate(values):
             recs[index]['values'] = row
-            recs[index]['primary_key'] = {key: row[key] for key in primary_key}
-        # todo: row formats
+            recs[index]['primary_key'] = {key: row[key] for key in pkey}
+        #TODO: row formats
 
-        sums = self.get_sums(join)
+        sums = self.get_sums()
 
-        # todo: Don't let fields be reference to fields
-        # todo: Burde ikke være nødvendig
+        #TODO: Don't let fields be reference to fields
+        #TODO: Burde ikke være nødvendig
         fields = json.loads(json.dumps(fields))
 
-        # todo: replace field.name with field.alias
+        #TODO: replace field.name with field.alias
 
         form = self.get_form()
 
@@ -363,28 +362,28 @@ class Table:
                 'sums': sums,
                 'sort_columns': grid.sort_columns
             },
-            'form': { # todo:  kun ett attributt
+            'form': { #TODO:  kun ett attributt
                 'items': None if 'items' not in form else form['items']
             },
-            'permission': { # todo: hent fra funksjon
+            'permission': { #TODO: hent fra funksjon
                 'view': 1,
                 'add': 1,
                 'edit': 1,
                 'delete': 1
             },
             'type': self.get_type(),
-            'primary_key': primary_key,
+            'primary_key': pkey,
             'foreign_keys': foreign_keys,
             'label': self.db.get_label(self.name),
             'actions': getattr(self, 'actions', []),
             'limit': self.limit,
             'offset': self.offset,
-            'selection': 0, # todo row_idx
-            'conditions': [], # todo: self.client_conditions,
-            'date_as_string': {'separator': '-'}, # todo wtf
-            'expansion_column': None, # todo
+            'selection': 0, #TODO: row_idx
+            'conditions': [], #TODO: self.client_conditions,
+            'date_as_string': {'separator': '-'}, #TODO wtf
+            'expansion_column': None, #TODO
             'relations': self.get_ref_relations(),
-            'saved_filters': [] # todo: self.get_saved_filters()
+            'saved_filters': [] #TODO: self.get_saved_filters()
         })
 
         return data
@@ -401,6 +400,8 @@ class Table:
         return fk
 
     def get_join(self):
+        if self.join is not None:
+            return self.join
         joins = []
         foreign_keys = self.get_fkeys()
         fields = self.get_fields()
@@ -416,7 +417,10 @@ class Table:
 
             joins.append(f"left join {table.name} {key} on {on_list}")
 
-        return "\n".join(joins)
+        self.join = "\n".join(joins)
+
+        return self.join
+
 
     def get_sort_fields(self, selects):
         sort_fields = Dict()
@@ -460,10 +464,11 @@ class Table:
 
         return order_by
 
-    def get_sums(self, join):
+    def get_sums(self):
         sums = []
 
         cols = self.get_summation_columns()
+        join = self.get_join()
         cond = self.get_conds()
         params = self.params
 
@@ -485,13 +490,9 @@ class Table:
 
         return sums
 
-    def get_form(self):
-
+    def get_field_groups(self, fields):
+        """Group fields according to first part of field name"""
         col_groups = Dict()
-        form = Dict({'items': {}}) # todo: vurder 'subitems'
-        fields = self.get_fields()
-
-        # Group fields according to first part of field name
         for field in fields.values():
             # Don't add column to form if it's part of primary key but not shown in grid
             if (field.name in self.get_primary_key() and
@@ -510,16 +511,25 @@ class Table:
 
             if group not in col_groups:
                 col_groups[group] = []
-            
-            col_groups[group].append(field.name)
 
-        for group_name, col_names in col_groups.items():
+            col_groups[group].append(field.name)
+        
+        return col_groups
+
+    def get_form(self):
+
+        form = Dict({'items': {}}) #TODO: vurder 'subitems'
+        fields = self.get_fields()
+
+        field_groups = self.get_field_groups(fields)
+
+        for group_name, col_names in field_groups.items():
             if len(col_names) == 1:
                 label = self.db.get_label(col_names[0])
                 form['items'][label] = col_names[0]
             else:
                 inline = False
-                colnames = Dict()  # todo: tullete med colnames og col_names
+                colnames = Dict()  #TODO: tullete med colnames og col_names
                 sum_size = 0
                 for colname in col_names:
                     # removes group name prefix from column name and use the rest as label
@@ -543,18 +553,18 @@ class Table:
                 
                 form['items'][group_label] = Dict({
                     'inline': inline,
-                    'items': colnames  # todo vurder 'subitems'
+                    'items': colnames  #TODO vurder 'subitems'
                 })
 
         # Add relations to form
         relations = self.get_relations()
 
         for alias, rel in relations.items():
-            # todo: Finn faktisk database det lenkes fra
+            #TODO: Finn faktisk database det lenkes fra
             rel_table = Table(self.db, rel.table)
 
             # Find indexes that can be used to get relation
-            # todo: Har jeg ikke gjort liknende lenger opp?
+            #TODO: Har jeg ikke gjort liknende lenger opp?
             # Se "Find if there exists an index to find local key"
             index_exist = False
             s = slice(0, len(rel.foreign))
@@ -565,6 +575,7 @@ class Table:
 
             if index_exist and not rel.get('hidden', False):
                 if rel.foreign == rel_table.get_primary_key():
+                    # if the relation table extends active table
                     rest = rel_table.name.replace(self.name+"_", "")
                     label = self.db.get_label(rest)
                 else:
@@ -580,7 +591,7 @@ class Table:
         return self.relations[alias]
 
     def get_relations(self): 
-        # todo: Skal filtreres på permission
+        #TODO: Skal filtreres på permission
         if not hasattr(self, 'relations'):
             self.init_relations()
 
@@ -590,7 +601,7 @@ class Table:
         """ Interim function needed to support old schema """
         relations = {}
         for fk in self.get_relations().values():
-            # fk_table = Table(self.db, fk.table) # todo: egentlig db
+            # fk_table = Table(self.db, fk.table) #TODO: egentlig db
 
             # alias = fk.foreign[-1]
             # if alias in foreign_keys:
@@ -600,14 +611,14 @@ class Table:
             relations[fk.name] = Dict({
                 'table': fk.table,
                 'foreign_key': fk.foreign[-1],
-                # 'label': self.db.get_label(fk.table) # todo: Finn bedre løsning
+                # 'label': self.db.get_label(fk.table) #TODO: Finn bedre løsning
             })
 
         return relations
 
     def get_user_permission(self, tbl_name):
-        # todo: Når behøver jeg å angi tbl_name?
-        user = 'admin' # todo: Autentisering
+        #TODO: Når behøver jeg å angi tbl_name?
+        user = 'admin' #TODO: Autentisering
 
         sql = """
         --sql
@@ -643,17 +654,17 @@ class Table:
             if row.delete_: permission.delete = True
             if row.admin  : permission.admin  = True
 
-        # todo: Kode hvis ingen permission er gitt. Merkelig
+        #TODO: Kode hvis ingen permission er gitt. Merkelig
 
         if self.db.schema == 'urd':
-            admin_schemas = self.db.get_user_admin_schemas() # todo
+            admin_schemas = self.db.get_user_admin_schemas() #TODO
 
             if len(admin_schemas):
-                # todo: definer listen med navn som beskriver hva dette er
+                #TODO: definer listen med navn som beskriver hva dette er
                 if self.name in ['filter', 'format', 'role', 'role_permission', 'user_role']:
                     self.add_cond(self.name + ".schema_ in ('" + "','".join(admin_schemas) + "')")
 
-                # todo: Merkelig å gjenta nesten samme lista
+                #TODO: Merkelig å gjenta nesten samme lista
                 #       Må iallfall kunne forenkle dette
                 if self.name in ['filter', 'format', 'role', 'role_permission', 'user_', 'user_role']:
                     permission.view = 1
@@ -694,7 +705,7 @@ class Table:
             self.conditions.append(f"{expr} {operator} ?")
             self.params.append(value)
             self.client_conditions.append(f"{expr} {operator} {value}")
-        # todo: Handle "in" operator
+        #TODO: Handle "in" operator
 
     def get_conds(self):
         return " and ".join(self.conditions)
@@ -718,11 +729,11 @@ class Table:
         
         return count
 
-    def get_filter(self): # todo
+    def get_filter(self): #TODO
         return ""
 
     def get_select(self, req):
-        # todo: Kan jeg ikke hente noe fra backend istenfor å få alt servert fra frontend? Altfor mange parametre!
+        #TODO: Kan jeg ikke hente noe fra backend istenfor å få alt servert fra frontend? Altfor mange parametre!
         search = None if not 'q' in req else req.q.replace("*", "%")
 
         if 'key' in req:
@@ -788,7 +799,7 @@ class Table:
                 if rec['values']:
                     res = record.update(rec['values'])
 
-            # todo: Log to log table
+            #TODO: Log to log table
 
             record_vals = record.get_values()
 
@@ -890,7 +901,7 @@ class Table:
                 'element': element,
                 'nullable': col.nullable == True,
                 'label': self.db.get_label(cname),
-                'description': None # todo
+                'description': None #TODO
             })
 
             if 'column_size' in col:
@@ -924,7 +935,7 @@ class Table:
                 default = def_vals[0]
                 default = default.replace("'", "")
 
-                # todo: Sjekk om jeg trenger å endre current_timestamp()
+                #TODO: Sjekk om jeg trenger å endre current_timestamp()
 
                 urd_col.default = self.db.expr.replace_vars(default)
 
@@ -944,7 +955,7 @@ class Table:
         self.fields = fields
 
     def init_view(self):
-        # todo: Hvordan kan filter defineres i databasen?
+        #TODO: Hvordan kan filter defineres i databasen?
         #       Og når er det behov for å gjøre det?
         tbl_filter = self.get_filter()
         if tbl_filter:

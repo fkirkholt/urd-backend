@@ -31,38 +31,37 @@ class Database:
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
 
-        params = ['admin'] # todo: Autentisering
+        params = ['admin'] #TODO: Autentisering
 
-        q = """ 
+        sql = """
         select count(*) from role_permission
         where role_ in (select role_ from user_role where user_ = ?)
         and admin = true
         """
 
         if self.schema == 'urd':
-            q += " and (schema_ = '*' or schema_ = ?)"
+            sql += " and (schema_ = '*' or schema_ = ?)"
             params.append(self.schema)
         
         cursor = self.urd.cursor()
-        is_admin = cursor.execute(q, params).fetchval()
+        is_admin = cursor.execute(sql, params).fetchval()
 
         self.user = {'admin': is_admin}
 
         info = {
+            "branch": branch,
             "base": {
                 "name": self.name, 
                 "schema": self.schema,
                 "label": self.label,
-                # todo: branch should not be connected to base
-                "branch": branch,
                 "tables": self.get_tables(),
-                "reports": {}, # todo
+                "reports": {}, #TODO
                 "contents": self.get_contents(),
                 #'contents': self.contents
             },
             "user": {
-                "name": 'Admin', # todo: Autentisering
-                "id": 'admin', # todo: Autentisering
+                "name": 'Admin', #TODO: Autentisering
+                "id": 'admin', #TODO: Autentisering
                 "admin": is_admin
             }
         }
@@ -70,7 +69,7 @@ class Database:
         return info
 
     def get_user_admin_schemas(self):
-        user = 'admin' # todo: Autentisering
+        user = 'admin' #TODO: Autentisering
 
         sql = """
         select schema_
@@ -99,7 +98,7 @@ class Database:
         return {row.table_: row.view_ for row in rows}
 
     def filter_tables(self):
-        user = 'admin' # todo: autentisering
+        user = 'admin' #TODO: autentisering
 
         rights = self.view_rights(user)
 
@@ -121,23 +120,25 @@ class Database:
         for key, table in self.tables.items():
             if 'label' not in table:
                 table['label'] = table['name'].replace("_", " ").capitalize()
-            
+
             # Don't show tables the user doesn't have access to
             view = False
             if key in rights:
                 view = rights[key]
             elif '*' in rights:
                 view = rights['*']
-            elif self.schema == 'urd' and self.user['admin'] and key in ['filter', 'format', 'role', 'role_permission', 'user_']:
+
+            # Allow admins access to some tables in urd
+            urd_tables = ['filter', 'format', 'role', 'role_permission', 'user_']
+            #TODO: Prøv å sjekke på navn på urd-tabellen, slik registrert i config
+            if self.schema == 'urd' and self.user['admin'] and key in urd_tables:
                 view = True
             
             if not view: continue
 
-            # todo: Don't exposer filter to client
-
             if key in filters:
                 table['default_filter'] = filters[key]
-                # todo: Replace variables
+                #TODO: Replace variables
 
             tables[key] = table
         
@@ -152,13 +153,13 @@ class Database:
         for tbl in rows:
             tbl_name = tbl.table_name
             pkeys = cursor.primaryKeys(table=tbl_name, catalog=self.cat, schema=self.schema)
-            pk = [row.column_name for row in pkeys]
+            pkey = [row.column_name for row in pkeys]
 
             table = Dict({
                 'name': tbl_name,
                 'icon': None,
                 'label': self.get_label(tbl_name),
-                'primary_key': pk,
+                'primary_key': pkey,
                 'description': tbl.remarks,
                 'hidden': False
             })
@@ -212,13 +213,13 @@ class Database:
         if table.type == "reference":
             return False
         
-        for fk in table.foreign_keys.values():
-            if fk.table not in self.tables: continue
+        for fkey in table.foreign_keys.values():
+            if fkey.table not in self.tables: continue
 
             # Not top level if has foreign keys to other table
             # that is not a reference table
-            if fk.table != table.name:
-                fk_table = self.tables[fk.table]
+            if fkey.table != table.name:
+                fk_table = self.tables[fkey.table]
                 if fk_table.type != "reference":
                     return False
         
@@ -260,7 +261,7 @@ class Database:
 
     def get_tbl_groups(self):
         tbl_groups = Dict()
-        terms = Dict() # todo: lag self.terms
+        terms = Dict() #TODO: lag self.terms
         for tbl_key, table in self.tables.items():
             group = tbl_key.split("_")[0]
 
@@ -290,10 +291,10 @@ class Database:
         sub_tables = Dict()
         for tbl_key, table in self.tables.items():
 
-            # todo: Legg til get_table_type isteden
+            #TODO: Legg til get_table_type isteden
             if len(table.primary_key):
                 last_pk_col = table.primary_key[-1]
-                if last_pk_col in table.foreign_keys: # todo extends
+                if last_pk_col in table.foreign_keys: #TODO extends
                     table.type = "xref"
 
             for colname in table.primary_key:
@@ -312,13 +313,13 @@ class Database:
         return sub_tables
 
     def get_label(self, term):
-        terms = Dict() # todo
+        terms = Dict() #TODO
         if term in terms:
             label = terms[term].label
         else:
             label = term.replace("_", " ")
         
-        norwegian_chars = True # todo
+        norwegian_chars = True #TODO
         if norwegian_chars:
             label = label.replace("ae", "æ")
             label = label.replace("oe", "ø")
@@ -407,7 +408,7 @@ class Database:
                 keys[name] = Dict({
                     'name': name,
                     'table': row.pktable_name,
-                    # todo: Dette er "databasen"
+                    #TODO: Dette er "databasen"
                     'schema': row.pktable_cat,
                     'local': [],
                     'foreign': []
@@ -415,11 +416,11 @@ class Database:
             keys[name].local.append(row.fkcolumn_name.lower())
             keys[name].foreign.append(row.pkcolumn_name.lower())
 
-        for fk in keys.values():
-            alias = fk.local[-1]
+        for fkey in keys.values():
+            alias = fkey.local[-1]
             if alias in foreign_keys:
                 alias = alias + "_2"
-            foreign_keys[alias] = fk
+            foreign_keys[alias] = fkey
 
         return foreign_keys
 
@@ -435,7 +436,7 @@ class Database:
                 keys[name] = Dict({
                     'name': name,
                     'table': row.fktable_name,
-                    # todo: Dette er "databasen"
+                    #TODO: Dette er "databasen"
                     'schema': row.fktable_cat,
                     'local': [],
                     'foreign': []
@@ -443,21 +444,21 @@ class Database:
             keys[name].local.append(row.pkcolumn_name)
             keys[name].foreign.append(row.fkcolumn_name)
 
-        for fk in keys.values():
-            alias = fk.foreign[-1]
+        for fkey in keys.values():
+            alias = fkey.foreign[-1]
             if alias in foreign_keys:
                 alias = alias + "_2"
-            foreign_keys[alias] = fk
+            foreign_keys[alias] = fkey
 
-            relations[fk.name] = Dict({
-                'table': fk.table,
+            relations[fkey.name] = Dict({
+                'table': fkey.table,
                 'foreign_key': alias,
                 'label': "todo"
             })
 
         return relations
 
-    def get_reports(self): # todo
+    def get_reports(self): #TODO
         return {}
 
     def query(self, sql, params=[]):

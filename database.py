@@ -1,5 +1,6 @@
 import pyodbc
 import os
+import json
 from schema import Schema
 from config import config
 from expression import Expression
@@ -24,6 +25,8 @@ class Database:
         else:
             self.cat = None
         self.system = base.system
+        self.cache = None if not base.cache else Dict(json.loads(base.cache))
+        self.use_cache = base.use_cache
         self.expr   = Expression(self.system)
 
     def get_info(self):
@@ -145,6 +148,9 @@ class Database:
         return tables
 
     def get_tables(self):
+        if (self.use_cache and self.cache):
+            self.tables = self.cache
+            return self.cache
         cursor = self.cnxn.cursor()
         tables = Dict()
 
@@ -174,6 +180,22 @@ class Database:
             # table.relations = self.get_relations(tbl_name)
 
             tables[tbl_name] = table
+
+        for tbl in tables.values():
+            for key in tbl.foreign_keys.values():
+                table = tables[key.table]
+                table.relations[key.name] = Dict({
+                    "table": tbl.name,
+                    "foreign_key": key.name,
+                    "label": self.get_label(tbl.name) #TODO: Fix
+                })
+
+        if (self.use_cache):
+            cursor = self.urd.cursor()
+            self.cache = tables
+            sql = "update database_ set cache = ?\n"
+            sql+= "where name = ?"
+            result = cursor.execute(sql, json.dumps(tables), self.name).commit()
 
         self.tables = tables
         return tables
@@ -402,7 +424,9 @@ class Database:
         foreign_keys = {}
         keys = {}
 
-        for row in cursor.foreignKeys(foreignTable=tbl_name):
+        for row in cursor.foreignKeys(foreignTable=tbl_name,
+                                      foreignCatalog=self.cat,
+                                      foreignSchema=self.schema):
             name = row.fk_name
             if name not in keys:
                 keys[name] = Dict({

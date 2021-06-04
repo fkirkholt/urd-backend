@@ -9,6 +9,7 @@ from addict import Dict
 class Database:
     def __init__(self, db_name):
         cnxnstr = config['db']['connection_string']
+        pyodbc.lowercase = True
         urd_cnxn = pyodbc.connect(cnxnstr)
         cursor = urd_cnxn.cursor()
         cursor.execute("select * from database_ where name = ? or alias = ?", db_name, db_name)
@@ -158,21 +159,19 @@ class Database:
         
         for tbl in rows:
             tbl_name = tbl.table_name
-            pkeys = cursor.primaryKeys(table=tbl_name, catalog=self.cat, schema=self.schema)
-            pkey = [row.column_name for row in pkeys]
 
             table = Dict({
                 'name': tbl_name,
                 'icon': None,
                 'label': self.get_label(tbl_name),
-                'primary_key': pkey,
+                'primary_key': self.get_pkey(tbl_name),
                 'description': tbl.remarks,
                 'hidden': False
             })
 
             table.indexes = self.get_indexes(tbl_name)
 
-            table.fields = self.get_fields(table)
+            table.fields = self.get_columns(tbl_name)
             table.type = self.get_table_type(table)
 
             table.foreign_keys = self.get_foreign_keys(tbl_name)
@@ -183,12 +182,13 @@ class Database:
 
         for tbl in tables.values():
             for key in tbl.foreign_keys.values():
-                table = tables[key.table]
-                table.relations[key.name] = Dict({
-                    "table": tbl.name,
-                    "foreign_key": key.name,
-                    "label": self.get_label(tbl.name) #TODO: Fix
-                })
+                if key.table in tables: # fkey may refer to other schema
+                    table = tables[key.table]
+                    table.relations[key.name] = Dict({
+                        "table": tbl.name,
+                        "foreign_key": key.name,
+                        "label": self.get_label(tbl.name) #TODO: Fix
+                    })
 
         if (self.use_cache):
             cursor = self.urd.cursor()
@@ -200,22 +200,6 @@ class Database:
         self.tables = tables
         return tables
 
-    def get_fields(self, table):
-        fields = Dict()
-        cursor = self.cnxn.cursor()
-        for col in cursor.columns(table=table.name, catalog=self.cat, schema=self.schema):
-            cname = col.column_name
-            type_ = self.expr.to_urd_type(col.type_name)
-            urd_col = Dict({
-                'name': cname,
-                'datatype': type_
-            })
-
-            fields[cname] = urd_col
-        
-        return fields
-
-            
     def get_table_type(self, table):
         index_cols = []
         for index in table.indexes.values():
@@ -403,50 +387,28 @@ class Database:
         return contents
 
     def get_indexes(self, tbl_name):
-        cursor = self.cnxn.cursor()
-        indexes = Dict()
-        for row in cursor.statistics(tbl_name):
-            name = row.index_name
+        if not hasattr(self, 'indexes'):
+            self.init_indexes()
 
-            if name not in indexes:
-                indexes[name] = Dict({
-                    'name': name,
-                    'unique': not row.non_unique,
-                    'columns': []
-                })
+        return self.indexes[tbl_name]
 
-            indexes[name].columns.append(row.column_name)
+    def get_columns(self, tbl_name):
+        if not hasattr(self, 'columns'):
+            self.init_columns()
 
-        return indexes
+        return self.columns[tbl_name]
+
+    def get_pkey(self, tbl_name):
+        if not hasattr(self, 'pkeys'):
+            self. init_pkeys()
+
+        return self.pkeys[tbl_name]
 
     def get_foreign_keys(self, tbl_name):
-        cursor = self.cnxn.cursor()
-        foreign_keys = {}
-        keys = {}
+        if not hasattr(self, 'fkeys'):
+            self.init_foreign_keys()
 
-        for row in cursor.foreignKeys(foreignTable=tbl_name,
-                                      foreignCatalog=self.cat,
-                                      foreignSchema=self.schema):
-            name = row.fk_name
-            if name not in keys:
-                keys[name] = Dict({
-                    'name': name,
-                    'table': row.pktable_name,
-                    #TODO: Dette er "databasen"
-                    'schema': row.pktable_cat,
-                    'local': [],
-                    'foreign': []
-                })
-            keys[name].local.append(row.fkcolumn_name.lower())
-            keys[name].foreign.append(row.pkcolumn_name.lower())
-
-        for fkey in keys.values():
-            alias = fkey.local[-1]
-            if alias in foreign_keys:
-                alias = alias + "_2"
-            foreign_keys[alias] = fkey
-
-        return foreign_keys
+        return self.fkeys[tbl_name]
 
     def get_relations(self, tbl_name):
         cursor = self.cnxn.cursor()
@@ -489,3 +451,108 @@ class Database:
         cursor = self.cnxn.cursor()
         return cursor.execute(sql, params)
 
+    def init_indexes(self):
+        cursor = self.cnxn.cursor()
+        indexes = Dict()
+        if self.system in ["oracle"]:
+            sql = self.expr.indexes()
+            for row in cursor.execute(sql, self.schema):
+                name = row.index_name
+
+                indexes[row.table_name][name].name = name
+                indexes[row.table_name][name].unique = not row.non_unique
+                if not 'columns' in indexes[row.table_name][name]:
+                    indexes[row.table_name][name].columns = []
+                indexes[row.table_name][name].columns.append(row.column_name)
+        else:
+            for tbl in cursor.tables(catalog=self.cat, schema=self.schema):
+                for row in cursor.statistics(tbl.table_name):
+                    name = row.index_name
+                    indexes[tbl.table_name][name].name = name
+                    indexes[tbl.table_name][name].unique = not row.non_unique
+                    if not 'columns' in indexes[tbl.table_name][name]:
+                        indexes[tbl.table_name][name].columns = []
+                    indexes[tbl.table_name][name].columns.append(row.column_name)
+
+        self.indexes = indexes
+
+    def init_columns(self):
+        cursor = self.cnxn.cursor()
+        columns = Dict()
+        if self.system in ["oracle"]:
+            sql = self.expr.columns()
+            for col in cursor.execute(sql, self.schema, None):
+                cname = col.column_name
+                type_ = self.expr.to_urd_type(col.type_name)
+                urd_col = Dict({
+                    'name': cname,
+                    'datatype': type_
+                })
+
+                columns[col.table_name][cname] = urd_col
+        else:
+            rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+            for row in rows:
+                cols = cursor.columns(table=row.table_name, catalog=self.cat, schema=self.schema).fetchall()
+                for col in cols:
+                    cname = col.column_name
+                    type_ = self.expr.to_urd_type(col.type_name)
+                    urd_col = Dict({
+                        'name': cname,
+                        'datatype': type_
+                    })
+
+                    columns[row.table_name][cname] = urd_col
+
+        self.columns = columns
+
+    def init_pkeys(self):
+        cursor = self.cnxn.cursor()
+        pkeys = Dict()
+        if self.system in ["oracle"]:
+            sql = self.expr.pkeys()
+            rows = cursor.execute(sql, self.schema, None)
+            for row in rows:
+                if row.table_name not in pkeys:
+                    pkeys[row.table_name] = []
+                pkeys[row.table_name].append(row.column_name)
+        else:
+           tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+           for tbl in tbls:
+               rows = cursor.primaryKeys(table=tbl_name, catalog=self.cat, schema=self.schema)
+               pkey = [row.column_name for row in rows]
+               pkeys[tbl.table_name] = pkey
+
+        self.pkeys = pkeys
+
+    def init_foreign_keys(self):
+        cursor = self.cnxn.cursor()
+        fkeys = Dict()
+        foreign_keys = Dict()
+        if self.system in ["oracle"]:
+            sql = self.expr.fkeys()
+            for row in cursor.execute(sql, self.schema):
+                name = row.fk_name
+                fkeys[row.fktable_name][name].name = row.fk_name
+                fkeys[row.fktable_name][name].table = row.pktable_name
+                fkeys[row.fktable_name][name].schema = row.pktable_cat #TODO: merkelig
+                if not 'local' in fkeys[row.fktable_name][name]:
+                    fkeys[row.fktable_name][name].local = []
+                    fkeys[row.fktable_name][name].foreign = []
+                fkeys[row.fktable_name][name].local.append(row.fkcolumn_name.lower())
+                fkeys[row.fktable_name][name].foreign.append(row.pkcolumn_name.lower())
+
+            for tbl_name, keys in fkeys.items():
+                for fkey in keys.values():
+                    alias = fkey.local[-1]
+                    if alias in foreign_keys[tbl_name]:
+                        alias = alias + "_2"
+                    foreign_keys[tbl_name][alias] = fkey
+        else:
+            from table import Table
+            rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+            for row in rows:
+                tbl = Table(self, row.table_name)
+                foreign_keys[row.table_name] = tbl.get_foreign_keys()
+
+        self.fkeys = foreign_keys

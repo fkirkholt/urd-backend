@@ -181,8 +181,6 @@ class Table:
         sql += join + "\n"
         sql += "" if not conds else f"where {conds}\n"
 
-        print('rowcount', sql)
-        print('params:', self.params)
         cursor = self.db.cnxn.cursor()
         count = cursor.execute(sql, self.params).fetchval()
 
@@ -221,7 +219,7 @@ class Table:
         cursor = self.db.cnxn.cursor()
         pkeys = cursor.primaryKeys(table=self.name, catalog=self.cat,
                                    schema=self.schema)
-        return [row.column_name for row in pkeys]
+        return [row.column_name.lower() for row in pkeys]
 
     def get_grid_columns(self):
         indexes = self.get_indexes()
@@ -680,9 +678,7 @@ class Table:
     def set_search_cond(self, query):
         filters = query.split(" AND ")
         for filter in filters:
-            print('filter', filter)
             parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|IS NULL|IS NOT NULL)\s*", filter, 2)
-            print('parts', parts)
             field = parts[0]
             if "." not in field:
                 field = self.name + "." + field
@@ -860,8 +856,13 @@ class Table:
         pkey = self.get_primary_key()
         indexes = self.get_indexes()
         cursor = self.db.cnxn.cursor()
-        for col in cursor.columns(table=self.name, catalog=self.cat,
-                                  schema=self.schema):
+        if self.db.system == 'oracle':
+            sql = self.db.expr.columns()
+            cols = cursor.execute(sql, self.db.schema, self.name).fetchall()
+        else:
+            cols = cursor.columns(table=self.name, catalog=self.cat,
+                                  schema=self.schema).fetchall()
+        for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
             if ('column_size' in col or 'display_size' in col):

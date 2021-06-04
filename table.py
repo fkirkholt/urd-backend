@@ -923,7 +923,7 @@ class Table:
                 for index in ref_tbl.get_indexes().values():
                     if index.columns != ref_pk and index.unique:
                         cols = [cname+"."+col for col in index.columns]
-                        urd_col.view = " || ".join(cols)
+                        urd_col.view = " || ', ' || ".join(cols)
                         break
 
                 if 'view' in urd_col:

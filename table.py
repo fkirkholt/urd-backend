@@ -572,12 +572,9 @@ class Table:
                     index_exist = True
 
             if index_exist and not rel.get('hidden', False):
-                if rel.foreign == rel_table.get_primary_key():
-                    # if the relation table extends active table
-                    rest = rel_table.name.replace(self.name+"_", "")
-                    label = self.db.get_label(rest)
-                else:
-                    label = self.db.get_label(rel_table.name)
+                label = rel_table.name.replace(self.name + '_', '')
+                label = label.replace('_' + self.name, '')
+                label = self.db.get_label(label).strip()
                 form['items'][label] = "relations." + alias
 
         return form

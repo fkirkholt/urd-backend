@@ -857,6 +857,7 @@ class Table:
         indexes = self.get_indexes()
         cursor = self.db.cnxn.cursor()
         if self.db.system == 'oracle':
+            # cursor.columns doesn't work for all types of oracle columns
             sql = self.db.expr.columns()
             cols = cursor.execute(sql, self.db.schema, self.name).fetchall()
         else:

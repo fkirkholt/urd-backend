@@ -519,7 +519,7 @@ class Database:
         else:
            tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
            for tbl in tbls:
-               rows = cursor.primaryKeys(table=tbl_name, catalog=self.cat, schema=self.schema)
+               rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
                pkey = [row.column_name for row in rows]
                pkeys[tbl.table_name] = pkey
 
@@ -553,6 +553,6 @@ class Database:
             rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
             for row in rows:
                 tbl = Table(self, row.table_name)
-                foreign_keys[row.table_name] = tbl.get_foreign_keys()
+                foreign_keys[row.table_name] = tbl.get_fkeys()
 
         self.fkeys = foreign_keys

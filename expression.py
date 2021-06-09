@@ -73,14 +73,16 @@ class Expression:
             else:
                 raise ValueError(f"Type {type_} not supported yet")
         elif self.platform == "oracle":
-            if type_ in ["char", "varchar2"]:
+            if type_ in ["char", "varchar2", "nvarchar2", "clob", "nclob"]:
                 return "string"
             elif type_ == "number":
                 return "integer"
             elif type_ in ["date", "timestamp", "timestamp(6)"]:
                 return "date"
-            elif type_ in ["decimal"]:
+            elif type_ in ["decimal", "float"]:
                 return "float"
+            elif type_ in ["blob"]:
+                return "binary"
             else:
                 raise ValueError(f"Type {type_} not supported yet")
         else:

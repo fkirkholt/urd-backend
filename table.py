@@ -85,7 +85,7 @@ class Table:
     def get_options(self, field, fields=None):
 
         fk = self.get_fkey(field.name)
-        cand_tbl = self.get_db_table(fk.base, fk.table)
+        cand_tbl = self.get_db_table(fk.base or fk.schema, fk.table)
 
         # List of fields
         kodefelter = [field.name + '.' + name for name in fk.foreign]
@@ -119,19 +119,26 @@ class Table:
         if not 'column_view' in field:
             field.column_view = field.view
 
+        # Count records
+        cursor = self.db.cnxn.cursor()
+
+        sql = "select count(*)\n"
+        sql+= f"from {self.schema or self.cat}.{cand_tbl.name} {field.name}\n"
+        sql+= condition
+
+        count = cursor.execute(sql).fetchval()
+
+        if (count > 200):
+            return False
+
         sql = "select " + value_field + " as value, "
         sql+= "(" + field.view + ") as label, "
         sql+= "(" + field.column_view + ") as coltext "
         sql+= "from " + cand_tbl.name + " " + field.name + "\n"
         sql+= condition + "\n" + order
+        print(sql)
 
-        cursor = self.db.cnxn.cursor()
-        count = cursor.execute(sql).rowcount
-
-        if (count > 200):
-            return False
-        
-        rows = cursor.fetchall()
+        rows = cursor.execute(sql).fetchall()
 
         result = []
         colnames = [column[0] for column in cursor.description]
@@ -407,13 +414,13 @@ class Table:
             if key not in fields:
                 continue
 
-            table = self.get_db_table(fk.base, fk.table)
+            table = self.get_db_table(fk.base or fk.schema, fk.table)
 
             # Get the ON statement in the join
             ons = [key+'.'+fk.foreign[idx] + " = " + self.name + "." + col for idx, col in enumerate(fk.local)]
             on_list = ' AND '.join(ons)
 
-            joins.append(f"left join {table.name} {key} on {on_list}")
+            joins.append(f"left join {self.schema or self.cat}.{table.name} {key} on {on_list}")
 
         self.join = "\n".join(joins)
 
@@ -712,8 +719,9 @@ class Table:
     def get_record_count(self, join=''):
         cond = self.get_conds()
         params = self.params
+        print('params', params)
         sql = "select count(*) \n"
-        sql+= f"  from {self.name} \n"
+        sql+= f"  from {self.schema or self.cat}.{self.name} \n"
         sql+= join + "\n"
         sql+= "" if not cond else "where " + cond
 

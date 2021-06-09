@@ -42,7 +42,7 @@ class Record:
         from table import Table
         relations = {}
         for key, rel in self.tbl.get_relations().items():
-            db = Database(rel.base)
+            db = Database(rel.base or rel.schema)
             tbl_rel = Table(db, rel.table)
 
             # todo: filtrate on highest level
@@ -53,8 +53,7 @@ class Record:
 
             # Add condition to fetch only rows that link to record
             for idx, col in enumerate(rel.foreign):
-                ref_key = rel.local[idx]
-
+                ref_key = rel.local[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
                 tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
 
@@ -88,11 +87,21 @@ class Record:
     def get_relation(self, alias: str):
         from table import Table
         rel = self.tbl.get_relation(alias)
-        db = Database(rel.base)
+        db = Database(rel.base or rel.schema)
         tbl_rel = Table(db, rel.table)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
         
         # todo: filter
+
+        # Don't get values for new records that's not saved
+        if hasattr(self, 'pk') and len(set(self.pk)):
+            rec_values = self.get_values()
+
+        # Add condition to fetch only rows that link to record
+        for idx, col in enumerate(rel.foreign):
+            ref_key = rel.local[idx].lower()
+            val = None if len(self.pk) == 0 else rec_values[ref_key]
+            tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
 
         relation = tbl_rel.get_grid()
 

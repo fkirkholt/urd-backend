@@ -12,7 +12,8 @@ class Database:
         pyodbc.lowercase = True
         urd_cnxn = pyodbc.connect(cnxnstr)
         cursor = urd_cnxn.cursor()
-        cursor.execute("select * from database_ where name = ? or alias = ?", db_name, db_name)
+        sql = "select * from database_ where lower(name) = ? or alias = ?"
+        cursor.execute(sql, db_name.lower(), db_name)
         base = cursor.fetchone()
         self.cnxn   = pyodbc.connect(base._connection_string)
         self.urd    = urd_cnxn
@@ -202,7 +203,7 @@ class Database:
             relations = self.get_relations(table.name)
             for rel in relations.values():
                 fkey = self.fkeys[rel.table][rel.foreign_key]
-                if 'update_rule' in fkey and fkey.update_rule in [RESTRICT, NO_ACTION]:
+                if 'delete_rule' in fkey and fkey.delete_rule in [RESTRICT, NO_ACTION]:
                     type_ = 'reference'
             if table.name in ["meta_term"]:
                 type_ = 'reference'

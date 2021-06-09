@@ -27,7 +27,7 @@ class Database:
             self.cat = None
         self.system = base.system
         self.cache = None if not base.cache else Dict(json.loads(base.cache))
-        self.use_cache = base.use_cache
+        self.use_cache = int(base.use_cache)
         self.expr   = Expression(self.system)
 
     def get_info(self):

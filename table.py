@@ -833,6 +833,8 @@ class Table:
                     'table': row.pktable_name,
                     'base': row.pktable_cat,
                     'schema': row.pktable_schem,
+                    'delete_rule': row.delete_rule,
+                    'update_rule': row.update_rule,
                     'local': [],
                     'foreign': []
                 })

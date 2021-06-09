@@ -190,17 +190,22 @@ class Database:
         return tables
 
     def get_table_type(self, table):
-        index_cols = []
-        for index in table.indexes.values():
-            if index.unique:
-                index_cols = index_cols + index.columns
+        CASCADE = 0
+        RESTRICT = 1
+        SET_NULL = 2
+        NO_ACTION = 3
+        SET_DEFAULT = 4
 
-        if len(set(index_cols)) == len(table.fields):
-            type_ = 'reference'
-        elif table.name[0:4] == "ref_" or table.name[:-4] == "_ref" or table.name[0:5] == "meta_":
-            type_ = "reference"
-        else:
-            type_ = "data"
+        type_ = 'data'
+
+        if self.urd_structure:
+            relations = self.get_relations(table.name)
+            for rel in relations.values():
+                fkey = self.fkeys[rel.table][rel.foreign_key]
+                if 'update_rule' in fkey and fkey.update_rule in [RESTRICT, NO_ACTION]:
+                    type_ = 'reference'
+            if table.name in ["meta_term"]:
+                type_ = 'reference'
 
         return type_
 

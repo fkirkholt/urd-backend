@@ -172,23 +172,11 @@ class Database:
             table.indexes = self.get_indexes(tbl_name)
 
             table.fields = self.get_columns(tbl_name)
+            table.foreign_keys = self.get_foreign_keys(tbl_name)
+            table.relations = self.get_relations(tbl_name)
             table.type = self.get_table_type(table)
 
-            table.foreign_keys = self.get_foreign_keys(tbl_name)
-
-            # table.relations = self.get_relations(tbl_name)
-
             tables[tbl_name] = table
-
-        for tbl in tables.values():
-            for key in tbl.foreign_keys.values():
-                if key.table in tables: # fkey may refer to other schema
-                    table = tables[key.table]
-                    table.relations[key.name] = Dict({
-                        "table": tbl.name,
-                        "foreign_key": key.name,
-                        "label": self.get_label(tbl.name) #TODO: Fix
-                    })
 
         if (self.use_cache):
             cursor = self.urd.cursor()
@@ -411,38 +399,10 @@ class Database:
         return self.fkeys[tbl_name]
 
     def get_relations(self, tbl_name):
-        cursor = self.cnxn.cursor()
-        relations = Dict()
-        foreign_keys = Dict()
-        keys = Dict()
+        if not hasattr(self, 'relations'):
+            self.init_relations()
 
-        for row in cursor.foreignKeys(table=tbl_name):
-            name = row.pk_name
-            if name not in keys:
-                keys[name] = Dict({
-                    'name': name,
-                    'table': row.fktable_name,
-                    #TODO: Dette er "databasen"
-                    'schema': row.fktable_cat,
-                    'local': [],
-                    'foreign': []
-                })
-            keys[name].local.append(row.pkcolumn_name)
-            keys[name].foreign.append(row.fkcolumn_name)
-
-        for fkey in keys.values():
-            alias = fkey.foreign[-1]
-            if alias in foreign_keys:
-                alias = alias + "_2"
-            foreign_keys[alias] = fkey
-
-            relations[fkey.name] = Dict({
-                'table': fkey.table,
-                'foreign_key': alias,
-                'label': "todo"
-            })
-
-        return relations
+        return self.relations[tbl_name]
 
     def get_reports(self): #TODO
         return {}
@@ -556,3 +516,20 @@ class Database:
                 foreign_keys[row.table_name] = tbl.get_fkeys()
 
         self.fkeys = foreign_keys
+
+    def init_relations(self):
+        if not hasattr(self, 'fkeys'):
+            self.init_foreign_keys()
+
+        relations = Dict()
+
+        for fktable_name, keys in self.fkeys.items():
+            for alias, key in keys.items():
+                if key.schema == self.schema:
+                    relations[key.table][key.name] = Dict({
+                        "table": fktable_name,
+                        "foreign_key": alias,
+                        "label": self.get_label(key.table) #TODO: Fix
+                    })
+
+        self.relations = relations

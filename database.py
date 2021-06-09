@@ -367,6 +367,13 @@ class Database:
                 placed = False
 
                 contents = self.get_content_items(table_alias, sub_tables, contents)
+            elif group_name in table_names.values():
+                table_names = {key:val for key, val in table_names.items() if val != group_name}
+                if (group_name in sub_tables):
+                    sub_tables[group_name].extend(table_names.values())
+                else:
+                    sub_tables[group_name] = table_names.values()
+                contents = self.get_content_items(group_name, sub_tables, contents)
             else:
                 label = self.get_label(group_name)
                 if label == "Ref":

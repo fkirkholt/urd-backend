@@ -35,8 +35,8 @@ def db_info(base: str):
     return {'data': info}
 
 @app.get("/table")
-def get_table(base: str, table: str, sort: str = None, limit: int = 30, offset: int = 0, filter: str = None):
-    db = Database(base)
+def get_table(base: str, table: str, schema: str = None, sort: str = None, limit: int = 30, offset: int = 0, filter: str = None):
+    db = Database(base or schema)
     table = Table(db, table)
     table.limit  = limit
     table.offset = offset
@@ -46,8 +46,8 @@ def get_table(base: str, table: str, sort: str = None, limit: int = 30, offset: 
     return {'data': table.get_grid()}
 
 @app.get("/record")
-def get_record(base: str, table: str, primary_key: str):
-    db = Database(base)
+def get_record(base: str, table: str, primary_key: str, schema: str = None):
+    db = Database(base or schema)
     tbl = Table(db, table)
     pk = json.loads(primary_key)
     record = Record(db, tbl, pk)

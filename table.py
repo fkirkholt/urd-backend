@@ -230,9 +230,9 @@ class Table:
 
     def get_grid_columns(self):
         indexes = self.get_indexes()
-        grid_idx = indexes.get(self.name + "_grid_idx", None)
+        grid_idx = indexes.get(self.name.lower() + "_grid_idx", None)
         if grid_idx:
-            columns = grid_idx.columns
+            columns = [col.lower() for col in grid_idx.columns]
         else:
             columns = []
             for key, field in self.get_fields().items():
@@ -246,7 +246,7 @@ class Table:
 
     def get_sort_columns(self):
         indexes = self.get_indexes()
-        sort_idx = indexes.get(self.name + "_sort_idx", None)
+        sort_idx = indexes.get(self.name.lower() + "_sort_idx", None)
         grid_idx = indexes.get(self.name + "_grid_idx", None)
         if sort_idx:
             columns = sort_idx.columns

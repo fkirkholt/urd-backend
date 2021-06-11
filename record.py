@@ -288,7 +288,7 @@ class Record:
         params = [val for val in self.pk.values()]
 
         sql = "select " + select + "\n"
-        sql += "  from " + self.tbl.name + "\n"
+        sql += f"from {self.db.schema or self.db.cat}.{self.tbl.name}\n"
         sql += join + "\n"
         sql += " where " + cond
 

@@ -6,6 +6,7 @@ from schema import Schema
 from database import Database
 from table import Table
 from record import Record
+from column import Column
 import json
 import os
 from config import config
@@ -83,7 +84,13 @@ async def get_select(request: Request):
     # print(request_query_params)
     db = Database(req.base)
     tbl = Table(db, req.table)
-    data = tbl.get_select(req)
+    if 'key' in req:
+        key = json.loads(req.key)
+        colname = key[-1]
+    else:
+        colname = self.get_primary_key()[-1]
+    col = Column(tbl, colname)
+    data = col.get_select(req)
     return data
 
 @app.get('/urd/dialog_schema', response_class=HTMLResponse)

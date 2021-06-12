@@ -1,6 +1,7 @@
 import json
 from addict import Dict
 from record import Record
+from column import Column
 import re
 
 class Table:
@@ -80,73 +81,6 @@ class Table:
             self.init_fields()
 
         return self.fields
-
-    
-    def get_options(self, field, fields=None):
-
-        fk = self.get_fkey(field.name)
-        cand_tbl = self.get_db_table(fk.base or fk.schema, fk.table)
-
-        # List of fields
-        kodefelter = [field.name + '.' + name for name in fk.foreign]
-
-        # Field that holds the value of the options
-        value_field = kodefelter[-1]
-
-        # Sorting
-        cand_sort_columns = cand_tbl.get_sort_columns()
-        sort_fields = [field.name + '.' + col for col in cand_sort_columns]
-
-        order = "order by " + ', '.join(sort_fields) if len(sort_fields) else ''
-
-        # Conditions
-        conditions = []
-        if 'filter' in fk:
-            conditions.append("("+self.db.expr.replace_vars(fk.filter)+")")
-
-        if fk.schema == 'urd' and 'schema_' in cand_tbl.fields:
-            admin_schemas = "'" + "', '".join(self.db.get_user_admin_schemas()) + "'"
-            conditions.append(f"schema_ in ({admin_schemas})")
-        
-        # Adds condition if this select depends on other selects
-        if 'value' in field and len(fk.local) > 1:
-            for idx, key in enumerate(fk.local):
-                if key != field.name and fields[key].value:
-                    conditions.append(fk.foreign[idx] + " = '" + str(fields[key].value) + "'")
-
-        condition = "where " + " AND ".join(conditions) if len(conditions) else ''
-
-        if not 'column_view' in field:
-            field.column_view = field.view
-
-        # Count records
-        cursor = self.db.cnxn.cursor()
-
-        sql = "select count(*)\n"
-        sql+= f"from {self.schema or self.cat}.{cand_tbl.name} {field.name}\n"
-        sql+= condition
-
-        count = cursor.execute(sql).fetchval()
-
-        if (count > 200):
-            return False
-
-        sql = "select " + value_field + " as value, "
-        sql+= "(" + field.view + ") as label, "
-        sql+= "(" + field.column_view + ") as coltext "
-        sql+= "from " + cand_tbl.name + " " + field.name + "\n"
-        sql+= condition + "\n" + order
-        print(sql)
-
-        rows = cursor.execute(sql).fetchall()
-
-        result = []
-        colnames = [column[0] for column in cursor.description]
-        for row in rows:
-            result.append(dict(zip(colnames, row)))
-
-        return result
-
 
     def get_values(self, selects, order):
         #TODO: hent join selv, og kanskje flere
@@ -281,29 +215,18 @@ class Table:
         for col in pkey:
             selects[col] = self.name + '.' + col
 
-        for alias in grid.columns:
+        for colname in grid.columns:
 
-            col = fields[alias]
-            col.alias = alias
+            col = fields[colname]
 
-            col.ref = self.name + '.' + alias
+            col.ref = self.name + '.' + colname
 
-            if alias in foreign_keys:
-                fk = foreign_keys[alias]
-                if 'view' in col:
-                    col.options = self.get_options(col)
-            else:
-                fk = None
-
-            if 'view' in col and 'column_view' not in col:
-                col.column_view = col.view
-            
             if 'column_view' in col:
-                selects[alias] = col.column_view
+                selects[colname] = col.column_view
             elif col.element == 'textarea':
-                selects[alias] = "substr(" + col.ref + ', 1, 255)'
+                selects[colname] = "substr(" + col.ref + ', 1, 255)'
             else:
-                selects[alias] = col.ref
+                selects[colname] = col.ref
 
         if hasattr(self, 'expansion_column'):
             # Get number of relations to same table for expanding row
@@ -592,7 +515,7 @@ class Table:
 
         return self.relations[alias]
 
-    def get_relations(self): 
+    def get_relations(self):
         #TODO: Skal filtreres på permission
         if not hasattr(self, 'relations'):
             self.init_relations()
@@ -733,45 +656,6 @@ class Table:
     def get_filter(self): #TODO
         return ""
 
-    def get_select(self, req):
-        #TODO: Kan jeg ikke hente noe fra backend istenfor å få alt servert fra frontend? Altfor mange parametre!
-        search = None if not 'q' in req else req.q.replace("*", "%")
-
-        if 'key' in req:
-            key = json.loads(req.key)
-            col = key[-1]
-        else:
-            col = self.get_primary_key()[-1]
-
-        view = req.get('view') or col
-        col_view = req.get('column_view') or col
-
-        conds = req.condition.split(" and ") if req.condition else []
-        # ignore case
-        if search:
-            search = search.lower()
-            conds.append(f"lower(cast({view} as varchar)) like '%{search}%'")
-        
-        cond = " and ".join(conds) if len(conds) else col + "IS NOT NULL"
-
-        val_col = req.alias + "." + col
-
-        sql = f"""
-        select distinct {val_col} as value, {view} as label,
-        {col_view} as coltext\n
-        from {self.name} {req.alias}\n
-        where {cond}\n
-        order by {view}
-        """
-
-        rows = self.db.query(sql).fetchmany(int(req.limit))
-
-        result = []
-        for row in rows:
-            result.append({'value': row.value, 'label': row.label})
-
-        return result
-
     def save(self, records: list):
         from database import Database
         result = Dict()
@@ -859,8 +743,6 @@ class Table:
 
     def init_fields(self):
         fields = Dict()
-        foreign_keys = self.get_fkeys()
-        pkey = self.get_primary_key()
         indexes = self.get_indexes()
         cursor = self.db.cnxn.cursor()
         if self.db.system == 'oracle':
@@ -876,79 +758,9 @@ class Table:
             if ('column_size' in col or 'display_size' in col):
                 col.column_size = col.get('column_size', col.display_size)
             cname = col.column_name
-            type_ = self.db.expr.to_urd_type(col.type_name)
-            
-            # Decides what sort of input should be used
-            if type_ == 'date':
-                element = 'input[type=date]'
-            elif type_ == 'boolean':
-                if col.nullable:
-                    element = 'select'
-                    options = [
-                        {
-                            'value': 0,
-                            'label': 'Nei'
-                        },
-                        {
-                            'value': 1,
-                            'label': 'Ja'
-                        }
-                    ]
-                else:
-                    element = 'input[type=checkbox]'
-            elif cname in foreign_keys:
-                element = 'select'
-                options = []
-            elif type_ == 'binary' or (type_ == 'string' and (col.column_size > 255)):
-                element = "textarea"
-            else:
-                element = "input[type=text]"
-            
-            urd_col = Dict({
-                'name': cname,
-                'datatype': type_,
-                'element': element,
-                'nullable': col.nullable == True,
-                'label': self.db.get_label(cname),
-                'description': None #TODO
-            })
 
-            if 'column_size' in col:
-                urd_col.size = col.column_size
-            if col.get('auto_increment', None):
-                urd_col.extra = "auto_increment"
-            if element == "select" and len(options):
-                urd_col.options = options
-            elif cname in foreign_keys:
-                fk = foreign_keys[cname]
-                urd_col.foreign_key = fk
-                ref_tbl = Table(self.db, fk.table)
-                ref_pk = ref_tbl.get_primary_key()
-
-                if (ref_tbl.get_type() == "data"):
-                    urd_col.expandable = True
-
-                for index in ref_tbl.get_indexes().values():
-                    if index.columns != ref_pk and index.unique:
-                        cols = [cname+"."+col for col in index.columns]
-                        urd_col.view = " || ', ' || ".join(cols)
-                        break
-
-                if 'view' in urd_col:
-                    urd_col.options = self.get_options(urd_col)
-            if (type_ == 'integer' and len(pkey) and cname == pkey[-1] and cname not in foreign_keys):
-                urd_col.extra = "auto_increment"
-            
-            if col.column_def and not col.auto_increment:
-                def_vals = col.column_def.split('::')
-                default = def_vals[0]
-                default = default.replace("'", "")
-
-                #TODO: Sjekk om jeg trenger å endre current_timestamp()
-
-                urd_col.default = self.db.expr.replace_vars(default)
-
-            fields[cname] = urd_col
+            column = Column(self, cname)
+            fields[cname] = column.get_field(col)
 
         updated_idx = indexes.get(self.name + "_updated_idx", None)
         if updated_idx:

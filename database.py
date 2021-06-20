@@ -16,18 +16,27 @@ class Connection:
         cnxn = pyodbc.connect(cnxnstr)
         self.cursor = cnxn.cursor
         self.system = system
+        self.user = user
         self.expr = Expression(self.system)
         self.string = cnxnstr
 
     def get_databases(self):
         sql = self.expr.databases()
-        rows = self.cursor().execute(sql).fetchall()
+        if self.system == 'oracle':
+            rows = self.cursor().execute(sql, self.user).fetchall()
+        else:
+            rows = self.cursor().execute(sql).fetchall()
         result = []
         for row in rows:
             base = Dict()
             base.columns.name = row[0]
             base.columns.label = row[0].capitalize()
+            result.append(base)
 
+        if self.system == 'oracle':
+            base = Dict()
+            base.columns.name = self.user
+            base.columns.label = self.user.capitalize()
             result.append(base)
 
         return result

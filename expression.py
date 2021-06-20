@@ -117,6 +117,13 @@ class Expression:
             select datname from pg_database
             where datistemplate is false and datname != 'postgres'
             """
+        elif self.platform == 'oracle':
+            return """
+            select distinct owner
+            from table_privileges
+            where grantee = ?
+            order by owner;
+            """
 
     def indexes(self):
         if self.platform == 'oracle':

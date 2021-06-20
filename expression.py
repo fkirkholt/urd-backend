@@ -111,6 +111,13 @@ class Expression:
         return sql
         # todo:t Må ha autentisering på plass før denne kan lages
 
+    def databases(self):
+        if self.platform == 'postgres':
+            return """
+            select datname from pg_database
+            where datistemplate is false and datname != 'postgres'
+            """
+
     def indexes(self):
         if self.platform == 'oracle':
             return """

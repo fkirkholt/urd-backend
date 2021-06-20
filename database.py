@@ -6,33 +6,69 @@ from config import config
 from expression import Expression
 from addict import Dict
 
-class Database:
-    def __init__(self, db_name):
-        cnxnstr = config['db']['connection_string']
+class Connection:
+    def __init__(self, system, server, user, pwd, db_name=None):
+        cnxnstr = 'Driver={' + config['odbc'][system]['driver'] + '};'
+        if db_name:
+            cnxnstr += 'Database=' + db_name + ';'
+        cnxnstr += 'Server=' + server + ';Uid=' + user + ';Pwd=' + pwd + ';'
         pyodbc.lowercase = True
-        urd_cnxn = pyodbc.connect(cnxnstr)
-        cursor = urd_cnxn.cursor()
-        sql = "select * from database_ where lower(name) = ? or alias = ?"
-        cursor.execute(sql, db_name.lower(), db_name)
-        base = cursor.fetchone()
-        self.cnxn   = pyodbc.connect(base._connection_string)
-        self.urd    = urd_cnxn
-        self.name   = base.name 
-        self.alias  = base.alias
-        self.label  = base.label
-        self.schema = base.schema_
-        if base.system == 'mysql':
-            self.cat = base.name
+        cnxn = pyodbc.connect(cnxnstr)
+        self.cursor = cnxn.cursor
+        self.system = system
+        self.expr = Expression(self.system)
+        self.string = cnxnstr
+
+    def get_databases(self):
+        sql = self.expr.databases()
+        rows = self.cursor().execute(sql).fetchall()
+        result = []
+        for row in rows:
+            base = Dict()
+            base.columns.name = row[0]
+            base.columns.label = row[0].capitalize()
+
+            result.append(base)
+
+        return result
+
+class Database:
+    def __init__(self, cnxn, db_name):
+        self.cnxn   = cnxn
+        self.name   = db_name
+        if cnxn.system == 'mysql':
+            self.cat = db_name
             self.schema = None
+        elif cnxn.system == 'postgres':
+            self.cat = db_name
+            self.schema = 'public'
         else:
+            self.schema = 'public'
             self.cat = None
-        self.system = base.system
-        self.cache = None if not base.cache else Dict(json.loads(base.cache))
-        self.use_cache = int(base.use_cache)
-        self.urd_structure = int(base.urd_structure)
-        self.expr   = Expression(self.system)
+        self.expr   = Expression(cnxn.system)
+        self.use_cache = False #TODO
+
+    def get_metadata(self):
+        if not hasattr(self, 'metadata'):
+            self.init_metadata()
+        return self.metadata
+
+    def init_metadata(self):
+        cursor = self.cnxn.cursor()
+        metadata = Dict()
+        md_table= cursor.tables(table='meta_data', catalog=self.cat, schema=self.schema).fetchone()
+        tables = cursor.tables(catalog=self.cat).fetchall()
+        if (md_table):
+            sql = f"select * from {self.schema or self.cat}.meta_data"
+            rows = cursor.execute(sql).fetchall()
+            for row in rows:
+                metadata[row.key_] = row.value_
+
+        self.metadata = metadata
 
     def get_info(self):
+
+        metadata = self.get_metadata()
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
@@ -45,12 +81,7 @@ class Database:
         and admin = true
         """
 
-        if self.schema == 'urd':
-            sql += " and (schema_ = '*' or schema_ = ?)"
-            params.append(self.schema)
-        
-        cursor = self.urd.cursor()
-        is_admin = cursor.execute(sql, params).fetchval()
+        is_admin = 1 #TODO
 
         self.user = {'admin': is_admin}
 
@@ -59,10 +90,11 @@ class Database:
             "base": {
                 "name": self.name, 
                 "schema": self.schema,
-                "label": self.label,
+                "label": metadata.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "reports": {}, #TODO
                 "contents": self.get_contents(),
+                "description": metadata.get('description', None),
                 #'contents': self.contents
             },
             "user": {
@@ -139,7 +171,7 @@ class Database:
             #TODO: Prøv å sjekke på navn på urd-tabellen, slik registrert i config
             if self.schema == 'urd' and self.user['admin'] and key in urd_tables:
                 view = True
-            
+
             if not view: continue
 
             if key in filters:
@@ -147,18 +179,20 @@ class Database:
                 #TODO: Replace variables
 
             tables[key] = table
-        
+
         return tables
 
     def get_tables(self):
-        if (self.use_cache and self.cache):
-            self.tables = self.cache
-            return self.cache
+        metadata = self.get_metadata()
+
+        if metadata.get('cache', None):
+            self.tables = Dict(json.loads(metadata.cache))
+            return self.tables
         cursor = self.cnxn.cursor()
         tables = Dict()
 
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
-        
+
         for tbl in rows:
             tbl_name = tbl.table_name
 
@@ -180,12 +214,12 @@ class Database:
 
             tables[tbl_name] = table
 
-        if (self.use_cache):
-            cursor = self.urd.cursor()
+        if 'cache' in metadata:
+            cursor = self.cnxn.cursor()
             self.cache = tables
-            sql = "update database_ set cache = ?\n"
-            sql+= "where name = ?"
-            result = cursor.execute(sql, json.dumps(tables), self.name).commit()
+            sql = "update meta_data set value_ = ?\n"
+            sql+= "where key_ = ?"
+            result = cursor.execute(sql, json.dumps(tables), 'cache').commit()
 
         self.tables = tables
         return tables
@@ -199,7 +233,10 @@ class Database:
 
         type_ = 'data'
 
-        if self.urd_structure:
+        metadata = self.get_metadata()
+
+        # Only databases with metadata table are expected to follow these rules
+        if len(metadata):
             relations = self.get_relations(table.name)
             for rel in relations.values():
                 fkey = self.fkeys[rel.table][rel.foreign_key]
@@ -213,7 +250,7 @@ class Database:
     def is_top_level(self, table):
         if table.type == "reference":
             return False
-        
+
         for fkey in table.foreign_keys.values():
             if fkey.table not in self.tables: continue
 
@@ -223,7 +260,7 @@ class Database:
                 fk_table = self.tables[fkey.table]
                 if fk_table.type != "reference":
                     return False
-        
+
         return True
 
     def add_module(self, table, modules):
@@ -240,7 +277,7 @@ class Database:
                 else:
                     modules[module_id] = list(set(module + modules[module_id]))
                     del modules[idx]
-        
+
         if module_id == None:
             modules.append(rel_tables)
 
@@ -271,7 +308,7 @@ class Database:
             subordinate = False
             if not table.primary_key:
                 subordinate = True
-            
+
             for colname in table.primary_key:
                 if colname in table.foreign_keys:
                     subordinate = True
@@ -283,7 +320,7 @@ class Database:
                     label = terms[rest].label
                 else:
                     label = rest.replace("_", " ").capitalize()
-                
+
                 tbl_groups[group][label] = tbl_key
 
         return tbl_groups
@@ -319,13 +356,13 @@ class Database:
             label = terms[term].label
         else:
             label = term.replace("_", " ")
-        
+
         norwegian_chars = True #TODO
         if norwegian_chars:
             label = label.replace("ae", "æ")
             label = label.replace("oe", "ø")
             label = label.replace("aa", "å")
-        
+
         label = label.capitalize()
 
         return label
@@ -370,7 +407,7 @@ class Database:
                 contents = self.get_content_items(table_alias, sub_tables, contents)
             elif group_name in table_names.values():
                 table_names = {key:val for key, val in table_names.items() if val != group_name}
-                if (group_name in sub_tables):
+                if group_name in sub_tables:
                     sub_tables[group_name].extend(table_names.values())
                 else:
                     sub_tables[group_name] = table_names.values()
@@ -385,7 +422,7 @@ class Database:
                     'class_content': "ml3",
                     'subitems': table_names
                 }
-        
+
         return contents
 
     def get_indexes(self, tbl_name):
@@ -428,7 +465,7 @@ class Database:
     def init_indexes(self):
         cursor = self.cnxn.cursor()
         indexes = Dict()
-        if self.system in ["oracle"]:
+        if self.cnxn.system in ["oracle"]:
             sql = self.expr.indexes()
             for row in cursor.execute(sql, self.schema):
                 name = row.index_name
@@ -453,7 +490,7 @@ class Database:
     def init_columns(self):
         cursor = self.cnxn.cursor()
         columns = Dict()
-        if self.system in ["oracle"]:
+        if self.cnxn.system in ["oracle"]:
             sql = self.expr.columns()
             for col in cursor.execute(sql, self.schema, None):
                 cname = col.column_name
@@ -483,7 +520,7 @@ class Database:
     def init_pkeys(self):
         cursor = self.cnxn.cursor()
         pkeys = Dict()
-        if self.system in ["oracle"]:
+        if self.cnxn.system in ["oracle"]:
             sql = self.expr.pkeys()
             rows = cursor.execute(sql, self.schema, None)
             for row in rows:
@@ -491,11 +528,11 @@ class Database:
                     pkeys[row.table_name] = []
                 pkeys[row.table_name].append(row.column_name)
         else:
-           tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
-           for tbl in tbls:
-               rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
-               pkey = [row.column_name for row in rows]
-               pkeys[tbl.table_name] = pkey
+            tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+            for tbl in tbls:
+                rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
+                pkey = [row.column_name for row in rows]
+                pkeys[tbl.table_name] = pkey
 
         self.pkeys = pkeys
 
@@ -503,7 +540,7 @@ class Database:
         cursor = self.cnxn.cursor()
         fkeys = Dict()
         foreign_keys = Dict()
-        if self.system in ["oracle"]:
+        if self.cnxn.system in ["oracle"]:
             sql = self.expr.fkeys()
             for row in cursor.execute(sql, self.schema):
                 name = row.fk_name

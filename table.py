@@ -53,7 +53,7 @@ class Table:
     
     def get_db_table(self, base, table):
         from database import Database
-        db = Database(base)
+        db = Database(self.db.cnxn, base)
         tbl = Table(db, table)
 
         return tbl
@@ -375,11 +375,11 @@ class Table:
             return ""
 
         for sort in sort_fields.values():
-            if self.db.system == 'mysql':
+            if self.db.cnxn.system == 'mysql':
                 order_by += f"isnull({sort.field}), {sort.field} {sort.order}, "
-            elif self.db.system in ['oracle', 'postgres']:
+            elif self.db.cnxn.system in ['oracle', 'postgres']:
                 order_by += f"{sort.field} {sort.order}, "
-            elif self.db.system == 'sqlite':
+            elif self.db.cnxn.system == 'sqlite':
                 order_by += f"{sort.field} is null, {sort.field} {sort.order}, "
         
         for field in pkey:
@@ -387,7 +387,7 @@ class Table:
 
         order_by = order_by[0:-2]
 
-        if self.db.system in ['oracle', 'postgres']:
+        if self.db.cnxn.system in ['oracle', 'postgres']:
             order_by += " nulls last"
 
         return order_by
@@ -745,7 +745,7 @@ class Table:
         fields = Dict()
         indexes = self.get_indexes()
         cursor = self.db.cnxn.cursor()
-        if self.db.system == 'oracle':
+        if self.db.cnxn.system == 'oracle':
             # cursor.columns doesn't work for all types of oracle columns
             sql = self.db.expr.columns()
             cols = cursor.execute(sql, self.db.schema, self.name).fetchall()

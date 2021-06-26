@@ -42,7 +42,7 @@ class Record:
         from table import Table
         relations = {}
         for key, rel in self.tbl.get_relations().items():
-            db = Database(rel.base or rel.schema)
+            db = Database(self.db.cnxn, rel.base or rel.schema)
             tbl_rel = Table(db, rel.table)
 
             # todo: filtrate on highest level

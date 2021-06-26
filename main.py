@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseSettings
 from schema import Schema
 from database import Database, Connection
 from table import Table
@@ -9,29 +10,33 @@ from record import Record
 from column import Column
 import json
 import os
-from config import config
 from addict import Dict
 
-app = FastAPI()
+class Settings(BaseSettings):
+    db_system: str = "postgres"
+    db_server: str = "localhost"
+    db_name  : str = "urd"
+    db_uid   : str = "urd"
+    db_pwd   : str = "urd"
 
-# todo: Legg dette en annen plass
-# cnxnstr = 'Driver={PostgreSQL Unicdaode};Server=localhost;Port=5432;Database=urd;Uid=urd;Pwd=urd;'
+cfg = Settings()
+
+app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/bundle.js")
-db = Dict(config['db'])
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("urd.html", {
-        "request": request, "v": mod, "base": config['db']['name']
+        "request": request, "v": mod, "base": cfg.db_name
     })
 
 @app.get("/database")
 def db_info(base: str):
-    cnxn = Connection(db.system, db.server, db.uid, db.pwd, base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base)
     dbo = Database(cnxn, base)
     info = dbo.get_info()
     json.dumps(info)
@@ -40,9 +45,9 @@ def db_info(base: str):
 @app.get("/table")
 def get_table(base: str, table: str, schema: str = None, sort: str = None, limit: int = 30, offset: int = 0, filter: str = None):
     if (base == 'urd' and table == 'database_'):
-        cnxn = Connection(db.system, db.server, db.uid, db.pwd) #TODO
+        cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd) #TODO
         return {'data': {'records': cnxn.get_databases()}}
-    cnxn = Connection(db.system, db.server, db.uid, db.pwd, base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
     dbo = Database(cnxn, base or schema)
     table = Table(dbo, table)
     table.limit  = limit
@@ -55,7 +60,7 @@ def get_table(base: str, table: str, schema: str = None, sort: str = None, limit
 
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str, schema: str = None):
-    cnxn = Connection(db.system, db.server, db.uid, db.pwd, base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
     dbo = Database(cnxn, base or schema)
     tbl = Table(dbo, table)
     pk = json.loads(primary_key)
@@ -64,7 +69,7 @@ def get_record(base: str, table: str, primary_key: str, schema: str = None):
 
 @app.get("/relations")
 def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None, types: str = None):
-    cnxn = Connection(db.system, db.server, db.uid, db.pwd, base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)
     pk = json.loads(primary_key)

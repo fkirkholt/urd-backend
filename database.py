@@ -2,23 +2,28 @@ import pyodbc
 import os
 import json
 from schema import Schema
-from config import config
 from expression import Expression
 from addict import Dict
 
 class Connection:
     def __init__(self, system, server, user, pwd, db_name=None):
-        cnxnstr = 'Driver={' + config['odbc'][system]['driver'] + '};'
+        self.system = system
+        driver = self.get_driver()
+        cnxnstr = f'Driver={driver};'
         if db_name:
             cnxnstr += 'Database=' + db_name + ';'
         cnxnstr += 'Server=' + server + ';Uid=' + user + ';Pwd=' + pwd + ';'
         pyodbc.lowercase = True
         cnxn = pyodbc.connect(cnxnstr)
         self.cursor = cnxn.cursor
-        self.system = system
         self.user = user
         self.expr = Expression(self.system)
         self.string = cnxnstr
+
+    def get_driver(self):
+        drivers = [d for d in pyodbc.drivers() if self.system in d.lower()]
+
+        return drivers[0]
 
     def get_databases(self):
         sql = self.expr.databases()

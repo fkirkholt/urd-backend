@@ -1,5 +1,4 @@
 import json
-from config import config
 import pyodbc
 from addict import Dict
 import re

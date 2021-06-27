@@ -555,6 +555,7 @@ class Database:
                 fkeys[row.fktable_name][name].name = row.fk_name
                 fkeys[row.fktable_name][name].table = row.pktable_name
                 fkeys[row.fktable_name][name].schema = row.pktable_cat #TODO: merkelig
+                fkeys[row.fktable_name][name].delete_rule = row.delete_rule
                 if not 'local' in fkeys[row.fktable_name][name]:
                     fkeys[row.fktable_name][name].local = []
                     fkeys[row.fktable_name][name].foreign = []
@@ -588,6 +589,7 @@ class Database:
                     relations[key.table][key.name] = Dict({
                         "table": fktable_name,
                         "foreign_key": alias,
+                        "delete_rule": key.delete_rule,
                         "label": self.get_label(key.table) #TODO: Fix
                     })
 

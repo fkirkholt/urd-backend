@@ -26,31 +26,25 @@ class Table:
         return self.view
 
     def get_type(self):
-        if (
-            self.name[0:4] == "ref_" or 
-            self.name[-2:] == "_ref" or
-            self.name[0:5] == "meta_"
-        ):
-            self.type = "reference"
-        else:
-            # Check if unique indexes cover all columns
-            idx_cols = []
-            for idx in self.get_indexes().values():
-                if idx.unique:
-                    idx_cols = idx_cols + idx.columns
+        CASCADE = 0
+        RESTRICT = 1
+        SET_NULL = 2
+        NO_ACTION = 3
+        SET_DEFAULT = 4
 
-            idx_cols = list(set(idx_cols))
+        type_ = 'data'
 
-            if len(self.get_fields()) == len(idx_cols):
-                self.type = "reference"
-            else:
-                self.type = "data"
+        # Only databases with metadata table are expected to follow these rules
+        if len(self.db.metadata):
+            relations = self.get_relations()
+            for rel in relations.values():
+                if rel.delete_rule in [RESTRICT, NO_ACTION]:
+                    type_ = 'reference'
+            if self.name.startswith("meta_"):
+                type_ = 'reference'
 
-        return self.type
+        return type_
 
-        #TODO: Flere sjekker, særlig hvis ikke urd-struktur
-
-    
     def get_db_table(self, base, table):
         from database import Database
         db = Database(self.db.cnxn, base)
@@ -441,14 +435,13 @@ class Table:
                 col_groups[group] = []
 
             col_groups[group].append(field.name)
-        
+
         return col_groups
 
     def get_form(self):
 
         form = Dict({'items': {}}) #TODO: vurder 'subitems'
         fields = self.get_fields()
-
         field_groups = self.get_field_groups(fields)
 
         for group_name, col_names in field_groups.items():
@@ -846,6 +839,7 @@ class Table:
                     'table': row.fktable_name,
                     'base': row.fktable_cat,
                     'schema': row.fktable_schem,
+                    'delete_rule': row.delete_rule,
                     'local': [],
                     'foreign': []
                 })

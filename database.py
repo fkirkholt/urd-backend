@@ -19,6 +19,7 @@ class Connection:
         self.user = user
         self.expr = Expression(self.system)
         self.string = cnxnstr
+        self.metadata = self.get_metadata()
 
     def get_driver(self):
         drivers = [d for d in pyodbc.drivers() if self.system in d.lower()]
@@ -82,8 +83,6 @@ class Database:
 
     def get_info(self):
 
-        metadata = self.get_metadata()
-
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
 
@@ -104,11 +103,11 @@ class Database:
             "base": {
                 "name": self.name, 
                 "schema": self.schema,
-                "label": metadata.get('label', self.name.capitalize()),
+                "label": self.metadata.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "reports": {}, #TODO
                 "contents": self.get_contents(),
-                "description": metadata.get('description', None),
+                "description": self.metadata.get('description', None),
                 #'contents': self.contents
             },
             "user": {
@@ -197,10 +196,8 @@ class Database:
         return tables
 
     def get_tables(self):
-        metadata = self.get_metadata()
-
-        if metadata.get('cache', None):
-            self.tables = Dict(json.loads(metadata.cache))
+        if self.metadata.get('cache', None):
+            self.tables = Dict(json.loads(self.metadata.cache))
             return self.tables
         cursor = self.cnxn.cursor()
         tables = Dict()
@@ -228,7 +225,7 @@ class Database:
 
             tables[tbl_name] = table
 
-        if 'cache' in metadata:
+        if 'cache' in self.metadata:
             cursor = self.cnxn.cursor()
             self.cache = tables
             sql = "update meta_data set value_ = ?\n"
@@ -247,16 +244,13 @@ class Database:
 
         type_ = 'data'
 
-        metadata = self.get_metadata()
-
         # Only databases with metadata table are expected to follow these rules
-        if len(metadata):
+        if len(self.metadata):
             relations = self.get_relations(table.name)
             for rel in relations.values():
-                fkey = self.fkeys[rel.table][rel.foreign_key]
-                if 'delete_rule' in fkey and fkey.delete_rule in [RESTRICT, NO_ACTION]:
+                if rel.delete_rule in [RESTRICT, NO_ACTION]:
                     type_ = 'reference'
-            if table.name in ["meta_term"]:
+            if table.name.startswith("meta_"):
                 type_ = 'reference'
 
         return type_

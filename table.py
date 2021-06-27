@@ -457,21 +457,18 @@ class Table:
                 form['items'][label] = col_names[0]
             else:
                 inline = False
-                colnames = Dict()  #TODO: tullete med colnames og col_names
+                subitems = Dict()
                 sum_size = 0
                 for colname in col_names:
                     # removes group name prefix from column name and use the rest as label
                     rest = colname.replace(group_name+"_", "")
                     label = self.db.get_label(rest)
-
-                    colnames[label] = colname
+                    subitems[label] = colname
 
                     field = fields[colname]
                     if 'size' in field:
                         sum_size += field.size
-                    elif field.datatype == "date":
-                        sum_size += 10
-                    elif field.datatype == "integer":
+                    elif field.datatype in ["date", "integer"]:
                         sum_size += 10
 
                 if sum_size < 50:
@@ -481,7 +478,7 @@ class Table:
                 
                 form['items'][group_label] = Dict({
                     'inline': inline,
-                    'items': colnames  #TODO vurder 'subitems'
+                    'items': subitems  #TODO vurder 'subitems' også for nøkkel
                 })
 
         # Add relations to form

@@ -701,6 +701,9 @@ class Table:
         return result
 
     def init_foreign_keys(self):
+        if self.db.metadata.get("cache", None):
+            self.foreign_keys = self.db.metadata.cache[self.name].foreign_keys
+            return
         cursor = self.db.cnxn.cursor()
         foreign_keys = Dict()
         keys = {}
@@ -732,6 +735,9 @@ class Table:
         self.foreign_keys = foreign_keys
 
     def init_fields(self):
+        if self.db.metadata.get("cache", None):
+            self.fields = self.db.metadata.cache[self.name].fields
+            return
         fields = Dict()
         indexes = self.get_indexes()
         cursor = self.db.cnxn.cursor()
@@ -808,6 +814,9 @@ class Table:
         self.view = view
             
     def init_indexes(self):
+        if self.db.metadata.get("cache", None):
+            self.indexes= self.db.metadata.cache[self.name].indexes
+            return
         cursor = self.db.cnxn.cursor()
         indexes = Dict()
 
@@ -827,6 +836,9 @@ class Table:
         self.indexes = indexes
 
     def init_relations(self):
+        if self.db.metadata.get("cache", None):
+            self.relations = self.db.metadata.cache[self.name].relations
+            return
         cursor = self.db.cnxn.cursor()
         relations = Dict()
 

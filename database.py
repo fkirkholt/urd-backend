@@ -19,7 +19,6 @@ class Connection:
         self.user = user
         self.expr = Expression(self.system)
         self.string = cnxnstr
-        self.metadata = self.get_metadata()
 
     def get_driver(self):
         drivers = [d for d in pyodbc.drivers() if self.system in d.lower()]
@@ -62,6 +61,7 @@ class Database:
             self.cat = None
         self.expr   = Expression(cnxn.system)
         self.use_cache = False #TODO
+        self.metadata = self.get_metadata()
 
     def get_metadata(self):
         if not hasattr(self, 'metadata'):
@@ -77,7 +77,10 @@ class Database:
             sql = f"select * from {self.schema or self.cat}.meta_data"
             rows = cursor.execute(sql).fetchall()
             for row in rows:
-                metadata[row.key_] = row.value_
+                if row.key_ == "cache" and row.value_:
+                    metadata[row.key_] = Dict(json.loads(row.value_))
+                else:
+                    metadata[row.key_] = row.value_
 
         self.metadata = metadata
 
@@ -197,7 +200,7 @@ class Database:
 
     def get_tables(self):
         if self.metadata.get('cache', None):
-            self.tables = Dict(json.loads(self.metadata.cache))
+            self.tables = self.metadata.cache
             return self.tables
         cursor = self.cnxn.cursor()
         tables = Dict()
@@ -218,7 +221,9 @@ class Database:
 
             table.indexes = self.get_indexes(tbl_name)
 
-            table.fields = self.get_columns(tbl_name)
+            if 'cache' in self.metadata:
+                # fields are needed only when creating cache
+                table.fields = self.get_columns(tbl_name)
             table.foreign_keys = self.get_foreign_keys(tbl_name)
             table.relations = self.get_relations(tbl_name)
             table.type = self.get_table_type(table)
@@ -484,7 +489,8 @@ class Database:
                     indexes[row.table_name][name].columns = []
                 indexes[row.table_name][name].columns.append(row.column_name)
         else:
-            for tbl in cursor.tables(catalog=self.cat, schema=self.schema):
+            tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+            for tbl in tbls:
                 for row in cursor.statistics(tbl.table_name):
                     name = row.index_name
                     indexes[tbl.table_name][name].name = name
@@ -496,32 +502,13 @@ class Database:
         self.indexes = indexes
 
     def init_columns(self):
+        from table import Table
         cursor = self.cnxn.cursor()
+        rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
         columns = Dict()
-        if self.cnxn.system in ["oracle"]:
-            sql = self.expr.columns()
-            for col in cursor.execute(sql, self.schema, None):
-                cname = col.column_name
-                type_ = self.expr.to_urd_type(col.type_name)
-                urd_col = Dict({
-                    'name': cname,
-                    'datatype': type_
-                })
-
-                columns[col.table_name][cname] = urd_col
-        else:
-            rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
-            for row in rows:
-                cols = cursor.columns(table=row.table_name, catalog=self.cat, schema=self.schema).fetchall()
-                for col in cols:
-                    cname = col.column_name
-                    type_ = self.expr.to_urd_type(col.type_name)
-                    urd_col = Dict({
-                        'name': cname,
-                        'datatype': type_
-                    })
-
-                    columns[row.table_name][cname] = urd_col
+        for row in rows:
+            tbl = Table(self, row.table_name)
+            columns[tbl.name] = tbl.get_fields()
 
         self.columns = columns
 
@@ -587,9 +574,14 @@ class Database:
             for alias, key in keys.items():
                 if key.schema == self.schema:
                     relations[key.table][key.name] = Dict({
+                        "name": key.name,
                         "table": fktable_name,
+                        "base": key.base,
+                        "schema": key.schema,
                         "foreign_key": alias,
                         "delete_rule": key.delete_rule,
+                        "local": key.foreign,
+                        "foreign": key.local,
                         "label": self.get_label(key.table) #TODO: Fix
                     })
 

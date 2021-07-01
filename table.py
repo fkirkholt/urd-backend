@@ -2,6 +2,7 @@ import json
 from addict import Dict
 from record import Record
 from column import Column
+from expression import Expression
 import re
 
 class Table:
@@ -855,10 +856,23 @@ class Table:
                     'local': [],
                     'foreign': []
                 })
+
             relations[name].local.append(row.pkcolumn_name)
             relations[name].foreign.append(row.fkcolumn_name)
 
         self.relations = relations
 
+    def export_ddl(self, system):
+        ddl = f"create table {self.name} (\n"
+        coldefs = []
+        for col in self.get_fields().values():
+            expr = Expression(system)
+            datatype = expr.to_native_type(col.datatype, col.size)
+            coldef = f"    {col.name} {datatype}"
+            if not col.nullable:
+                coldef += " NOT NULL"
+            coldefs.append(coldef)
+        ddl += ",\n".join(coldefs)
+        ddl += ")"
 
-
+        return ddl

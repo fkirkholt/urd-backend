@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseSettings
+import io
 from schema import Schema
 from database import Database, Connection
 from table import Table
@@ -127,3 +128,14 @@ async def update_schema(request: Request):
     schema.update(dbo, config)
 
     # return {'sucess': False}
+
+@app.get('/table_sql')
+def export_sql(base: str, table: str, dialekt: str):
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    dbo = Database(cnxn, base)
+    table = Table(dbo, table)
+    ddl = table.export_ddl(dialekt)
+    response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
+    response.headers["Content-Disposition"] = f"attachment; filename={table.name}.sql"
+
+    return response

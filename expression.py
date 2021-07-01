@@ -32,11 +32,11 @@ class Expression:
     def to_native_type(self, type_, size):
         if self.platform == "mysql":
             if type_ == "string":
-                return "varchar(" + size + ")" if size else "longtext"
+                return "varchar(" + str(size) + ")" if size else "longtext"
             elif type_ == "integer":
-                return "int(" + size + ")"
+                return "int(" + str(size) + ")"
             elif type_ == "float":
-                return "float(" + size + ")"
+                return "float(" + str(size) + ")"
             elif type_ == "date":
                 return "date"
             elif type_ == "boolean":
@@ -54,6 +54,19 @@ class Expression:
                 return "real"
             elif type_ == "binary":
                 return "blob"
+        elif self.platform == 'postgres':
+            if type_ == "string":
+                return "varchar(" + str(size) + ")"
+            elif type_ == "integer":
+                return "integer"
+            elif type_ == "float":
+                return "float(" + str(size) + ")"
+            elif type_ == "date":
+                return "date"
+            elif type_ == "boolean":
+                return "boolean"
+            elif type_ == "binary":
+                return "bytea"
         else:
             raise ValueError(f"Type conversion for {self.platform} not implemented")
 

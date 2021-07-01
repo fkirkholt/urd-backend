@@ -11,7 +11,7 @@ class Table:
         self.name = tbl_name
         self.cat = self.db.cat
         self.schema = self.db.schema
-        self.label = tbl_name #TODO
+        self.label = db.get_label(tbl_name)
         self.offset = 0
         self.limit = 30
         self.conditions = []

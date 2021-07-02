@@ -10,10 +10,15 @@ class Connection:
         self.system = system
         driver = self.get_driver()
         cnxnstr = f'Driver={driver};'
-        if db_name:
+        if (db_name and system != 'oracle'):
             cnxnstr += 'Database=' + db_name + ';'
-        cnxnstr += 'Server=' + server + ';Uid=' + user + ';Pwd=' + pwd + ';'
+        if system == 'oracle':
+            cnxnstr += "DBQ=" + server
+        else:
+            cnxnstr += 'Server=' + server
+        cnxnstr += ';Uid=' + user + ';Pwd=' + pwd + ';'
         pyodbc.lowercase = True
+        print('cnxnstr', cnxnstr)
         cnxn = pyodbc.connect(cnxnstr)
         self.cursor = cnxn.cursor
         self.user = user
@@ -27,10 +32,7 @@ class Connection:
 
     def get_databases(self):
         sql = self.expr.databases()
-        if self.system == 'oracle':
-            rows = self.cursor().execute(sql, self.user).fetchall()
-        else:
-            rows = self.cursor().execute(sql).fetchall()
+        rows = self.cursor().execute(sql).fetchall()
         result = []
         for row in rows:
             base = Dict()
@@ -56,6 +58,9 @@ class Database:
         elif cnxn.system == 'postgres':
             self.cat = db_name
             self.schema = 'public'
+        elif cnxn.system == 'oracle':
+            self.cat = None
+            self.schema = db_name
         else:
             self.schema = 'public'
             self.cat = None

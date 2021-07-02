@@ -57,6 +57,8 @@ class Expression:
         elif self.platform == 'postgres':
             if type_ == "string":
                 return "varchar(" + str(size) + ")"
+            elif (type_ == "integer" and size > 11):
+                return "bigint"
             elif type_ == "integer":
                 return "integer"
             elif type_ == "float":
@@ -132,9 +134,9 @@ class Expression:
             """
         elif self.platform == 'oracle':
             return """
-            select distinct owner
-            from table_privileges
-            where grantee = ?
+            SELECT DISTINCT OWNER
+              FROM ALL_OBJECTS
+             WHERE OBJECT_TYPE = 'TABLE'
             order by owner;
             """
 

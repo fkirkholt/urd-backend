@@ -130,11 +130,11 @@ async def update_schema(request: Request):
     # return {'sucess': False}
 
 @app.get('/table_sql')
-def export_sql(base: str, table: str, dialekt: str):
+def export_sql(base: str, table: str, dialect: str):
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
     dbo = Database(cnxn, base)
     table = Table(dbo, table)
-    ddl = table.export_ddl(dialekt)
+    ddl = table.export_ddl(dialect)
     response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
     response.headers["Content-Disposition"] = f"attachment; filename={table.name}.sql"
 

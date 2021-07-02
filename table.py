@@ -1,4 +1,4 @@
-import json
+import simplejson as json
 from addict import Dict
 from record import Record
 from column import Column

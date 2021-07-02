@@ -49,7 +49,7 @@ class Column:
         })
 
         if 'column_size' in col:
-            field.size = col.column_size
+            field.size = int(col.column_size)
         if col.get('auto_increment', None):
             field.extra = "auto_increment"
         if element == "select" and len(options):
@@ -136,7 +136,7 @@ class Column:
         sql = "select " + value_field + " as value, "
         sql+= "(" + field.view + ") as label, "
         sql+= "(" + field.column_view + ") as coltext "
-        sql+= "from " + cand_tbl.name + " " + field.name + "\n"
+        sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition + "\n" + order
         print(sql)
 

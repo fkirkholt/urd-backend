@@ -67,7 +67,8 @@ class Column:
                 if index.columns != ref_pk and index.unique:
                     cols = [self.name+"."+col for col in index.columns]
                     field.view = " || ', ' || ".join(cols)
-                    break
+                    if index.name.endswith("_sort_idx"):
+                        break
 
             if 'view' in field:
                 if 'column_view' not in field:

@@ -204,6 +204,7 @@ class Database:
         return tables
 
     def get_tables(self):
+        from table import Table
         if self.metadata.get('cache', None):
             self.tables = self.metadata.cache
             return self.tables
@@ -215,25 +216,24 @@ class Database:
         for tbl in rows:
             tbl_name = tbl.table_name
 
-            table = Dict({
+            table = Table(self, tbl_name)
+
+            tables[tbl_name] = Dict({
                 'name': tbl_name,
                 'icon': None,
                 'label': self.get_label(tbl_name),
                 'primary_key': self.get_pkey(tbl_name),
                 'description': tbl.remarks,
-                'hidden': False
+                'hidden': False,
+                'indexes': self.get_indexes(tbl_name),
+                'foreign_keys': self.get_foreign_keys(tbl_name),
+                'relations': self.get_relations(tbl_name),
+                'type': table.get_type(),
+                # fields are needed only when creating cache
+                'fields': None if 'cache' not in self.metadata
+                           else self.get_columns(tbl_name),
             })
 
-            table.indexes = self.get_indexes(tbl_name)
-
-            if 'cache' in self.metadata:
-                # fields are needed only when creating cache
-                table.fields = self.get_columns(tbl_name)
-            table.foreign_keys = self.get_foreign_keys(tbl_name)
-            table.relations = self.get_relations(tbl_name)
-            table.type = self.get_table_type(table)
-
-            tables[tbl_name] = table
 
         if 'cache' in self.metadata:
             cursor = self.cnxn.cursor()
@@ -244,26 +244,6 @@ class Database:
 
         self.tables = tables
         return tables
-
-    def get_table_type(self, table):
-        CASCADE = 0
-        RESTRICT = 1
-        SET_NULL = 2
-        NO_ACTION = 3
-        SET_DEFAULT = 4
-
-        type_ = 'data'
-
-        # Only databases with metadata table are expected to follow these rules
-        if len(self.metadata):
-            relations = self.get_relations(table.name)
-            for rel in relations.values():
-                if rel.delete_rule in [RESTRICT, NO_ACTION]:
-                    type_ = 'reference'
-            if table.name.startswith("meta_"):
-                type_ = 'reference'
-
-        return type_
 
     def is_top_level(self, table):
         if table.type == "reference":
@@ -347,7 +327,7 @@ class Database:
         sub_tables = Dict()
         for tbl_key, table in self.tables.items():
 
-            #TODO: Legg til get_table_type isteden
+            #TODO: Legg til Table.get_type isteden
             if len(table.primary_key):
                 last_pk_col = table.primary_key[-1]
                 if last_pk_col in table.foreign_keys: #TODO extends

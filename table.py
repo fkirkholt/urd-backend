@@ -837,6 +837,9 @@ class Table:
         self.indexes = indexes
 
     def init_relations(self):
+        if hasattr(self.db, 'relations'):
+            self.relations = self.db.relations(self.name)
+            return
         if self.db.metadata.get("cache", None):
             self.relations = self.db.metadata.cache[self.name].relations
             return

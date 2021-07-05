@@ -11,7 +11,8 @@ class Connection:
         driver = self.get_driver()
         cnxnstr = f'Driver={driver};'
         if (db_name and system != 'oracle'):
-            cnxnstr += 'Database=' + db_name + ';'
+            path = db_name.split('.')
+            cnxnstr += 'Database=' + path[0] + ';'
         if system == 'oracle':
             cnxnstr += "DBQ=" + server
         else:
@@ -56,8 +57,10 @@ class Database:
             self.cat = db_name
             self.schema = None
         elif cnxn.system == 'postgres':
-            self.cat = db_name
-            self.schema = 'public'
+            path = db_name.split('.')
+            self.cat = path[0]
+            self.name = path[0]
+            self.schema = 'public' if len(path) == 1 else path[1]
         elif cnxn.system == 'oracle':
             self.cat = None
             self.schema = db_name
@@ -109,8 +112,10 @@ class Database:
         info = {
             "branch": branch,
             "base": {
-                "name": self.name, 
+                "name": self.name,
+                "system": self.cnxn.system,
                 "schema": self.schema,
+                "schemata": self.get_schemata(),
                 "label": self.metadata.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "reports": {}, #TODO
@@ -126,6 +131,19 @@ class Database:
         }
 
         return info
+
+    def get_schemata(self):
+        cursor = self.cnxn.cursor()
+        schemata = []
+
+        if self.cnxn.system == 'postgres':
+            sql = self.expr.schemata()
+            rows = cursor.execute(sql).fetchall()
+            for row in rows:
+                schemata.append(row.schema_name)
+
+        return schemata
+
 
     def get_user_admin_schemas(self):
         user = 'admin' #TODO: Autentisering

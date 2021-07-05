@@ -139,6 +139,14 @@ class Expression:
              WHERE OBJECT_TYPE = 'TABLE'
             order by owner;
             """
+    def schemata(self):
+        if self.platform == 'postgres':
+            return """
+            select schema_name
+            from information_schema.schemata
+            where schema_name != 'information_schema'
+              and schema_name not like 'pg_%';
+            """
 
     def indexes(self):
         if self.platform == 'oracle':

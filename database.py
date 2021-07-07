@@ -14,10 +14,13 @@ class Connection:
             path = db_name.split('.')
             cnxnstr += 'Database=' + path[0] + ';'
         if system == 'oracle':
-            cnxnstr += "DBQ=" + server
+            cnxnstr += "DBQ=" + server + ';'
         else:
-            cnxnstr += 'Server=' + server
-        cnxnstr += ';Uid=' + user + ';Pwd=' + pwd + ';'
+            srv_parts = server.split(':')
+            cnxnstr += 'Server=' + srv_parts[0] + ';'
+            if len(srv_parts) == 2:
+                cnxnstr += 'Port=' + srv_parts[1] + ';'
+        cnxnstr += 'Uid=' + user + ';Pwd=' + pwd + ';'
         pyodbc.lowercase = True
         print('cnxnstr', cnxnstr)
         cnxn = pyodbc.connect(cnxnstr)
@@ -59,7 +62,6 @@ class Database:
         elif cnxn.system == 'postgres':
             path = db_name.split('.')
             self.cat = path[0]
-            self.name = path[0]
             self.schema = 'public' if len(path) == 1 else path[1]
         elif cnxn.system == 'oracle':
             self.cat = None

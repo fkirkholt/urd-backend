@@ -42,7 +42,11 @@ class Record:
         from table import Table
         relations = {}
         for key, rel in self.tbl.get_relations().items():
-            db = Database(self.db.cnxn, rel.base or rel.schema)
+            if self.db.cnxn.system == 'postgres':
+                base_name = rel.base + '.' + rel.schema
+            else:
+                base_name = rel.base or rel.schema
+            db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
 
             # todo: filtrate on highest level
@@ -87,7 +91,7 @@ class Record:
     def get_relation(self, alias: str):
         from table import Table
         rel = self.tbl.get_relation(alias)
-        db = Database(rel.base or rel.schema)
+        db = Database(self.db.cnxn, rel.base or rel.schema)
         tbl_rel = Table(db, rel.table)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
         

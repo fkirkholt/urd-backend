@@ -824,6 +824,8 @@ class Table:
         for row in cursor.statistics(table=self.name, catalog=self.cat,
                                      schema=self.schema):
             name = row.index_name
+            # Sometimes rows not part of index is returned
+            if name == None: continue
 
             if name not in indexes:
                 indexes[name] = Dict({

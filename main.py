@@ -49,7 +49,11 @@ def get_table(base: str, table: str, schema: str = None, sort: str = None, limit
         cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd) #TODO
         return {'data': {'records': cnxn.get_databases()}}
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
-    dbo = Database(cnxn, base or schema)
+    if cnxn.system == 'postgres' and schema:
+        base_path = base + '.' + schema
+    else:
+        base_path = base or schema
+    dbo = Database(cnxn, base_path)
     table = Table(dbo, table)
     table.limit  = limit
     table.offset = offset
@@ -62,7 +66,11 @@ def get_table(base: str, table: str, schema: str = None, sort: str = None, limit
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str, schema: str = None):
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
-    dbo = Database(cnxn, base or schema)
+    if cnxn.system == 'postgres' and schema:
+        base_path = base + '.' + schema
+    else:
+        base_path = base or schema
+    dbo = Database(cnxn, base_path)
     tbl = Table(dbo, table)
     pk = json.loads(primary_key)
     record = Record(dbo, tbl, pk)

@@ -493,7 +493,16 @@ class Table:
                     index_exist = True
 
             if index_exist and not rel.get('hidden', False):
+                rel_pkey = rel_table.get_primary_key()
                 label = rel_table.name.replace(self.name + '_', '')
+                if set(rel_pkey) > set(rel.foreign):
+                    # If foreign key is part of primary key, and the other
+                    # pk field is also a foreign key, we have a xref table
+                    rel_fkeys = rel_table.get_fkeys()
+                    rest = set(rel_pkey) - set(rel.foreign)
+                    pk_field = list(rest)[-1]
+                    if pk_field in rel_fkeys:
+                        label = pk_field
                 label = label.replace('_' + self.name, '')
                 label = self.db.get_label(label).strip()
                 form['items'][label] = "relations." + alias

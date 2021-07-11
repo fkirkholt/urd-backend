@@ -204,3 +204,15 @@ class Expression:
             from all_tab_columns
             where owner = ? and table_name = nvl(?, table_name)
             """
+        else:
+            return None
+
+    def privilege(self):
+        if self.platform == 'postgres':
+            return """
+            select pg_catalog.has_schema_privilege(current_user, nspname, 'CREATE') "create"
+            from pg_catalog.pg_namespace
+            where nspname = ?
+            """
+        else:
+            return None

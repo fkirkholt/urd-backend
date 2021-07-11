@@ -99,18 +99,6 @@ class Database:
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
 
-        params = ['admin'] #TODO: Autentisering
-
-        sql = """
-        select count(*) from role_permission
-        where role_ in (select role_ from user_role where user_ = ?)
-        and admin = true
-        """
-
-        is_admin = 1 #TODO
-
-        self.user = {'admin': is_admin}
-
         info = {
             "branch": branch,
             "base": {
@@ -128,11 +116,26 @@ class Database:
             "user": {
                 "name": 'Admin', #TODO: Autentisering
                 "id": 'admin', #TODO: Autentisering
-                "admin": is_admin
+                "admin": self.get_privileges().usage
             }
         }
 
         return info
+
+    def get_privileges(self):
+        privilege = Dict()
+        sql = self.expr.privilege()
+        cursor = self.cnxn.cursor()
+
+        if not sql:
+            privilege.create = 0
+        else:
+            priv = cursor.execute(sql, self.schema or self.cat).fetchone()
+            privilege.create = priv.create
+            privilege.usage = 0
+
+        return privilege
+
 
     def get_schemata(self):
         cursor = self.cnxn.cursor()

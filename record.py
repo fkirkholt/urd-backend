@@ -71,6 +71,7 @@ class Record:
                 'name': rel.table,
                 'conditions': tbl_rel.get_client_conditions(),
                 'base_name': rel.base,
+                'schema_name': rel.schema,
                 'relationship': rel.type
             })
             
@@ -91,7 +92,11 @@ class Record:
     def get_relation(self, alias: str):
         from table import Table
         rel = self.tbl.get_relation(alias)
-        db = Database(self.db.cnxn, rel.base or rel.schema)
+        if self.db.cnxn.system == 'postgres':
+            base_name = rel.base + '.' + rel.schema
+        else:
+            base_name = rel.base or rel.schema
+        db = Database(self.db.cnxn, base_name)
         tbl_rel = Table(db, rel.table)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
         

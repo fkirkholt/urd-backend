@@ -20,12 +20,6 @@ class Table:
         self.user_filtered = False
         self.join = None
 
-    def get_view(self):
-        if not hasattr(self, 'view'):
-            self.init_view()
-
-        return self.view
-
     def get_type(self):
         CASCADE = 0
         RESTRICT = 1
@@ -781,48 +775,6 @@ class Table:
 
         self.fields = fields
 
-    def init_view(self):
-        #TODO: Hvordan kan filter defineres i databasen?
-        #       Og når er det behov for å gjøre det?
-        tbl_filter = self.get_filter()
-        if tbl_filter:
-            condition = 'where ' + self.db.expr.replace_vars(tbl_filter)
-        else:
-            condition = ''
-
-        cols = []
-        n = 0  # modified columns
-        fields = self.get_fields()
-        for key, col in fields.items():
-            if col.get('table', self.name) != self.name:
-                continue
-
-            if 'name' not in col:
-                col.name = key
-
-            if 'source' in col:
-                cols.append(f"({col.source}) as {key}")
-                n += 1
-            elif col.name != key:
-                cols.append(f"{col.name} as {key}")
-                n += 1
-            else:
-                cols.append(col.name)
-
-        if n:
-            select = ', '.join(cols)
-            view = "(select " + select + "\n"
-            view += " from " + self.name + "\n"
-            view += condition + ")\n"
-        elif condition:
-            view = "(select " + self.name + ".*\n"
-            view += " from " + self.name + "\n"
-            view += condition + ")"
-        else:
-            view = self.name
-
-        self.view = view
-            
     def init_indexes(self):
         if self.db.metadata.get("cache", None):
             self.indexes= self.db.metadata.cache[self.name].indexes

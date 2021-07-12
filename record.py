@@ -56,8 +56,8 @@ class Record:
                 rec_values = self.get_values()
 
             # Add condition to fetch only rows that link to record
-            for idx, col in enumerate(rel.foreign):
-                ref_key = rel.local[idx].lower()
+            for idx, col in enumerate(rel.primary):
+                ref_key = rel.foreign[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
                 tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
 
@@ -107,8 +107,8 @@ class Record:
             rec_values = self.get_values()
 
         # Add condition to fetch only rows that link to record
-        for idx, col in enumerate(rel.foreign):
-            ref_key = rel.local[idx].lower()
+        for idx, col in enumerate(rel.primary):
+            ref_key = rel.foreign[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
             tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
 
@@ -119,9 +119,9 @@ class Record:
             rec_values = self.get_values()
 
         values = [None if len(self.pk) == 0 else rec_values[key]
-                  for key in rel.local]
+                  for key in rel.foreign]
         
-        for idx, col in enumerate(rel.foreign):
+        for idx, col in enumerate(rel.primary):
             relation.fields[col].default = values[idx]
             relation.fields[col].defines_relation = True
 
@@ -129,8 +129,8 @@ class Record:
         # Add condition to fetch only rows that link to record
         # todo: Hvorfor er dette nødvendig her og ikke for
         #       telling av relasjoner?
-        for idx, col in enumerate(rel.foreign):
-            ref_key = rel.local[idx]
+        for idx, col in enumerate(rel.primary):
+            ref_key = rel.foreign[idx]
             val = None if len(self.pk) == 0 else rec_values[ref_key]
             tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
             pk[col] = val
@@ -193,8 +193,8 @@ class Record:
             pk = {}
 
             # Add condition to fetch only rows that link to record
-            for idx, col in enumerate(rel.foreign):
-                ref_key = rel.local[idx]
+            for idx, col in enumerate(rel.primary):
+                ref_key = rel.foreign[idx]
 
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
                 tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
@@ -243,9 +243,9 @@ class Record:
 
                 # Find condition for relation
                 # todo: Har håndtert at pk ikke er satt i php-koden
-                values = [None if len(self.pk) == 0 else  rec_values[key] for key in rel.local]
+                values = [None if len(self.pk) == 0 else  rec_values[key] for key in rel.foreign]
 
-                for idx, col in enumerate(rel.foreign):
+                for idx, col in enumerate(rel.primary):
                     relation.fields[col].default = values[idx]
                     relation.fields[col].defines_relation = True
 
@@ -316,8 +316,8 @@ class Record:
         relations = self.tbl.get_relations()
         rel = [rel for rel in relations if rel.table == self.tbl.name][0]
 
-        for idx, colname in enumerate(rel.foreign):
-            foreign = rel.local[idx]
+        for idx, colname in enumerate(rel.primary):
+            foreign = rel.foreign[idx]
             value = rec.fields[foreign].value
             self.tbl.add_cond(f"{rel.table}.{colname}", "=", value)
         

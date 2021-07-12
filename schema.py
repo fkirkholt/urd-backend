@@ -190,14 +190,14 @@ class Schema:
                         'table': row.pktable_name.lower(),
                         # todo: Dette er "databasen"
                         'schema': row.pktable_cat.lower(),
-                        'local': [],
-                        'foreign': []
+                        'foreign': [],
+                        'primary': []
                     })
-                keys[name].local.append(row.fkcolumn_name.lower())
-                keys[name].foreign.append(row.pkcolumn_name.lower())
+                keys[name].foreign.append(row.fkcolumn_name.lower())
+                keys[name].primary.append(row.pkcolumn_name.lower())
 
             for fk in keys.values():
-                alias = fk.local[-1]
+                alias = fk.foreign[-1]
                 if alias in table.foreign_keys:
                     alias = alias + '_2'
                 fk.name = f"{table.name}_{alias}_fkey"
@@ -215,30 +215,30 @@ class Schema:
                     })
                 
                 # Check if relation defines this as an extension table
-                if fk.local == pk:
+                if fk.foreign== pk:
                     table.extends = fk.table
                 
                 # Find index associated with the foreign key
                 fk_index = None
                 for index in table.indexes.values():
-                    if index.columns == fk.local:
+                    if index.columns == fk.foreign:
                         fk_index = index
                 
-                # Find if there exists an index to find local key
+                # Find if there exists an index to find foreign key
                 index_exists = False
-                s = slice(0, len(fk.local))
+                s = slice(0, len(fk.foreign))
                 for index in table.indexes.values():
-                    if len(index.columns) >= len(fk.local) and index.columns[s] == fk.local:
+                    if len(index.columns) >= len(fk.foreign) and index.columns[s] == fk.foreign:
                         index_exists = True
                 
                 # Find label for has-many relations
                 if config.urd_structure and fk_index:
                     lbl = re.sub(r"^(fk_|idx_)", "", fk_index.name)
                     lbl = re.sub(f"(_{fk.table})"+r"(_fk|_idx)?$", "", lbl)
-                    local = '_'.join(fk.local)
-                    lbl = re.sub("^"+local+"$", "", lbl)
-                    replace = "" if fk.table == local else f" ({local})"
-                    lbl = re.sub("(_"+local+r")(_fk|_idx)?$", replace, lbl)
+                    foreign = '_'.join(fk.foreign)
+                    lbl = re.sub("^"+foreign+"$", "", lbl)
+                    replace = "" if fk.table == foreign else f" ({foreign})"
+                    lbl = re.sub("(_"+foreign+r")(_fk|_idx)?$", replace, lbl)
                     lbl = re.sub(r"(_fk|_idx)$", "", lbl)
                     lbl = lbl.replace("_", " ")
                 else:
@@ -546,11 +546,11 @@ class Schema:
 
                     # Find indexes that can be used to get relation
                     # todo: Har jeg ikke gjort liknende lenger opp?
-                    # Se "Find if there exists an index to find local key"
+                    # Se "Find if there exists an index to find foreign key"
                     index_exist = False
-                    s = slice(0, len(fk.local))
+                    s = slice(0, len(fk.foreign))
                     for index in rel_table.indexes.values():
-                        if index.columns[s] == fk.local:
+                        if index.columns[s] == fk.foreign:
                             index_exist = True
                     
                     if index_exist and not relation.get('hidden', False):
@@ -560,7 +560,7 @@ class Schema:
                             label = alias.replace("_", " ").capitalize()
                         table.form['items'][label] = "relations." + alias
                     
-                    rf_name = fk.local[-1]
+                    rf_name = fk.foreign[-1]
                     ref_field = self.tables[relation.table].fields[rf_name]
                     ref_tbl_col = relation.table + "." + rf_name
 

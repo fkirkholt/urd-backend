@@ -335,7 +335,7 @@ class Table:
             table = self.get_db_table(fk.base or fk.schema, fk.table)
 
             # Get the ON statement in the join
-            ons = [key+'.'+fk.foreign[idx] + " = " + self.name + "." + col for idx, col in enumerate(fk.local)]
+            ons = [key+'.'+fk.primary[idx] + " = " + self.name + "." + col for idx, col in enumerate(fk.foreign)]
             on_list = ' AND '.join(ons)
 
             joins.append(f"left join {self.schema or self.cat}.{table.name} {key} on {on_list}")
@@ -484,7 +484,7 @@ class Table:
 
             # Find indexes that can be used to get relation
             #TODO: Har jeg ikke gjort liknende lenger opp?
-            # Se "Find if there exists an index to find local key"
+            # Se "Find if there exists an index to find foreign key"
             index_exist = False
             s = slice(0, len(rel.foreign))
             rel_indexes = rel_table.get_indexes()
@@ -675,9 +675,9 @@ class Table:
                 # Insert value for primary key also in the relations
                 for rel in self.get_relations().values():
                     for rel_rec in rel.records.values():
-                        for idx, colname in enumerate(rel.local):
+                        for idx, colname in enumerate(rel.foreign):
                             if colname not in rel_rec.values:
-                                pk_col = rel.foreign[idx]
+                                pk_col = rel.primary[idx]
                                 rel_rec.values[colname] = pk[pk_col]
                     
             elif rec.method == "put":
@@ -697,14 +697,14 @@ class Table:
                 # Set value of fkey columns to matched colums of record
                 fkey = rel_table.get_fkey(rel.fkey)
                 for rel_rec in rel.records:
-                    for idx, col in enumerate(fkey.local):
-                        fcol = fkey.foreign[idx]
-                        rel_rec['values'][col] = record_vals[fcol]
+                    for idx, col in enumerate(fkey.foreign):
+                        pkcol = fkey.primary[idx]
+                        rel_rec['values'][col] = record_vals[pkcol]
 
                         # Primary keys of relation may be updated by
                         # cascade if primary keys of record is updated
                         if col in rel_rec.prim_key:
-                            rel_rec.prim_key[col] = record_vals[fcol]
+                            rel_rec.prim_key[col] = record_vals[pkcol]
 
                 rel_table.save(rel.records)
         
@@ -730,14 +730,14 @@ class Table:
                     'schema': row.pktable_schem,
                     'delete_rule': row.delete_rule,
                     'update_rule': row.update_rule,
-                    'local': [],
-                    'foreign': []
+                    'foreign': [],
+                    'primary': []
                 })
-            keys[name].local.append(row.fkcolumn_name.lower())
-            keys[name].foreign.append(row.pkcolumn_name.lower())
+            keys[name].foreign.append(row.fkcolumn_name.lower())
+            keys[name].primary.append(row.pkcolumn_name.lower())
 
         for fk in keys.values():
-            alias = fk.local[-1]
+            alias = fk.foreign[-1]
             if alias in foreign_keys:
                 alias = alias + "_2"
             foreign_keys[alias] = fk
@@ -868,12 +868,12 @@ class Table:
                     'base': row.fktable_cat,
                     'schema': row.fktable_schem,
                     'delete_rule': row.delete_rule,
-                    'local': [],
-                    'foreign': []
+                    'foreign': [],
+                    'primary': []
                 })
 
-            relations[name].local.append(row.pkcolumn_name)
-            relations[name].foreign.append(row.fkcolumn_name)
+            relations[name].foreign.append(row.pkcolumn_name)
+            relations[name].primary.append(row.fkcolumn_name)
 
         self.relations = relations
 

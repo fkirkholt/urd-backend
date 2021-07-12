@@ -551,15 +551,15 @@ class Database:
                 fkeys[row.fktable_name][name].table = row.pktable_name
                 fkeys[row.fktable_name][name].schema = row.pktable_cat #TODO: merkelig
                 fkeys[row.fktable_name][name].delete_rule = row.delete_rule
-                if not 'local' in fkeys[row.fktable_name][name]:
-                    fkeys[row.fktable_name][name].local = []
+                if not 'foreign' in fkeys[row.fktable_name][name]:
                     fkeys[row.fktable_name][name].foreign = []
-                fkeys[row.fktable_name][name].local.append(row.fkcolumn_name.lower())
-                fkeys[row.fktable_name][name].foreign.append(row.pkcolumn_name.lower())
+                    fkeys[row.fktable_name][name].primary = []
+                fkeys[row.fktable_name][name].foreign.append(row.fkcolumn_name.lower())
+                fkeys[row.fktable_name][name].primary.append(row.pkcolumn_name.lower())
 
             for tbl_name, keys in fkeys.items():
                 for fkey in keys.values():
-                    alias = fkey.local[-1]
+                    alias = fkey.foreign[-1]
                     if alias in foreign_keys[tbl_name]:
                         alias = alias + "_2"
                     foreign_keys[tbl_name][alias] = fkey
@@ -588,8 +588,8 @@ class Database:
                         "schema": key.schema,
                         "foreign_key": alias,
                         "delete_rule": key.delete_rule,
-                        "local": key.foreign,
-                        "foreign": key.local,
+                        "foreign": key.primary,
+                        "primary": key.foreign,
                         "label": self.get_label(key.table) #TODO: Fix
                     })
 

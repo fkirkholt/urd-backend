@@ -1,16 +1,16 @@
+"""Module for handling tables"""
+import re
 import simplejson as json
 from addict import Dict
 from record import Record
 from column import Column
 from expression import Expression
-import re
 
 class Table:
+    """Getting metadata for table and data for showing grid"""
     def __init__(self, db, tbl_name):
         self.db = db
         self.name = tbl_name
-        self.cat = self.db.cat
-        self.schema = self.db.schema
         self.label = db.get_label(tbl_name)
         self.offset = 0
         self.limit = 30
@@ -19,13 +19,18 @@ class Table:
         self.client_conditions = []
         self.user_filtered = False
         self.join = None
+        self.foreign_keys = None
+        self.fields = None
+        self.indexes = None
+        self.relations = None
 
     def get_type(self):
-        CASCADE = 0
-        RESTRICT = 1
-        SET_NULL = 2
-        NO_ACTION = 3
-        SET_DEFAULT = 4
+        """Return table type - 'data' or 'reference'"""
+        # cascade = 0
+        restrict = 1
+        # set_null = 2
+        no_action = 3
+        # set_default = 4
 
         type_ = 'data'
 
@@ -33,45 +38,51 @@ class Table:
         if len(self.db.metadata):
             relations = self.get_relations()
             for rel in relations.values():
-                if rel.delete_rule in [RESTRICT, NO_ACTION]:
+                if rel.delete_rule in [restrict, no_action]:
                     type_ = 'reference'
             if self.name.startswith("meta_"):
                 type_ = 'reference'
 
         return type_
 
-    def get_db_table(self, base, table):
+    def get_db_table(self, base_name, table_name):
+        """Return table object"""
         from database import Database
-        db = Database(self.db.cnxn, base)
-        tbl = Table(db, table)
+        base = Database(self.db.cnxn, base_name)
+        tbl = Table(base, table_name)
 
         return tbl
 
     def get_indexes(self):
+        """Return all table indexes"""
         if not hasattr(self, 'indexes'):
             self.init_indexes()
 
         return self.indexes
 
     def get_fkeys(self):
+        """Return all foreign keys of table"""
         if not hasattr(self, 'foreign_keys'):
             self.init_foreign_keys()
 
         return self.foreign_keys
 
     def get_fkey(self, key):
+        """Return single foreign key"""
         if not hasattr(self, 'foreign_keys'):
             self.init_foreign_keys()
 
         return self.foreign_keys[key]
 
     def get_fields(self):
+        """Return all fields of table"""
         if not hasattr(self, 'fields'):
             self.init_fields()
 
         return self.fields
 
     def get_values(self, selects, order):
+        """Return values for columns in grid"""
         #TODO: hent join selv, og kanskje flere
         cols = []
         fields = self.get_fields()
@@ -81,11 +92,11 @@ class Table:
 
         select = ', '.join(cols)
         join = self.get_join()
-        cond = self.get_conds()
+        cond = self.get_cond_expr()
         params = self.params
 
         sql = "select " + select
-        sql+= "  from " + (self.schema or self.cat) + "." + self.name
+        sql+= "  from " + (self.db.schema or self.db.cat) + "." + self.name
         sql+= " " + join + "\n"
         sql+= "" if not cond else "where " + cond +"\n"
         sql+= order
@@ -103,11 +114,12 @@ class Table:
         return result
 
     def get_rowcount(self):
-        conds = self.get_conds()
+        """Return rowcount for grid"""
+        conds = self.get_cond_expr()
         join = self.get_join()
 
         sql  = "select count(*)\n"
-        sql += f"from {self.schema or self.cat}.{self.name}\n"
+        sql += f"from {self.db.schema or self.db.cat}.{self.name}\n"
         sql += join + "\n"
         sql += "" if not conds else f"where {conds}\n"
 
@@ -117,18 +129,19 @@ class Table:
         return count
 
     def get_display_values(self, selects, order):
+        """Return display values for columns in grid"""
         for key, value in selects.items():
             selects[key] = value + ' as ' + key
-        
+
         select = ', '.join(selects.values())
         join = self.get_join()
-        conds = self.get_conds()
+        conds = self.get_cond_expr()
         params = self.params
 
 
         sql = "select " + select
-        sql+= "  from " + (self.schema or self.cat) + "." + self.name
-        sql+= " " + join + "\n" 
+        sql+= "  from " + (self.db.schema or self.db.cat) + "." + self.name
+        sql+= " " + join + "\n"
         sql+= "" if not conds else "where " + conds + "\n"
         sql+= order
 
@@ -146,12 +159,14 @@ class Table:
         return result
 
     def get_primary_key(self):
+        """Return primary key of table"""
         cursor = self.db.cnxn.cursor()
-        pkeys = cursor.primaryKeys(table=self.name, catalog=self.cat,
-                                   schema=self.schema)
+        pkeys = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
+                                   schema=self.db.schema)
         return [row.column_name.lower() for row in pkeys]
 
     def get_grid_columns(self):
+        """Return columns belonging to grid"""
         indexes = self.get_indexes()
         grid_idx = indexes.get(self.name.lower() + "_grid_idx", None)
         if grid_idx:
@@ -160,14 +175,17 @@ class Table:
             columns = []
             for key, field in self.get_fields().items():
                 # Don't show hdden columns
-                if field.name[0:1] == '_': continue
+                if field.name[0:1] == '_':
+                    continue
                 #TODO: Don't show autoinc columns
                 columns.append(key)
-                if len(columns) == 5: break
-        
+                if len(columns) == 5:
+                    break
+
         return columns
 
     def get_sort_columns(self):
+        """Return columns for default sorting of grid"""
         indexes = self.get_indexes()
         sort_idx = indexes.get(self.name.lower() + "_sort_idx", None)
         grid_idx = indexes.get(self.name + "_grid_idx", None)
@@ -181,16 +199,18 @@ class Table:
         return columns
 
     def get_summation_columns(self):
+        """Return columns that should be summed"""
         indexes = self.get_indexes()
         sum_idx = indexes.get(self.name + "_summation_idx", None)
-        
+
         return [] if not sum_idx else sum_idx.columns
 
 
     def get_grid(self):
+        """Return all metadata and data to display grid"""
         selects = {} # dict of select expressions
-            #TODO: Behøver selects å være dict? Kan det ikke være list? Det forenkler vel koden litt.
-        
+        #TODO: Behøver selects å være dict? Kan det ikke være list? Det forenkler vel koden litt.
+
         pkey = self.get_primary_key()
         foreign_keys = self.get_fkeys()
         fields = self.get_fields()
@@ -219,12 +239,12 @@ class Table:
 
         if hasattr(self, 'expansion_column'):
             # Get number of relations to same table for expanding row
-            fk = self.get_parent_fk()
-            rel_column = fields[fk.alias]
+            fkey = self.get_parent_fk()
+            rel_column = fields[fkey.alias]
             wheres = []
 
-            for idx, colname in enumerate(fk.foreign):
-                foreign = fk.foreign[idx]
+            for idx, colname in enumerate(fkey.foreign):
+                foreign = fkey.foreign[idx]
                 wheres.append(colname + ' = ' + self.name + '.' + foreign)
 
             where = ' and '.join(wheres)
@@ -235,7 +255,7 @@ class Table:
                 )"""
 
             # Filters on highest level if not filtered by user
-            if self.user_filtered == False:
+            if not self.user_filtered:
                 expr = self.name + '.' + rel_column.name
                 val = rel_column.get('default', None)
                 self.add_cond(expr, "=", val)
@@ -253,7 +273,7 @@ class Table:
         recs = []
         for row in display_values:
             recs.append({'columns': row})
-        
+
         for index, row in enumerate(values):
             recs[index]['values'] = row
             recs[index]['primary_key'] = {key: row[key] for key in pkey}
@@ -306,6 +326,7 @@ class Table:
         return data
 
     def get_parent_fk(self):
+        """Return foreign key defining hierarchy"""
         # Find relation to child records
         relations = self.get_relations()
         rel = [rel for rel in list(relations) if rel.name == self.name][0]
@@ -317,6 +338,7 @@ class Table:
         return fk
 
     def get_join(self):
+        """Return all joins to table as single string"""
         if self.join is not None:
             return self.join
         joins = []
@@ -332,7 +354,7 @@ class Table:
             ons = [key+'.'+fk.primary[idx] + " = " + self.name + "." + col for idx, col in enumerate(fk.foreign)]
             on_list = ' AND '.join(ons)
 
-            joins.append(f"left join {self.schema or self.cat}.{table.name} {key} on {on_list}")
+            joins.append(f"left join {self.db.schema or self.db.cat}.{table.name} {key} on {on_list}")
 
         self.join = "\n".join(joins)
 
@@ -340,6 +362,7 @@ class Table:
 
 
     def get_sort_fields(self, selects):
+        """Return sort fields as Dict"""
         sort_fields = Dict()
         for sort in self.get_sort_columns():
             # Split into field and sort order
@@ -350,11 +373,12 @@ class Table:
             if key in selects:
                 sort_fields[key].field = selects[key]
             sort_fields[key].order = direction
-        
+
         return sort_fields
 
 
     def make_order_by(self, selects):
+        """Return 'order by'-clause"""
         pkey = self.get_primary_key()
 
         order_by = "order by "
@@ -370,7 +394,7 @@ class Table:
                 order_by += f"{sort.field} {sort.order}, "
             elif self.db.cnxn.system == 'sqlite':
                 order_by += f"{sort.field} is null, {sort.field} {sort.order}, "
-        
+
         for field in pkey:
             order_by += f"{self.name}.{field}, "
 
@@ -382,14 +406,15 @@ class Table:
         return order_by
 
     def get_sums(self):
+        """Return list of sums for summation columns"""
         sums = []
 
         cols = self.get_summation_columns()
         join = self.get_join()
-        cond = self.get_conds()
+        cond = self.get_cond_expr()
         params = self.params
 
-        if len(cols):
+        if len(cols) > 0:
             selects = []
             for col in cols:
                 selects.append(f"sum({col}) as {col}")
@@ -434,6 +459,7 @@ class Table:
         return col_groups
 
     def get_form(self):
+        """Return form as Dict for displaying record"""
 
         form = Dict({'items': {}}) #TODO: vurder 'subitems'
         fields = self.get_fields()
@@ -504,12 +530,14 @@ class Table:
         return form
 
     def get_relation(self, alias):
+        """Return single relation"""
         if not hasattr(self, 'relations'):
             self.init_relations()
 
         return self.relations[alias]
 
     def get_relations(self):
+        """Return all 'has many' relations of table"""
         #TODO: Skal filtreres på permission
         if not hasattr(self, 'relations'):
             self.init_relations()
@@ -519,7 +547,7 @@ class Table:
     def get_ref_relations(self):
         """ Interim function needed to support old schema """
         relations = {}
-        for fk in self.get_relations().values():
+        for fkey in self.get_relations().values():
             # fk_table = Table(self.db, fk.table) #TODO: egentlig db
 
             # alias = fk.foreign[-1]
@@ -527,79 +555,19 @@ class Table:
             #     alias = alias + "_2"
             # foreign_keys[alias] = fk
 
-            relations[fk.name] = Dict({
-                'table': fk.table,
-                'foreign_key': fk.foreign[-1],
+            relations[fkey.name] = Dict({
+                'table': fkey.table,
+                'foreign_key': fkey.foreign[-1],
                 # 'label': self.db.get_label(fk.table) #TODO: Finn bedre løsning
             })
 
         return relations
 
-    def get_user_permission(self, tbl_name):
-        #TODO: Når behøver jeg å angi tbl_name?
-        user = 'admin' #TODO: Autentisering
-
-        sql = """
-        --sql
-        select rp.*
-        from role_permission rp 
-        inner join (
-            select max(schema_) schema_, max(role_) role_,
-                   max(table_) table_
-            from role_permission
-            where schema_ in (?, '*')
-              and table_ in (?, '*')
-              and role_ in (select role_ from user_role where user_ = ?)
-            group by role_
-        ) rp2 on rp.role_ = rp2.role_ and rp.schema_ = rp2.schema_
-        and rp.table_ = rp2.table_;
-        """
-
-        cursor = self.db.urd.cursor()
-        rows = cursor.execute(sql, self.db.schema, tbl_name, user).fetchall()
-
-        permission = Dict({
-            'view': False,
-            'add': False,
-            'edit': False,
-            'delete': False,
-            'admin': False
-        })
-
-        for row in rows:
-            if row.view_  : permission.view   = True
-            if row.add_   : permission.add    = True
-            if row.edit   : permission.edit   = True
-            if row.delete_: permission.delete = True
-            if row.admin  : permission.admin  = True
-
-        #TODO: Kode hvis ingen permission er gitt. Merkelig
-
-        if self.db.schema == 'urd':
-            admin_schemas = self.db.get_user_admin_schemas() #TODO
-
-            if len(admin_schemas):
-                #TODO: definer listen med navn som beskriver hva dette er
-                if self.name in ['filter', 'format', 'role', 'role_permission', 'user_role']:
-                    self.add_cond(self.name + ".schema_ in ('" + "','".join(admin_schemas) + "')")
-
-                #TODO: Merkelig å gjenta nesten samme lista
-                #       Må iallfall kunne forenkle dette
-                if self.name in ['filter', 'format', 'role', 'role_permission', 'user_', 'user_role']:
-                    permission.view = 1
-                    permission.add = 1
-                    permission.edit = 1
-                    permission.delete = 1
-
-        if (self.get_type() == 'reference' and permission.admin == 0):
-            permission.view = 0
-
-        return permission
-
     def set_search_cond(self, query):
+        """Set search conditions for grid queries"""
         filters = query.split(" AND ")
-        for filter in filters:
-            parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|IS NULL|IS NOT NULL)\s*", filter, 2)
+        for fltr in filters:
+            parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|IS NULL|IS NOT NULL)\s*", fltr, 2)
             field = parts[0]
             if "." not in field:
                 field = self.name + "." + field
@@ -613,6 +581,7 @@ class Table:
             self.add_cond(field, operator, value)
 
     def add_cond(self, expr, operator="=", value=None):
+        """Add condition used in grid queries"""
         if value is None:
             if operator in ["IS NULL", "IS NOT NULL"]:
                 self.conditions.append(f"{expr} {operator}")
@@ -624,33 +593,19 @@ class Table:
             self.client_conditions.append(f"{expr} {operator} {value}")
         #TODO: Handle "in" operator
 
-    def get_conds(self):
+    def get_cond_expr(self):
+        """Return expression with all query conditions"""
         return " and ".join(self.conditions)
 
-    def get_conditions(self):
-        return self.conditions
-
     def get_client_conditions(self):
+        """Return all conditions visible for client"""
         return self.client_conditions
-    
-    def get_record_count(self, join=''):
-        cond = self.get_conds()
-        params = self.params
-        print('params', params)
-        sql = "select count(*) \n"
-        sql+= f"  from {self.schema or self.cat}.{self.name} \n"
-        sql+= join + "\n"
-        sql+= "" if not cond else "where " + cond
-
-        cursor = self.db.cnxn.cursor()
-        count = cursor.execute(sql, params).fetchval()
-        
-        return count
 
     def get_filter(self): #TODO
         return ""
 
     def save(self, records: list):
+        """Save new and updated records in table"""
         from database import Database
         result = Dict()
         for rec in records:
@@ -665,7 +620,7 @@ class Table:
                 # correct offset when reloading table after saving
                 if 'selected' in rec:
                     result.selected = pk
-                
+
                 # Insert value for primary key also in the relations
                 for rel in self.get_relations().values():
                     for rel_rec in rel.records.values():
@@ -673,7 +628,7 @@ class Table:
                             if colname not in rel_rec.values:
                                 pk_col = rel.primary[idx]
                                 rel_rec.values[colname] = pk[pk_col]
-                    
+
             elif rec.method == "put":
                 if rec['values']:
                     res = record.update(rec['values'])
@@ -685,9 +640,9 @@ class Table:
             # Iterates over all the relations to the record
             for rel in rec.relations.values():
 
-                rel_db = Database(rel.base_name)
+                rel_db = Database(self.db.cnxn, rel.base_name)
                 rel_table = Table(rel_db, rel.table_name)
-                
+
                 # Set value of fkey columns to matched colums of record
                 fkey = rel_table.get_fkey(rel.fkey)
                 for rel_rec in rel.records:
@@ -701,10 +656,11 @@ class Table:
                             rel_rec.prim_key[col] = record_vals[pkcol]
 
                 rel_table.save(rel.records)
-        
+
         return result
 
     def init_foreign_keys(self):
+        """Store foreign keys in table object"""
         if self.db.metadata.get("cache", None):
             self.foreign_keys = self.db.metadata.cache[self.name].foreign_keys
             return
@@ -713,8 +669,8 @@ class Table:
         keys = {}
 
         for row in cursor.foreignKeys(foreignTable=self.name,
-                                      foreignCatalog=self.cat,
-                                      foreignSchema=self.schema):
+                                      foreignCatalog=self.db.cat,
+                                      foreignSchema=self.db.schema):
             name = row.fk_name
             if name not in keys:
                 keys[name] = Dict({
@@ -730,15 +686,16 @@ class Table:
             keys[name].foreign.append(row.fkcolumn_name.lower())
             keys[name].primary.append(row.pkcolumn_name.lower())
 
-        for fk in keys.values():
-            alias = fk.foreign[-1]
+        for fkey in keys.values():
+            alias = fkey.foreign[-1]
             if alias in foreign_keys:
                 alias = alias + "_2"
-            foreign_keys[alias] = fk
+            foreign_keys[alias] = fkey
 
         self.foreign_keys = foreign_keys
 
     def init_fields(self):
+        """Store Dict of fields in table object"""
         if self.db.metadata.get("cache", None):
             self.fields = self.db.metadata.cache[self.name].fields
             return
@@ -750,8 +707,8 @@ class Table:
             sql = self.db.expr.columns()
             cols = cursor.execute(sql, self.db.schema, self.name).fetchall()
         else:
-            cols = cursor.columns(table=self.name, catalog=self.cat,
-                                  schema=self.schema).fetchall()
+            cols = cursor.columns(table=self.name, catalog=self.db.cat,
+                                  schema=self.db.schema).fetchall()
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
@@ -776,17 +733,19 @@ class Table:
         self.fields = fields
 
     def init_indexes(self):
+        """Store Dict of indexes as attribute of table object"""
         if self.db.metadata.get("cache", None):
             self.indexes= self.db.metadata.cache[self.name].indexes
             return
         cursor = self.db.cnxn.cursor()
         indexes = Dict()
 
-        for row in cursor.statistics(table=self.name, catalog=self.cat,
-                                     schema=self.schema):
+        for row in cursor.statistics(table=self.name, catalog=self.db.cat,
+                                     schema=self.db.schema):
             name = row.index_name
             # Sometimes rows not part of index is returned
-            if name == None: continue
+            if name is None:
+                continue
 
             if name not in indexes:
                 indexes[name] = Dict({
@@ -800,6 +759,7 @@ class Table:
         self.indexes = indexes
 
     def init_relations(self):
+        """Store Dict of 'has many' relations as attribute of table object"""
         if hasattr(self.db, 'relations'):
             print('self.name', self.name)
             self.relations = self.db.relations[self.name]
@@ -810,8 +770,8 @@ class Table:
         cursor = self.db.cnxn.cursor()
         relations = Dict()
 
-        for row in cursor.foreignKeys(table=self.name, catalog=self.cat,
-                                      schema=self.schema):
+        for row in cursor.foreignKeys(table=self.name, catalog=self.db.cat,
+                                      schema=self.db.schema):
             name = row.fk_name
             if name not in relations:
                 relations[name] = Dict({
@@ -830,6 +790,7 @@ class Table:
         self.relations = relations
 
     def export_ddl(self, system):
+        """Return ddl for table"""
         ddl = f"create table {self.name} (\n"
         coldefs = []
         for col in self.get_fields().values():

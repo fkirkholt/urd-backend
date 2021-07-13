@@ -62,7 +62,7 @@ class Record:
                 tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
 
             if (len(self.pk)):
-                count_records = tbl_rel.get_record_count()
+                count_records = tbl_rel.get_rowcount()
             else:
                 count_records = 0
             
@@ -217,7 +217,7 @@ class Record:
                     tbl_rel.add_cond(tbl_rel.name+'.'+parent_col.alias, "=", parent_col.get('default'))
 
                 if (len(self.pk)):
-                    count_records = tbl_rel.get_record_count()
+                    count_records = tbl_rel.get_rowcount()
                 else:
                     count_records = 0
                 relation = Dict({

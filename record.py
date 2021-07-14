@@ -57,8 +57,8 @@ class Record:
                 rec_values = self.get_values()
 
             # Add condition to fetch only rows that link to record
-            for idx, col in enumerate(rel.primary):
-                ref_key = rel.foreign[idx].lower()
+            for idx, col in enumerate(rel.foreign):
+                ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
                 grid.add_cond(f"{rel.table}.{col}", "=", val)
 
@@ -109,8 +109,8 @@ class Record:
             rec_values = self.get_values()
 
         # Add condition to fetch only rows that link to record
-        for idx, col in enumerate(rel.primary):
-            ref_key = rel.foreign[idx].lower()
+        for idx, col in enumerate(rel.foreign):
+            ref_key = rel.primary[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
             grid.add_cond(f"{rel.table}.{col}", "=", val)
 
@@ -123,7 +123,7 @@ class Record:
         values = [None if len(self.pk) == 0 else rec_values[key]
                   for key in rel.foreign]
 
-        for idx, col in enumerate(rel.primary):
+        for idx, col in enumerate(rel.foreign):
             relation.fields[col].default = values[idx]
             relation.fields[col].defines_relation = True
 
@@ -143,9 +143,9 @@ class Record:
         if set(tbl_rel.pkey) <= set(rel.foreign):
             rec = Record(self.db, tbl_rel, pk)
             relation.records = [rec.get()]
-            relation.relationship == "1:1"
+            relation.relationship = "1:1"
         else:
-            relation.relationship == "1:M"
+            relation.relationship = "1:M"
 
         return relation
 
@@ -159,7 +159,7 @@ class Record:
         - types: set condition for showing relation based on type
         """
         # todo: Altfor lang og rotete funksjon
-        from table import Table
+        from table import Table, Grid
 
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
@@ -170,8 +170,9 @@ class Record:
         for key, rel in self.tbl.get_relations().items():
             if alias and alias != key: continue
 
-            db = Database(rel.base)
+            db = Database(self.db.cnxn, rel.base)
             tbl_rel = Table(db, rel.table)
+            grid = Grid(tbl_rel)
 
             # todo: too slow
             # permission = tbl_rel.get_user_permission(tbl_rel.name)
@@ -181,9 +182,9 @@ class Record:
 
             # If foreign key columns contains primary key
             if (set(tbl_rel.pkey) <= set(rel.foreign)):
-                rel.type = '1:1'
+                rel.type_ = '1:1'
             else:
-                rel.type = '1:M'
+                rel.type_ = '1:M'
 
             parts = tbl_rel.name.split("_")
             suffix = parts[-1]
@@ -199,12 +200,12 @@ class Record:
                 ref_key = rel.foreign[idx]
 
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
+                grid.add_cond(f"{rel.table}.{col}", "=", val)
 
                 pk[col] = val
             
             if rel.get('filter', None):
-                tbl_rel.add_cond(rel.filter)
+                grid.add_cond(rel.filter)
 
             if (count):
                 # todo: Burde vel være unødvendig med egen kode for å telle. Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
@@ -219,15 +220,15 @@ class Record:
                     tbl_rel.add_cond(tbl_rel.name+'.'+parent_col.alias, "=", parent_col.get('default'))
 
                 if (len(self.pk)):
-                    count_records = tbl_rel.get_rowcount()
+                    count_records = grid.get_rowcount()
                 else:
                     count_records = 0
                 relation = Dict({
                     'count_records': count_records,
                     'name': rel.table,
-                    'conditions': tbl_rel.get_client_conditions(),
+                    'conditions': grid.get_client_conditions(),
                     'base_name': rel.base,
-                    'relationship': rel.type
+                    'relationship': rel.type_
                 })
                 if show_if:
                     relation.show_if = show_if

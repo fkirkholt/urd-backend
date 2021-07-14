@@ -303,8 +303,8 @@ class Table:
                     'primary': []
                 })
 
-            relations[name].foreign.append(row.pkcolumn_name)
-            relations[name].primary.append(row.fkcolumn_name)
+            relations[name].foreign.append(row.fkcolumn_name)
+            relations[name].primary.append(row.pkcolumn_name)
 
         self.cache.relations = relations
 
@@ -442,7 +442,7 @@ class Grid:
             'limit': self.limit,
             'offset': self.offset,
             'selection': 0, #TODO: row_idx
-            'conditions': [], #TODO: self.client_conditions,
+            'conditions': self.client_conditions,
             'date_as_string': {'separator': '-'}, #TODO wtf
             'expansion_column': None, #TODO
             'relations': self.tbl.get_ref_relations(),
@@ -751,7 +751,7 @@ class Grid:
             s = slice(0, len(rel.foreign))
             rel_indexes = rel_table.get_indexes()
             for index in rel_indexes.values():
-                if index.columns[s] == rel.primary:
+                if index.columns[s] == rel.foreign:
                     index_exist = True
 
             if index_exist and not rel.get('hidden', False):
@@ -761,9 +761,9 @@ class Grid:
                     # If foreign key is part of primary key, and the other
                     # pk field is also a foreign key, we have a xref table
                     rel_fkeys = rel_table.get_fkeys()
-                    rest = set(rel_pkey) - set(rel.foreign)
+                    rest = [col for col in rel_pkey if col not in rel.foreign]
                     pk_field = list(rest)[-1]
-                    if pk_field in rel_fkeys:
+                    if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
                         label = pk_field
                 label = label.replace('_' + self.tbl.name, '')
                 label = self.db.get_label(label).strip()

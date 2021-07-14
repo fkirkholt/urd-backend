@@ -91,18 +91,22 @@ class Column:
         return field
 
     def get_options(self, field, fields=None):
+        from database import Database
+        from table import Table, Grid
 
         fk = self.tbl.get_fkey(field.name)
-        cand_tbl = self.tbl.get_db_table(fk.base or fk.schema, fk.table)
+        base = Database(self.db.cnxn, fk.base or fk.schema)
+        cand_tbl = Table(base, fk.table)
+        grid = Grid(cand_tbl)
 
         # List of fields
-        kodefelter = [field.name + '.' + name for name in fk.foreign]
+        kodefelter = [field.name + '.' + name for name in fk.primary]
 
         # Field that holds the value of the options
         value_field = kodefelter[-1]
 
         # Sorting
-        cand_sort_columns = cand_tbl.get_sort_columns()
+        cand_sort_columns = grid.get_sort_columns()
         sort_fields = [field.name + '.' + col for col in cand_sort_columns]
 
         order = "order by " + ', '.join(sort_fields) if len(sort_fields) else ''
@@ -117,10 +121,10 @@ class Column:
             conditions.append(f"schema_ in ({admin_schemas})")
 
         # Adds condition if this select depends on other selects
-        if 'value' in field and len(fk.local) > 1:
-            for idx, key in enumerate(fk.local):
+        if 'value' in field and len(fk.foreign) > 1:
+            for idx, key in enumerate(fk.foreign):
                 if key != field.name and fields[key].value:
-                    conditions.append(fk.foreign[idx] + " = '" + str(fields[key].value) + "'")
+                    conditions.append(fk.primary[idx] + " = '" + str(fields[key].value) + "'")
 
         condition = "where " + " AND ".join(conditions) if len(conditions) else ''
 
@@ -141,7 +145,6 @@ class Column:
         sql+= "(" + field.column_view + ") as coltext "
         sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition + "\n" + order
-        print(sql)
 
         rows = cursor.execute(sql).fetchall()
 
@@ -182,8 +185,6 @@ class Column:
         where {cond}\n
         order by {view}
         """
-
-        print(sql)
 
         rows = self.db.query(sql).fetchmany(int(req.limit))
 

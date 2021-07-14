@@ -6,7 +6,7 @@ from pydantic import BaseSettings
 import io
 from schema import Schema
 from database import Database, Connection
-from table import Table
+from table import Table, Grid
 from record import Record
 from column import Column
 import json
@@ -55,13 +55,14 @@ def get_table(base: str, table: str, schema: str = None, sort: str = None, limit
         base_path = base or schema
     dbo = Database(cnxn, base_path)
     table = Table(dbo, table)
+    grid = Grid(table)
     table.limit  = limit
     table.offset = offset
     if filter:
         table.set_search_cond(filter)
 
     # todo: handle sort
-    return {'data': table.get_grid()}
+    return {'data': grid.get()}
 
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str, schema: str = None):
@@ -105,7 +106,6 @@ async def get_select(request: Request):
     # todo: skal ikke behøve alias
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    # print(request_query_params)
     cnxn = Connection(db.system, db.server, db.uid, db.pwd, req.base) #TODO
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)

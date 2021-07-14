@@ -39,7 +39,7 @@ class Record:
         })
 
     def get_relation_count(self, types: list = None):
-        from table import Table
+        from table import Table, Grid
         relations = {}
         for key, rel in self.tbl.get_relations().items():
             if self.db.cnxn.system == 'postgres':
@@ -48,6 +48,7 @@ class Record:
                 base_name = rel.base or rel.schema
             db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
+            grid = Grid(tbl_rel)
 
             # todo: filtrate on highest level
 
@@ -59,17 +60,17 @@ class Record:
             for idx, col in enumerate(rel.primary):
                 ref_key = rel.foreign[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
+                grid.add_cond(f"{rel.table}.{col}", "=", val)
 
-            if (len(self.pk)):
-                count_records = tbl_rel.get_rowcount()
+            if len(self.pk):
+                count_records = grid.get_rowcount()
             else:
                 count_records = 0
-            
+
             relation = Dict({
                 'count_records': count_records,
                 'name': rel.table,
-                'conditions': tbl_rel.get_client_conditions(),
+                'conditions': grid.get_client_conditions(),
                 'base_name': rel.base,
                 'schema_name': rel.schema,
                 'relationship': rel.type
@@ -90,7 +91,7 @@ class Record:
         return relations
 
     def get_relation(self, alias: str):
-        from table import Table
+        from table import Table, Grid
         rel = self.tbl.get_relation(alias)
         if self.db.cnxn.system == 'postgres':
             base_name = rel.base + '.' + rel.schema
@@ -98,6 +99,7 @@ class Record:
             base_name = rel.base or rel.schema
         db = Database(self.db.cnxn, base_name)
         tbl_rel = Table(db, rel.table)
+        grid = Grid(tbl_rel)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
         
         # todo: filter
@@ -110,9 +112,9 @@ class Record:
         for idx, col in enumerate(rel.primary):
             ref_key = rel.foreign[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
+            grid.add_cond(f"{rel.table}.{col}", "=", val)
 
-        relation = tbl_rel.get_grid()
+        relation = grid.get()
 
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
@@ -120,7 +122,7 @@ class Record:
 
         values = [None if len(self.pk) == 0 else rec_values[key]
                   for key in rel.foreign]
-        
+
         for idx, col in enumerate(rel.primary):
             relation.fields[col].default = values[idx]
             relation.fields[col].defines_relation = True
@@ -132,19 +134,19 @@ class Record:
         for idx, col in enumerate(rel.primary):
             ref_key = rel.foreign[idx]
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            tbl_rel.add_cond(f"{rel.table}.{col}", "=", val)
+            grid.add_cond(f"{rel.table}.{col}", "=", val)
             pk[col] = val
 
         tbl_rel.pkey = tbl_rel.get_primary_key()
 
         # If foreign key columns contains primary key
-        if (set(tbl_rel.pkey) <= set(rel.foreign)):
+        if set(tbl_rel.pkey) <= set(rel.foreign):
             rec = Record(self.db, tbl_rel, pk)
             relation.records = [rec.get()]
             relation.relationship == "1:1"
         else:
             relation.relationship == "1:M"
-            
+
         return relation
 
     def get_relations(self, count = False, alias: str = None, types: list = None):
@@ -349,8 +351,6 @@ class Record:
             
             sql = f"select case when max({inc_col}) is null then 1 else max({inc_col}) +1 end from {self.tbl.name} where " + " and ".join(conditions)
 
-            print(sql)
-
             values[inc_col] = self.db.query(sql, params).fetchval()
             self.pk[inc_col] = values[inc_col]
 
@@ -377,6 +377,15 @@ class Record:
         result = self.db.query(sql, list(inserts.values())).commit()
 
         return self.pk
+
+    def set_fk_values(self, relations):
+        """Set value of fk of relations after autincrement pk"""
+        for rel in relations.values():
+            for rel_rec in rel.records.values():
+                for idx, colname in enumerate(rel.foreign):
+                    if colname not in rel_rec.values:
+                        pk_col = rel.primary[idx]
+                        rel_rec.values[colname] = self.pk[pk_col]
 
     def update(self, values):
         set_values = {}

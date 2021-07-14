@@ -22,7 +22,6 @@ class Connection:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + user + ';Pwd=' + pwd + ';'
         pyodbc.lowercase = True
-        print('cnxnstr', cnxnstr)
         cnxn = pyodbc.connect(cnxnstr)
         self.cursor = cnxn.cursor
         self.user = user

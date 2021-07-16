@@ -59,7 +59,7 @@ def get_table(base: str, table: str, schema: str = None, sort: str = None, limit
     table.limit  = limit
     table.offset = offset
     if filter:
-        table.set_search_cond(filter)
+        grid.set_search_cond(filter)
 
     # todo: handle sort
     return {'data': grid.get()}

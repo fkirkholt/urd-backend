@@ -210,15 +210,6 @@ class Record:
             if (count):
                 # todo: Burde vel være unødvendig med egen kode for å telle. Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
 
-                # Filter on highest level
-                # todo: Altfor rotete kode
-                # todo: Hvorfor filtrere på øvrste nivå kun ved count?
-                if hasattr(tbl_rel, 'expansion_column') and tbl_rel.name != self.tbl.name:
-                    fk = tbl_rel.get_parent_fk()
-                    parent_col = tbl_rel.fields[fk.alias]
-                    
-                    tbl_rel.add_cond(tbl_rel.name+'.'+parent_col.alias, "=", parent_col.get('default'))
-
                 if (len(self.pk)):
                     count_records = grid.get_rowcount()
                 else:
@@ -314,17 +305,21 @@ class Record:
         return Dict(zip(colnames, row))
 
     def get_children(self):
+        from table import Grid
+        grid = Grid(self.tbl)
+        grid.user_filtered = True
         rec = self.get()
 
-        relations = self.tbl.get_relations()
+        relations = self.tbl.get_relations().values()
         rel = [rel for rel in relations if rel.table == self.tbl.name][0]
 
         for idx, colname in enumerate(rel.primary):
             foreign = rel.foreign[idx]
-            value = rec.fields[foreign].value
-            self.tbl.add_cond(f"{rel.table}.{colname}", "=", value)
-        
-        relation = self.tbl.get_grid()
+            print('foreign', foreign)
+            value = rec.fields[colname].value
+            grid.add_cond(f"{rel.table}.{foreign}", "=", value)
+
+        relation = grid.get()
 
         return relation['records']
     

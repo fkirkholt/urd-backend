@@ -75,10 +75,11 @@ class Table:
         """Return foreign key defining hierarchy"""
         # Find relation to child records
         relations = self.get_relations()
-        rel = [rel for rel in list(relations) if rel.name == self.name][0]
+        rel = [rel for rel in relations.values() if rel.table == self.name][0]
+        key = rel.foreign[-1]
 
         foreign_keys = self.get_fkeys()
-        fkey = foreign_keys[rel.foreign_key]
+        fkey = foreign_keys[key]
         fkey.alias = rel.foreign_key
 
         return fkey
@@ -368,28 +369,30 @@ class Grid:
             else:
                 selects[colname] = col.ref
 
-        if hasattr(self, 'expansion_column'): #TODO: How get expansion column?
+        expansion_column = self.get_expansion_column()
+
+        if expansion_column:
             # Get number of relations to same table for expanding row
             fkey = self.tbl.get_parent_fk()
-            rel_column = fields[fkey.alias]
+            rel_column = fields[fkey.foreign[-1]]
             wheres = []
 
             for idx, colname in enumerate(fkey.foreign):
-                foreign = fkey.foreign[idx]
-                wheres.append(colname + ' = ' + self.tbl.name + '.' + foreign)
+                primary = fkey.primary[idx]
+                wheres.append(colname + ' = ' + self.tbl.name + '.' + primary)
 
             where = ' and '.join(wheres)
             selects['count_children'] = f"""(
                 select count(*)
-                from {self.db.name}.{self.tbl.name} child_table
+                from {self.db.schema or self.db.cat}.{self.tbl.name} child_table
                 where {where}
                 )"""
 
             # Filters on highest level if not filtered by user
             if not self.user_filtered:
                 expr = self.tbl.name + '.' + rel_column.name
-                val = rel_column.get('default', None)
-                self.tbl.add_cond(expr, "=", val)
+                # val = rel_column.get('default', None)
+                self.add_cond(expr, "IS NULL")
 
         #TODO: Find selected index
 
@@ -400,7 +403,15 @@ class Grid:
 
         recs = []
         for row in display_values:
-            recs.append({'columns': row})
+            if 'count_children' in row:
+                count_children = row['count_children']
+                del row['count_children']
+                recs.append({
+                    'count_children': count_children,
+                    'columns': row
+                })
+            else:
+                recs.append({'columns': row})
 
         for index, row in enumerate(values):
             recs[index]['values'] = row
@@ -444,12 +455,45 @@ class Grid:
             'selection': 0, #TODO: row_idx
             'conditions': self.client_conditions,
             'date_as_string': {'separator': '-'}, #TODO wtf
-            'expansion_column': None, #TODO
+            'expansion_column': expansion_column,
             'relations': self.tbl.get_ref_relations(),
             'saved_filters': [] #TODO: self.get_saved_filters()
         })
 
         return data
+
+    def get_expansion_column(self):
+        """Return column that should expspand a hierarchic table"""
+        self_relation = False
+        for rel in self.tbl.get_relations().values():
+            if rel.table == self.tbl.name:
+                self_relation = True
+                break
+
+        if not self_relation:
+            return None
+
+        ident_cols = None
+        for idx in self.tbl.get_indexes().values():
+            if idx.columns != self.tbl.get_primary_key() and idx.unique:
+                ident_cols = idx.columns
+                if idx.name.endswith("_sort_idx"):
+                    break
+
+        if not ident_cols:
+            return None
+
+        ident_col = None
+        maxlength = 0
+        fields = self.tbl.get_fields()
+        for colname in ident_cols:
+            col = fields[colname]
+            if col.datatype == 'string':
+                if col.size > maxlength:
+                    ident_col = colname
+
+        return ident_col
+
 
     def get_grid_columns(self):
         """Return columns belonging to grid"""

@@ -77,6 +77,16 @@ def get_record(base: str, table: str, primary_key: str, schema: str = None):
     record = Record(dbo, tbl, pk)
     return {'data': record.get()}
 
+@app.get("/children")
+def get_children(base: str, table: str, primary_key: str):
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    base_path = base or schema
+    dbo = Database(cnxn, base_path)
+    tbl = Table(dbo, table)
+    pk = json.loads(primary_key)
+    record = Record(dbo, tbl, pk)
+    return {'data': record.get_children()}
+
 @app.get("/relations")
 def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None, types: str = None):
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO

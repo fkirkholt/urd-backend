@@ -697,11 +697,13 @@ class Grid:
                 value = None
             self.add_cond(field, operator, value)
 
-    def add_cond(self, expr, operator="=", value=None):
+    def add_cond(self, expr, operator=None, value=None):
         """Add condition used in grid queries"""
         if value is None:
             if operator in ["IS NULL", "IS NOT NULL"]:
                 self.conditions.append(f"{expr} {operator}")
+            elif operator == "=":
+                self.conditions.append(f"{expr} IS NULL")
             else:
                 self.conditions.append(expr)
         else:

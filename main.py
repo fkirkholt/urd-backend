@@ -106,7 +106,7 @@ def get_relations(base: str, table: str, primary_key: str, count: bool, alias: s
 async def save_table(request: Request):
     req = await request.json()
     base = req['base_name']
-    cnxn = Connection(db.system, db.server, db.uid, db.pwd, base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
     dbo = Database(cnxn, base)
     tbl = Table(dbo, req['table_name'])
     return {'data': tbl.save(req['records'])}
@@ -116,7 +116,7 @@ async def get_select(request: Request):
     # todo: skal ikke behøve alias
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(db.system, db.server, db.uid, db.pwd, req.base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base) #TODO
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
     if 'key' in req:
@@ -139,7 +139,7 @@ async def update_schema(request: Request):
     req = await request.json()
     base = req['base']
     config = json.loads(req['config'])
-    cnxn = Connection(db.system, db.server, db.uid, db.pwd, base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
     dbo = Database(cnxn, base)
     schema_name = dbo.schema
     schema = Schema(schema_name)

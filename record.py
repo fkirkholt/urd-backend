@@ -9,7 +9,17 @@ class Record:
     def __init__(self, db, tbl, pk):
         self.db = db
         self.tbl = tbl
-        self.pk = pk
+        self.pk = self.format_pkey(pk)
+
+    def format_pkey(self, pkey):
+        """Return pkey values where floats are strings. Needed by pyodbc"""
+        formatted_pkey = {}
+        for key, value in pkey.items():
+            if type(value) == float:
+                value = str(value)
+            formatted_pkey[key] = value
+
+        return formatted_pkey
 
     def get(self):
         values = self.get_values()
@@ -203,14 +213,15 @@ class Record:
                 grid.add_cond(f"{rel.table}.{col}", "=", val)
 
                 pk[col] = val
-            
+
             if rel.get('filter', None):
                 grid.add_cond(rel.filter)
 
-            if (count):
-                # todo: Burde vel være unødvendig med egen kode for å telle. Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
+            if count:
+                #TODO: Burde vel være unødvendig med egen kode for å telle.
+                #Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
 
-                if (len(self.pk)):
+                if len(self.pk):
                     count_records = grid.get_rowcount()
                 else:
                     count_records = 0
@@ -344,8 +355,10 @@ class Record:
             for col in cols:
                 conditions.append(f"{col} = ?")
                 params.append(values[col])
-            
-            sql = f"select case when max({inc_col}) is null then 1 else max({inc_col}) +1 end from {self.tbl.name} where " + " and ".join(conditions)
+
+            sql = f"select case when max({inc_col}) is null then 1 "
+            sql+= f"else floor(max({inc_col}) +1) end from {self.tbl.name} "
+            sql+= "where " + " and ".join(conditions)
 
             values[inc_col] = self.db.query(sql, params).fetchval()
             self.pk[inc_col] = values[inc_col]

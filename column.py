@@ -76,7 +76,8 @@ class Column:
                 if 'column_view' not in field:
                     field.column_view = field.view
                 field.options = self.get_options(field)
-        if (type_ == 'integer' and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
+        if (type_ in ['integer', 'float'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
+            print(self.name + ' er autoinc')
             field.extra = "auto_increment"
 
         if col.column_def and not col.auto_increment:

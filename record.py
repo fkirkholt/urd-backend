@@ -10,6 +10,7 @@ class Record:
         self.db = db
         self.tbl = tbl
         self.pk = self.format_pkey(pk)
+        self.cache = Dict()
 
     def format_pkey(self, pkey):
         """Return pkey values where floats are strings. Needed by pyodbc"""
@@ -265,7 +266,17 @@ class Record:
 
         return relations
 
+    def get_value(self, colname):
+        if self.cache.get('vals', None):
+            return self.cache.vals[colname]
+        values = self.get_values()
+        return values[colname]
+
     def get_values(self):
+        if self.cache.get('vals', None):
+            return self.cache.vals
+        print('get_values')
+        print('self.pk', self.pk)
         conds = [f"{key} = ?" for key in self.pk]
         cond = " and ".join(conds)
         params = [val for val in self.pk.values()]
@@ -281,7 +292,8 @@ class Record:
         if not row:
             return Dict()
 
-        return Dict(zip(colnames, row))
+        self.cache.vals = Dict(zip(colnames, row))
+        return self.cache.vals
 
     def get_display_values(self):
         displays = {}
@@ -341,6 +353,9 @@ class Record:
 
         # Get autoinc values for compound primary keys
         pkey = self.tbl.get_primary_key()
+        for colname in pkey:
+            if colname in values:
+                self.pk[colname] = values[colname]
         inc_col = pkey[-1]
         if (
             inc_col not in values and
@@ -390,7 +405,7 @@ class Record:
     def set_fk_values(self, relations):
         """Set value of fk of relations after autincrement pk"""
         for rel in relations.values():
-            for rel_rec in rel.records.values():
+            for rel_rec in rel.records:
                 for idx, colname in enumerate(rel.foreign):
                     if colname not in rel_rec.values:
                         pk_col = rel.primary[idx]

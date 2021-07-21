@@ -56,8 +56,8 @@ def get_table(base: str, table: str, schema: str = None, sort: str = None, limit
     dbo = Database(cnxn, base_path)
     table = Table(dbo, table)
     grid = Grid(table)
-    table.limit  = limit
-    table.offset = offset
+    grid.limit  = limit
+    grid.offset = offset
     if filter:
         grid.set_search_cond(filter)
 

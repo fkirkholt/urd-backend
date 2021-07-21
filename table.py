@@ -149,14 +149,9 @@ class Table:
                 if 'selected' in rec:
                     result.selected = pkey
 
-                # Insert value for primary key also in the relations
-                record.set_fk_values(rec.relations)
-
             elif rec.method == "put":
                 if rec['values']:
                     record.update(rec['values'])
-
-            record_vals = record.get_values()
 
             # Iterates over all the relations to the record
             for rel in rec.relations.values():
@@ -169,12 +164,12 @@ class Table:
                 for rel_rec in rel.records:
                     for idx, col in enumerate(fkey.foreign):
                         pkcol = fkey.primary[idx]
-                        rel_rec['values'][col] = record_vals[pkcol]
+                        rel_rec['values'][col] = record.get_value(pkcol)
 
                         # Primary keys of relation may be updated by
                         # cascade if primary keys of record is updated
                         if col in rel_rec.prim_key:
-                            rel_rec.prim_key[col] = record_vals[pkcol]
+                            rel_rec.prim_key[col] = record.get_value(pkcol)
 
                 rel_table.save(rel.records)
 
@@ -697,11 +692,13 @@ class Grid:
                 value = None
             self.add_cond(field, operator, value)
 
-    def add_cond(self, expr, operator="=", value=None):
+    def add_cond(self, expr, operator=None, value=None):
         """Add condition used in grid queries"""
         if value is None:
             if operator in ["IS NULL", "IS NOT NULL"]:
                 self.conditions.append(f"{expr} {operator}")
+            elif operator == "=":
+                self.conditions.append(f"{expr} IS NULL")
             else:
                 self.conditions.append(expr)
         else:

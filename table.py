@@ -15,6 +15,28 @@ class Table:
         self.label = db.get_label(tbl_name)
         self.cache = Dict()
 
+    def user_privileges(self):
+        """Return privileges of database user"""
+        privileges = Dict({
+            'view': 0,
+            'add': 0,
+            'edit': 0,
+            'delete': 0
+        })
+        sql = self.db.expr.table_privileges()
+        rows = self.db.query(sql, [self.db.cnxn.user, self.name]).fetchall()
+        for row in rows:
+            if row.privilege_type == 'SELECT':
+                privileges.view = 1
+            elif row.privilege_type == 'INSERT':
+                privileges.add = 1
+            elif row.privilege_type == 'UPDATE':
+                privileges.edit = 1
+            elif row.privilege_type == 'DELETE':
+                privileges.delete = 1
+
+        return privileges
+
     def get_type(self):
         """Return table type - 'data' or 'reference'"""
         # cascade = 0
@@ -370,10 +392,6 @@ class Grid:
             if not self.user_filtered:
                 self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
 
-        row_idx = None
-        if pkey_vals:
-            row_idx = self.get_selected_idx(pkey_vals, selects)
-
         recs = []
         for row in self.get_display_values(selects):
             if 'count_children' in row:
@@ -389,11 +407,6 @@ class Grid:
         for index, row in enumerate(values):
             recs[index]['values'] = row
             recs[index]['primary_key'] = {key: row[key] for key in pkey}
-        #TODO: row formats
-
-        #TODO: Don't let fields be reference to fields
-        #TODO: Burde ikke være nødvendig
-        fields = json.loads(json.dumps(fields))
 
         data = Dict({
             'name': self.tbl.name,
@@ -406,12 +419,7 @@ class Grid:
                 'sort_columns': self.get_sort_columns()
             },
             'form': self.get_form(),
-            'permission': { #TODO: hent fra funksjon
-                'view': 1,
-                'add': 1,
-                'edit': 1,
-                'delete': 1
-            },
+            'permission': self.tbl.user_privileges(),
             'type': self.tbl.get_type(),
             'primary_key': pkey,
             'foreign_keys': self.tbl.get_fkeys(),
@@ -419,7 +427,7 @@ class Grid:
             'actions': getattr(self, 'actions', []),
             'limit': self.limit,
             'offset': self.offset,
-            'selection': row_idx,
+            'selection': self.get_selected_idx(pkey_vals, selects),
             'conditions': self.cond.stmnts,
             'date_as_string': {'separator': '-'}, #TODO wtf
             'expansion_column': expansion_column,
@@ -430,6 +438,9 @@ class Grid:
         return data
 
     def get_selected_idx(self, pkey_vals, selects):
+        if not pkey_vals:
+            return None
+
         #TODO: Use parameters instead
         rec_conds = [f"{colname} = '{value}'" for colname, value in pkey_vals.items()]
         rec_cond = " WHERE " + " AND ".join(rec_conds)

@@ -389,12 +389,13 @@ class Grid:
                 # val = rel_column.get('default', None)
                 self.add_cond(expr, "IS NULL")
 
-        #TODO: Find selected index
-
         order_by = self.make_order_by(selects)
 
         display_values = self.get_display_values(selects, order_by)
         values = self.get_values(selects, order_by)
+        row_idx = None
+        if pkey_vals:
+            row_idx = self.get_selected_idx(pkey_vals, selects)
 
         recs = []
         for row in display_values:
@@ -456,6 +457,38 @@ class Grid:
         })
 
         return data
+
+    def get_selected_idx(self, pkey_vals, selects):
+        #TODO: Use parameters instead
+        rec_conds = [f"{colname} = '{value}'" for colname, value in pkey_vals.items()]
+        rec_cond = " WHERE " + " AND ".join(rec_conds)
+        join = self.tbl.get_join()
+
+        cond = ''
+        if len(self.cond.prep_stmnts):
+            cond = "WHERE " + " AND ".join(self.cond.prep_stmnts)
+
+        order_by = self.make_order_by(selects)
+
+        sql = f"""
+        select rownum - 1
+        from   (select row_number() over ({order_by}) as rownum,
+                       {self.tbl.name}.*
+                from   {self.tbl.name}
+                {join}
+                {cond}) tab
+        {rec_cond};
+        """
+
+        idx = self.db.query(sql, self.cond.params).fetchval()
+        if idx is not None:
+            page_nr = math.floor(idx / self.limit)
+            self.offset = page_nr * self.limit
+            row_idx = idx - self.offset
+        else:
+            row_idx = 0
+
+        return row_idx
 
     def get_expansion_column(self):
         """Return column that should expspand a hierarchic table"""

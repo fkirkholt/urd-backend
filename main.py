@@ -44,25 +44,33 @@ def db_info(base: str):
     return {'data': info}
 
 @app.get("/table")
-def get_table(base: str, table: str, schema: str = None, sort: str = None, limit: int = 30, offset: int = 0, filter: str = None):
-    if (base == 'urd' and table == 'database_'):
+async def get_table(request: Request):
+    req = Dict({item[0]: item[1]
+                for item in request.query_params.multi_items()})
+    print('request', req)
+    # base: str, table: str, schema: str = None, sort: str = None, limit: int = 30, offset: int = 0, filter: str = None
+    if (req.base == 'urd' and req.table == 'database_'):
         cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd) #TODO
         return {'data': {'records': cnxn.get_databases()}}
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base) #TODO
+    schema = req.get('schema', None)
     if cnxn.system == 'postgres' and schema:
-        base_path = base + '.' + schema
+        base_path = req.base + '.' + req.schema
     else:
-        base_path = base or schema
+        base_path = req.base or schema
     dbo = Database(cnxn, base_path)
-    table = Table(dbo, table)
+    table = Table(dbo, req.table)
     grid = Grid(table)
-    table.limit  = limit
-    table.offset = offset
-    if filter:
-        grid.set_search_cond(filter)
+    table.limit  = req.get('limit', 30)
+    table.offset = req.get('offset', 0)
+    if req.get('filter', None):
+        grid.set_search_cond(req['filter'])
 
     # todo: handle sort
-    return {'data': grid.get()}
+    pkey_vals = None
+    if 'prim_key' in req:
+        pkey_vals = json.loads(req.prim_key)
+    return {'data': grid.get(pkey_vals)}
 
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str, schema: str = None):

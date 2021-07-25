@@ -1,5 +1,6 @@
 """Module for handling tables"""
 import re
+import math
 import simplejson as json
 from addict import Dict
 from record import Record
@@ -330,28 +331,23 @@ class Grid:
         self.user_filtered = False
         self.offset = 0
         self.limit = 30
-        self.conditions = []
-        self.params = []
-        self.client_conditions = []
+        self.cond = Dict({
+            'prep_stmnts': [],
+            'params': [],
+            'stmnts': []
+        })
 
-    def get(self):
+    def get(self, pkey_vals = None):
         """Return all metadata and data to display grid"""
         selects = {} # dict of select expressions
 
         pkey = self.tbl.get_primary_key()
-        foreign_keys = self.tbl.get_fkeys()
         fields = self.tbl.get_fields()
-
-        grid = Dict({
-            'columns': self.get_grid_columns(),
-            'sort_columns': self.get_sort_columns(),
-            'summation_columns': self.get_summation_columns()
-        })
 
         for col in pkey:
             selects[col] = self.tbl.name + '.' + col
 
-        for colname in grid.columns:
+        for colname in self.get_grid_columns():
 
             col = fields[colname]
 
@@ -365,62 +361,39 @@ class Grid:
                 selects[colname] = col.ref
 
         expansion_column = self.get_expansion_column()
-
         if expansion_column:
-            # Get number of relations to same table for expanding row
             fkey = self.tbl.get_parent_fk()
             rel_column = fields[fkey.foreign[-1]]
-            wheres = []
-
-            for idx, colname in enumerate(fkey.foreign):
-                primary = fkey.primary[idx]
-                wheres.append(colname + ' = ' + self.tbl.name + '.' + primary)
-
-            where = ' and '.join(wheres)
-            selects['count_children'] = f"""(
-                select count(*)
-                from {self.db.schema or self.db.cat}.{self.tbl.name} child_table
-                where {where}
-                )"""
+            selects['count_children'] = self.select_children_count(fkey)
 
             # Filters on highest level if not filtered by user
             if not self.user_filtered:
-                expr = self.tbl.name + '.' + rel_column.name
-                # val = rel_column.get('default', None)
-                self.add_cond(expr, "IS NULL")
+                self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
 
-        order_by = self.make_order_by(selects)
-
-        display_values = self.get_display_values(selects, order_by)
-        values = self.get_values(selects, order_by)
         row_idx = None
         if pkey_vals:
             row_idx = self.get_selected_idx(pkey_vals, selects)
 
         recs = []
-        for row in display_values:
+        for row in self.get_display_values(selects):
             if 'count_children' in row:
-                count_children = row['count_children']
-                del row['count_children']
                 recs.append({
-                    'count_children': count_children,
+                    'count_children': row['count_children'],
                     'columns': row
                 })
+                del row['count_children']
             else:
                 recs.append({'columns': row})
 
+        values = self.get_values(selects)
         for index, row in enumerate(values):
             recs[index]['values'] = row
             recs[index]['primary_key'] = {key: row[key] for key in pkey}
         #TODO: row formats
 
-        sums = self.get_sums()
-
         #TODO: Don't let fields be reference to fields
         #TODO: Burde ikke være nødvendig
         fields = json.loads(json.dumps(fields))
-
-        form = self.get_form()
 
         data = Dict({
             'name': self.tbl.name,
@@ -428,13 +401,11 @@ class Grid:
             'count_records': self.get_rowcount(),
             'fields': fields,
             'grid': {
-                'columns': grid.columns,
-                'sums': sums,
-                'sort_columns': grid.sort_columns
+                'columns': self.get_grid_columns(),
+                'sums': self.get_sums(),
+                'sort_columns': self.get_sort_columns()
             },
-            'form': { #TODO:  kun ett attributt
-                'items': None if 'items' not in form else form['items']
-            },
+            'form': self.get_form(),
             'permission': { #TODO: hent fra funksjon
                 'view': 1,
                 'add': 1,
@@ -443,13 +414,13 @@ class Grid:
             },
             'type': self.tbl.get_type(),
             'primary_key': pkey,
-            'foreign_keys': foreign_keys,
+            'foreign_keys': self.tbl.get_fkeys(),
             'label': self.db.get_label(self.tbl.name),
             'actions': getattr(self, 'actions', []),
             'limit': self.limit,
             'offset': self.offset,
-            'selection': 0, #TODO: row_idx
-            'conditions': self.client_conditions,
+            'selection': row_idx,
+            'conditions': self.cond.stmnts,
             'date_as_string': {'separator': '-'}, #TODO wtf
             'expansion_column': expansion_column,
             'relations': self.tbl.get_ref_relations(),
@@ -490,8 +461,24 @@ class Grid:
 
         return row_idx
 
+    def select_children_count(self, fkey):
+        """ number of relations to same table for expanding row"""
+        wheres = []
+
+        for idx, colname in enumerate(fkey.foreign):
+            primary = fkey.primary[idx]
+            wheres.append(colname + ' = ' + self.tbl.name + '.' + primary)
+
+        where = ' and '.join(wheres)
+
+        return f"""(
+            select count(*)
+            from {self.db.schema or self.db.cat}.{self.tbl.name} child_table
+            where {where}
+            )"""
+
     def get_expansion_column(self):
-        """Return column that should expspand a hierarchic table"""
+        """Return column that should expand a hierarchic table"""
         self_relation = False
         for rel in self.tbl.get_relations().values():
             if rel.table == self.tbl.name:
@@ -570,7 +557,7 @@ class Grid:
 
         return order_by
 
-    def get_values(self, selects, order):
+    def get_values(self, selects):
         """Return values for columns in grid"""
         cols = []
         fields = self.tbl.get_fields()
@@ -581,15 +568,16 @@ class Grid:
         select = ', '.join(cols)
         join = self.tbl.get_join()
         cond = self.get_cond_expr()
+        order = self.make_order_by(selects)
 
-        sql = "select " + select
-        sql+= "  from " + (self.db.schema or self.db.cat) + "." + self.tbl.name
-        sql+= " " + join + "\n"
+        sql = "select " + select + "\n"
+        sql+= "from " + (self.db.schema or self.db.cat) + "." + self.tbl.name + "\n"
+        sql+= join + "\n"
         sql+= "" if not cond else "where " + cond +"\n"
         sql+= order
 
         cursor = self.db.cnxn.cursor()
-        cursor.execute(sql, self.params)
+        cursor.execute(sql, self.cond.params)
         cursor.skip(self.offset)
         rows = cursor.fetchmany(self.limit)
 
@@ -612,19 +600,21 @@ class Grid:
         sql += "" if not conds else f"where {conds}\n"
 
         cursor = self.db.cnxn.cursor()
-        count = cursor.execute(sql, self.params).fetchval()
+        count = cursor.execute(sql, self.cond.params).fetchval()
 
         return count
 
-    def get_display_values(self, selects, order):
+    def get_display_values(self, selects):
         """Return display values for columns in grid"""
-        for key, value in selects.items():
-            selects[key] = value + ' as ' + key
 
-        select = ', '.join(selects.values())
+        order = self.make_order_by(selects)
         join = self.tbl.get_join()
         conds = self.get_cond_expr()
 
+        alias_selects = {}
+        for key, value in selects.items():
+            alias_selects[key] = value + ' as ' + key
+        select = ', '.join(alias_selects.values())
 
         sql = "select " + select
         sql+= "  from " + (self.db.schema or self.db.cat) + "." + self.tbl.name
@@ -633,7 +623,7 @@ class Grid:
         sql+= order
 
         cursor = self.db.cnxn.cursor()
-        cursor.execute(sql, self.params)
+        cursor.execute(sql, self.cond.params)
         cursor.skip(self.offset)
         rows = cursor.fetchmany(self.limit)
 
@@ -651,7 +641,7 @@ class Grid:
         cols = self.get_summation_columns()
         join = self.tbl.get_join()
         cond = self.get_cond_expr()
-        params = self.params
+        params = self.cond.params
 
         if len(cols) > 0:
             selects = []
@@ -729,24 +719,24 @@ class Grid:
         """Add condition used in grid queries"""
         if value is None:
             if operator in ["IS NULL", "IS NOT NULL"]:
-                self.conditions.append(f"{expr} {operator}")
+                self.cond.prep_stmnts.append(f"{expr} {operator}")
             elif operator == "=":
-                self.conditions.append(f"{expr} IS NULL")
+                self.cond.prep_stmnts.append(f"{expr} IS NULL")
             else:
-                self.conditions.append(expr)
+                self.cond.prep_stmnts.append(expr)
         else:
-            self.conditions.append(f"{expr} {operator} ?")
-            self.params.append(value)
-            self.client_conditions.append(f"{expr} {operator} {value}")
+            self.cond.prep_stmnts.append(f"{expr} {operator} ?")
+            self.cond.params.append(value)
+            self.cond.stmnts.append(f"{expr} {operator} {value}")
         #TODO: Handle "in" operator
 
     def get_cond_expr(self):
         """Return expression with all query conditions"""
-        return " and ".join(self.conditions)
+        return " and ".join(self.cond.prep_stmnts)
 
     def get_client_conditions(self):
         """Return all conditions visible for client"""
-        return self.client_conditions
+        return self.cond.stmnts
 
     def get_field_groups(self, fields):
         """Group fields according to first part of field name"""

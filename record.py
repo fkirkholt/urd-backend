@@ -275,8 +275,6 @@ class Record:
     def get_values(self):
         if self.cache.get('vals', None):
             return self.cache.vals
-        print('get_values')
-        print('self.pk', self.pk)
         conds = [f"{key} = ?" for key in self.pk]
         cond = " and ".join(conds)
         params = [val for val in self.pk.values()]

@@ -216,3 +216,14 @@ class Expression:
             """
         else:
             return None
+
+    def table_privileges(self):
+        if self.platform == 'postgres':
+            return """
+            select privilege_type
+            from information_schema.table_privileges
+            where grantee = ?
+            and table_name = ?;
+            """
+        else:
+            return None

@@ -115,7 +115,7 @@ class Database:
             "user": {
                 "name": 'Admin', #TODO: Autentisering
                 "id": 'admin', #TODO: Autentisering
-                "admin": self.get_privileges().usage
+                "admin": self.get_privileges().create
             }
         }
 

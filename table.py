@@ -1,7 +1,6 @@
 """Module for handling tables"""
 import re
 import math
-import simplejson as json
 from addict import Dict
 from record import Record
 from column import Column
@@ -429,21 +428,26 @@ class Grid:
             'offset': self.offset,
             'selection': self.get_selected_idx(pkey_vals, selects),
             'conditions': self.cond.stmnts,
-            'date_as_string': {'separator': '-'}, #TODO wtf
             'expansion_column': expansion_column,
             'relations': self.tbl.get_ref_relations(),
-            'saved_filters': [] #TODO: self.get_saved_filters()
+            'saved_filters': [] # Needed in frontend
         })
 
         return data
 
     def get_selected_idx(self, pkey_vals, selects):
+        """Return rowindex for record selected in frontend"""
         if not pkey_vals:
             return None
 
-        #TODO: Use parameters instead
-        rec_conds = [f"{colname} = '{value}'" for colname, value in pkey_vals.items()]
-        rec_cond = " WHERE " + " AND ".join(rec_conds)
+        prep_stmnts = []
+        params = []
+        for colname, value in pkey_vals.items():
+            prep_stmnts.append(f"{colname} = ?")
+            params.append(value)
+
+        # rec_conds = [f"{colname} = '{value}'" for colname, value in pkey_vals.items()]
+        rec_cond = " WHERE " + " AND ".join(prep_stmnts)
         join = self.tbl.get_join()
 
         cond = ''
@@ -462,7 +466,8 @@ class Grid:
         {rec_cond};
         """
 
-        idx = self.db.query(sql, self.cond.params).fetchval()
+        params = self.cond.params + params
+        idx = self.db.query(sql, params).fetchval()
         if idx is not None:
             page_nr = math.floor(idx / self.limit)
             self.offset = page_nr * self.limit
@@ -533,7 +538,6 @@ class Grid:
                 # Don't show hdden columns
                 if field.name[0:1] == '_':
                     continue
-                #TODO: Don't show autoinc columns
                 columns.append(key)
                 if len(columns) == 5:
                     break
@@ -545,7 +549,16 @@ class Grid:
         pkey = self.tbl.get_primary_key()
 
         order_by = "order by "
-        sort_fields = self.get_sort_fields(selects)
+        sort_fields = Dict()
+        for sort in self.get_sort_columns():
+            # Split into field and sort order
+            parts = sort.split(' ')
+            key = parts[0]
+            direction = 'asc' if len(parts) == 1 else parts[1]
+            sort_fields[key].field = self.tbl.name + "." + key
+            if key in selects:
+                sort_fields[key].field = selects[key]
+            sort_fields[key].order = direction
 
         if (len(pkey) == 0 and len(sort_fields) == 0):
             return ""
@@ -672,22 +685,7 @@ class Grid:
 
         return sums
 
-    def get_sort_fields(self, selects):
-        """Return sort fields as Dict"""
-        sort_fields = Dict()
-        for sort in self.get_sort_columns():
-            # Split into field and sort order
-            parts = sort.split(' ')
-            key = parts[0]
-            direction = 'asc' if len(parts) == 1 else parts[1]
-            sort_fields[key].field = self.tbl.name + "." + key
-            if key in selects:
-                sort_fields[key].field = selects[key]
-            sort_fields[key].order = direction
-
-        return sort_fields
-
-    def get_sort_columns(self): #TODO: Forskjell fra get_sort_fields?
+    def get_sort_columns(self):
         """Return columns for default sorting of grid"""
         indexes = self.tbl.get_indexes()
         sort_idx = indexes.get(self.tbl.name.lower() + "_sort_idx", None)

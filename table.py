@@ -533,10 +533,15 @@ class Grid:
         if grid_idx:
             columns = [col.lower() for col in grid_idx.columns]
         else:
+            pkey = self.tbl.get_primary_key()
+            tbl_type = self.tbl.get_type()
             columns = []
             for key, field in self.tbl.get_fields().items():
                 # Don't show hdden columns
                 if field.name[0:1] == '_':
+                    continue
+                if ([field.name] == pkey and field.datatype == "integer"
+                    and tbl_type != "reference"):
                     continue
                 columns.append(key)
                 if len(columns) == 5:

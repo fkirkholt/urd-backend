@@ -718,8 +718,7 @@ class Grid:
             operator = parts[1].strip()
             value = parts[2].replace("*", "%")
             if operator == "IN":
-                value = "('" + value.strip().split(",").join("','") + "')"
-            value = value.strip()
+                value = value.strip().split(",")
             if value == "":
                 value = None
             self.add_cond(field, operator, value)
@@ -733,11 +732,16 @@ class Grid:
                 self.cond.prep_stmnts.append(f"{expr} IS NULL")
             else:
                 self.cond.prep_stmnts.append(expr)
+        elif operator == "IN":
+            marks = ",".join(['?' for val in value])
+            self.cond.prep_stmnts.append(f"{expr} {operator} ({marks})")
+            self.cond.params.extend(value)
+            value = "('" + "','".join(value) + "')"
+            self.cond.stmnts.append(f"{expr} {operator} {value}")
         else:
             self.cond.prep_stmnts.append(f"{expr} {operator} ?")
             self.cond.params.append(value)
             self.cond.stmnts.append(f"{expr} {operator} {value}")
-        #TODO: Handle "in" operator
 
     def get_cond_expr(self):
         """Return expression with all query conditions"""

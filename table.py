@@ -785,7 +785,7 @@ class Grid:
     def get_form(self):
         """Return form as Dict for displaying record"""
 
-        form = Dict({'items': {}}) #TODO: vurder 'subitems'
+        form = Dict({'items': {}})
         fields = self.tbl.get_fields()
         field_groups = self.get_field_groups(fields)
 
@@ -816,24 +816,26 @@ class Grid:
 
                 form['items'][group_label] = Dict({
                     'inline': inline,
-                    'items': subitems  #TODO vurder 'subitems' også for nøkkel
+                    'items': subitems
                 })
 
-        # Add relations to form
-        relations = self.tbl.get_relations()
+        form = self.relations_form(form)
 
+        return form
+
+    def relations_form(self, form):
+        """Add relations to form"""
+        relations = self.tbl.get_relations()
         for alias, rel in relations.items():
             #TODO: Finn faktisk database det lenkes fra
             rel_table = Table(self.db, rel.table)
 
             # Find indexes that can be used to get relation
-            #TODO: Har jeg ikke gjort liknende lenger opp?
-            # Se "Find if there exists an index to find foreign key"
             index_exist = False
-            s = slice(0, len(rel.foreign))
+            slice_obj = slice(0, len(rel.foreign))
             rel_indexes = rel_table.get_indexes()
             for index in rel_indexes.values():
-                if index.columns[s] == rel.foreign:
+                if index.columns[slice_obj] == rel.foreign:
                     index_exist = True
 
             if index_exist and not rel.get('hidden', False):

@@ -847,8 +847,14 @@ class Grid:
                     pk_field = list(rest)[-1]
                     if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
                         label = pk_field
+                        rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
+                        if len(rest):
+                            label += " (" + self.db.get_label(rest[-1]).lower() + ")"
+
                 label = label.replace('_' + self.tbl.name, '')
                 label = self.db.get_label(label).strip()
+                if rel.foreign[-1] != self.tbl.name:
+                    label += " (" + self.db.get_label(rel.foreign[-1]).lower() + ")"
                 form['items'][label] = "relations." + alias
 
         return form

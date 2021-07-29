@@ -142,8 +142,8 @@ class Record:
         # Add condition to fetch only rows that link to record
         # todo: Hvorfor er dette nødvendig her og ikke for
         #       telling av relasjoner?
-        for idx, col in enumerate(rel.primary):
-            ref_key = rel.foreign[idx]
+        for idx, col in enumerate(rel.foreign):
+            ref_key = rel.primary[idx]
             val = None if len(self.pk) == 0 else rec_values[ref_key]
             grid.add_cond(f"{rel.table}.{col}", "=", val)
             pk[col] = val

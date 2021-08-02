@@ -39,21 +39,23 @@ class Table:
     def get_type(self):
         """Return table type - 'data' or 'reference'"""
         # cascade = 0
-        restrict = 1
-        # set_null = 2
-        no_action = 3
-        # set_default = 4
+        # restrict = 1
+        set_null = 2
+        # no_action = 3
+        set_default = 4
 
         type_ = 'data'
+        pkey = self.get_primary_key()
 
-        # Only databases with metadata table are expected to follow these rules
-        if len(self.db.metadata):
-            relations = self.get_relations()
-            for rel in relations.values():
-                if rel.delete_rule in [restrict, no_action]:
+        if (self.name.startswith("meta_") or self.name.startswith("ref_")
+            or self.name.endswith("_ref")):
+            type_ = 'reference'
+
+        for index in self.get_indexes().values():
+            if index.columns != pkey and index.unique:
+                rest = set(index.columns) - set(pkey)
+                if len(rest) == 1:
                     type_ = 'reference'
-            if self.name.startswith("meta_"):
-                type_ = 'reference'
 
         return type_
 
@@ -534,6 +536,7 @@ class Grid:
             columns = [col.lower() for col in grid_idx.columns]
         else:
             pkey = self.tbl.get_primary_key()
+            fkeys = self.tbl.get_fkeys()
             tbl_type = self.tbl.get_type()
             columns = []
             for key, field in self.tbl.get_fields().items():
@@ -541,6 +544,7 @@ class Grid:
                 if field.name[0:1] == '_':
                     continue
                 if ([field.name] == pkey and field.datatype == "integer"
+                    and field.name not in fkeys
                     and tbl_type != "reference"):
                     continue
                 columns.append(key)
@@ -827,6 +831,8 @@ class Grid:
         """Add relations to form"""
         relations = self.tbl.get_relations()
         for alias, rel in relations.items():
+            if self.tbl.name == 'arkiv':
+                print('rel', rel)
             #TODO: Finn faktisk database det lenkes fra
             rel_table = Table(self.db, rel.table)
 

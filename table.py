@@ -834,6 +834,7 @@ class Grid:
         """Add relations to form"""
         relations = self.tbl.get_relations()
         for alias, rel in relations.items():
+            rel.order = 10
             if self.tbl.name == 'arkiv':
                 print('rel', rel)
             #TODO: Finn faktisk database det lenkes fra
@@ -851,21 +852,34 @@ class Grid:
                 rel_pkey = rel_table.get_primary_key()
                 label = rel_table.name.replace(self.tbl.name + '_', '')
                 if set(rel_pkey) > set(rel.foreign):
+                    # Set order priority
+                    idx = rel_pkey.index(rel.foreign[-1])
+                    rel.order = len(rel_pkey) - idx
                     # If foreign key is part of primary key, and the other
                     # pk field is also a foreign key, we have a xref table
                     rel_fkeys = rel_table.get_fkeys()
                     rest = [col for col in rel_pkey if col not in rel.foreign]
                     pk_field = list(rest)[-1]
                     if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
-                        label = pk_field
+                        rel.order = 5 + rel.order
+                        rel.label = pk_field
                         rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
                         if len(rest):
-                            label += " (" + self.db.get_label(rest[-1]).lower() + ")"
+                            rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
 
-                label = label.replace('_' + self.tbl.name, '')
-                label = self.db.get_label(label).strip()
+                rel.label = label.replace('_' + self.tbl.name, '')
+                rel.label = self.db.get_label(label).strip()
                 if rel.foreign[-1] != self.tbl.name:
-                    label += " (" + self.db.get_label(rel.foreign[-1]).lower() + ")"
-                form['items'][label] = "relations." + alias
+                    rel.label += " (" + self.db.get_label(rel.foreign[-1]).lower() + ")"
+            else:
+                rel.hidden = True
+
+            relations[alias] = rel
+
+        sorted_rels = dict(sorted(relations.items(), key=lambda tup: tup[1].order))
+
+        for alias, rel in sorted_rels.items():
+            if not rel.hidden:
+                form['items'][rel.label] = "relations." + alias
 
         return form

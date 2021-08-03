@@ -38,24 +38,22 @@ class Table:
 
     def get_type(self):
         """Return table type - 'data' or 'reference'"""
-        # cascade = 0
-        # restrict = 1
-        set_null = 2
-        # no_action = 3
-        set_default = 4
 
-        type_ = 'data'
-        pkey = self.get_primary_key()
+        indexes = self.get_indexes()
+        cols = [col.column_name for col in self.get_columns() if col.column_name[0:1] != '_']
 
-        if (self.name.startswith("meta_") or self.name.startswith("ref_")
-            or self.name.endswith("_ref")):
+        index_cols = []
+        for index in indexes.values():
+            if index.unique:
+                index_cols = index_cols + index.columns
+
+        if len(set(index_cols)) == len(cols):
+            # if unique indexes cover all columns
             type_ = 'reference'
-
-        for index in self.get_indexes().values():
-            if index.columns != pkey and index.unique:
-                rest = set(index.columns) - set(pkey)
-                if len(rest) == 1:
-                    type_ = 'reference'
+        elif self.name[0:4] == "ref_" or self.name[:-4] == "_ref" or self.name[0:5] == "meta_":
+            type_ = "reference"
+        else:
+            type_ = "data"
 
         return type_
 
@@ -234,13 +232,7 @@ class Table:
 
         self.cache.foreign_keys = foreign_keys
 
-    def init_fields(self):
-        """Store Dict of fields in table object"""
-        if self.db.metadata.get("cache", None):
-            self.cache.fields = self.db.metadata.cache[self.name].fields
-            return
-        fields = Dict()
-        indexes = self.get_indexes()
+    def get_columns(self):
         cursor = self.db.cnxn.cursor()
         if self.db.cnxn.system == 'oracle':
             # cursor.columns doesn't work for all types of oracle columns
@@ -249,6 +241,17 @@ class Table:
         else:
             cols = cursor.columns(table=self.name, catalog=self.db.cat,
                                   schema=self.db.schema).fetchall()
+
+        return cols
+
+    def init_fields(self):
+        """Store Dict of fields in table object"""
+        if self.db.metadata.get("cache", None):
+            self.cache.fields = self.db.metadata.cache[self.name].fields
+            return
+        fields = Dict()
+        indexes = self.get_indexes()
+        cols = self.get_columns()
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))

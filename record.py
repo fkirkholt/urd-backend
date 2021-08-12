@@ -65,7 +65,7 @@ class Record:
 
             # Don't get values for new records that's not saved
             if hasattr(self, 'pk') and len(set(self.pk)):
-                rec_values = self.get_values()
+                rec_values = self.get_values() or self.pk
 
             # Add condition to fetch only rows that link to record
             for idx, col in enumerate(rel.foreign):
@@ -78,13 +78,19 @@ class Record:
             else:
                 count_records = 0
 
+            tbl_rel.pkey = tbl_rel.get_primary_key()
+            if set(tbl_rel.pkey) <= set(rel.foreign):
+                relationship = "1:1"
+            else:
+                relationship = "1:M"
+
             relation = Dict({
                 'count_records': count_records,
                 'name': rel.table,
                 'conditions': grid.get_client_conditions(),
                 'base_name': rel.base,
                 'schema_name': rel.schema,
-                'relationship': rel.type
+                'relationship': relationship
             })
             
             parts = tbl_rel.name.split("_")
@@ -117,7 +123,7 @@ class Record:
 
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
-            rec_values = self.get_values()
+            rec_values = self.get_values() or self.pk
 
         # Add condition to fetch only rows that link to record
         for idx, col in enumerate(rel.foreign):
@@ -132,7 +138,7 @@ class Record:
             rec_values = self.get_values()
 
         values = [None if len(self.pk) == 0 else rec_values[key]
-                  for key in rel.foreign]
+                  for key in rel.primary]
 
         for idx, col in enumerate(rel.foreign):
             relation.fields[col].default = values[idx]
@@ -336,7 +342,6 @@ class Record:
 
         for idx, colname in enumerate(rel.primary):
             foreign = rel.foreign[idx]
-            print('foreign', foreign)
             value = rec.fields[colname].value
             grid.add_cond(f"{rel.table}.{foreign}", "=", value)
 

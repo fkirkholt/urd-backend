@@ -835,8 +835,6 @@ class Grid:
         relations = self.tbl.get_relations()
         for alias, rel in relations.items():
             rel.order = 10
-            if self.tbl.name == 'arkiv':
-                print('rel', rel)
             #TODO: Finn faktisk database det lenkes fra
             rel_table = Table(self.db, rel.table)
 

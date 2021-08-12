@@ -46,7 +46,8 @@ class Record:
             'table_name': self.tbl.name,
             'primary_key': self.pk,
             'fields': fields,
-            'new': new
+            'new': new,
+            'loaded': True
         })
 
     def get_relation_count(self, types: list = None):

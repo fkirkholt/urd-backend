@@ -60,6 +60,7 @@ class Record:
                 base_name = rel.base or rel.schema
             db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
+            tbl_rel.fields = tbl_rel.get_fields()
             grid = Grid(tbl_rel)
 
             # todo: filtrate on highest level
@@ -69,10 +70,15 @@ class Record:
                 rec_values = self.get_values() or self.pk
 
             # Add condition to fetch only rows that link to record
+            conds = Dict()
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                grid.add_cond(f"{rel.table}.{col}", "=", val)
+                if tbl_rel.fields[col].nullable:
+                    grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
+                else:
+                    grid.add_cond(f"{rel.table}.{col}", "=", val)
+                conds[col] = val
 
             if len(self.pk):
                 count_records = grid.get_rowcount()
@@ -89,6 +95,7 @@ class Record:
                 'count_records': count_records,
                 'name': rel.table,
                 'conditions': grid.get_client_conditions(),
+                'conds': conds,
                 'base_name': rel.base,
                 'schema_name': rel.schema,
                 'relationship': relationship
@@ -119,6 +126,7 @@ class Record:
         tbl_rel = Table(db, rel.table)
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
+        tbl_rel.fields = tbl_rel.get_fields()
         
         # todo: filter
 
@@ -127,12 +135,19 @@ class Record:
             rec_values = self.get_values() or self.pk
 
         # Add condition to fetch only rows that link to record
+        conds = Dict()
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            grid.add_cond(f"{rel.table}.{col}", "=", val)
+            if tbl_rel.fields[col].nullable:
+                grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
+            else:
+                grid.add_cond(f"{rel.table}.{col}", "=", val)
+            conds[col] = val
+            # grid.add_cond(f"coalesce({rel.table}.{col}, '-')", "IN", [val, '-'])
 
         relation = grid.get()
+        relation.conds = conds
 
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):

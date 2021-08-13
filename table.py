@@ -748,8 +748,11 @@ class Grid:
             marks = ",".join(['?' for val in value])
             self.cond.prep_stmnts.append(f"{expr} {operator} ({marks})")
             self.cond.params.extend(value)
-            value = "('" + "','".join(value) + "')"
+            value = "('" + "','".join(str(value)) + "')"
             self.cond.stmnts.append(f"{expr} {operator} {value}")
+        elif operator is None:
+            self.cond.prep_stmnts.append(expr)
+            self.cond.params.append(value)
         else:
             self.cond.prep_stmnts.append(f"{expr} {operator} ?")
             self.cond.params.append(value)

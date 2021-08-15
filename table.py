@@ -49,7 +49,10 @@ class Table:
 
         if len(set(index_cols)) == len(cols):
             # if unique indexes cover all columns
-            type_ = 'reference'
+            if (len(self.get_primary_key())) == len(cols):
+                type_ = 'xref'
+            else:
+                type_ = 'reference'
         elif self.name[0:4] == "ref_" or self.name[:-4] == "_ref" or self.name[0:5] == "meta_":
             type_ = "reference"
         else:

@@ -682,7 +682,7 @@ class Grid:
         if len(cols) > 0:
             selects = []
             for col in cols:
-                selects.append(f"sum({col}) as {col}")
+                selects.append(f"sum({self.tbl.name}.{col}) as {col}")
             select = ', '.join(selects)
 
             sql = "select " + select + "\n"

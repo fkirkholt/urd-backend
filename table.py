@@ -336,6 +336,7 @@ class Table:
 
     def export_ddl(self, system):
         """Return ddl for table"""
+        pkey = self.get_primary_key()
         ddl = f"create table {self.name} (\n"
         coldefs = []
         for col in self.get_fields().values():
@@ -346,7 +347,20 @@ class Table:
                 coldef += " NOT NULL"
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
-        ddl += ")"
+        ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"
+
+        for fkey in self.get_fkeys().values():
+            ddl += ",\n    foreign key (" + ", ".join(fkey.foreign) + ") references "
+            ddl += fkey.table + "(" + ", ".join(fkey.primary) + ")"
+        ddl += ");\n\n"
+
+        for idx in self.get_indexes().values():
+            if idx.columns == pkey:
+                continue
+            ddl += "create "
+            if idx.unique:
+                ddl += "unique "
+            ddl += f"index {idx.name} on {self.name} (" + ",".join(idx.columns) + ");\n"
 
         return ddl
 

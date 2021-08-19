@@ -187,6 +187,8 @@ class Table:
                 # Set value of fkey columns to matched colums of record
                 fkey = rel_table.get_fkey(rel.fkey)
                 for rel_rec in rel.records:
+                    if 'values' not in rel_rec:
+                        continue
                     for idx, col in enumerate(fkey.foreign):
                         pkcol = fkey.primary[idx]
                         rel_rec['values'][col] = record.get_value(pkcol)

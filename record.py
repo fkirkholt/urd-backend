@@ -74,7 +74,7 @@ class Record:
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                if tbl_rel.fields[col].nullable:
+                if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
                     grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
                 else:
                     grid.add_cond(f"{rel.table}.{col}", "=", val)
@@ -139,7 +139,7 @@ class Record:
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            if tbl_rel.fields[col].nullable:
+            if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
                 grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
             else:
                 grid.add_cond(f"{rel.table}.{col}", "=", val)
@@ -159,16 +159,6 @@ class Record:
         for idx, col in enumerate(rel.foreign):
             relation.fields[col].default = values[idx]
             relation.fields[col].defines_relation = True
-
-        pk = {}
-        # Add condition to fetch only rows that link to record
-        # todo: Hvorfor er dette nødvendig her og ikke for
-        #       telling av relasjoner?
-        for idx, col in enumerate(rel.foreign):
-            ref_key = rel.primary[idx]
-            val = None if len(self.pk) == 0 else rec_values[ref_key]
-            grid.add_cond(f"{rel.table}.{col}", "=", val)
-            pk[col] = val
 
         tbl_rel.pkey = tbl_rel.get_primary_key()
 
@@ -197,7 +187,7 @@ class Record:
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
             rec_values = self.get_values()      
-        
+
         relations = {}
 
         for key, rel in self.tbl.get_relations().items():

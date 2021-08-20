@@ -412,7 +412,7 @@ class Grid:
             selects['count_children'] = self.select_children_count(fkey)
 
             # Filters on highest level if not filtered by user
-            if not self.user_filtered:
+            if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
                 self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
 
         recs = []

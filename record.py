@@ -100,11 +100,14 @@ class Record:
                 'schema_name': rel.schema,
                 'relationship': relationship
             })
-            
+
             parts = tbl_rel.name.split("_")
-            suffix = parts[-1]
-            if types and (len(types) and suffix in types):
-                show_if = {'type_': suffix}
+            suffix_1 = parts[-1]
+            suffix_2 = None if len(parts) == 1 else parts[-2]
+            if types and (len(types) and suffix_1 in types):
+                show_if = {'type_': suffix_1}
+            elif types and (len(types) and suffix_2 in types):
+                show_if = {'type_': suffix_2}
             else:
                 show_if = None
 

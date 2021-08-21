@@ -671,9 +671,9 @@ class Grid:
             alias_selects[key] = value + ' as ' + key
         select = ', '.join(alias_selects.values())
 
-        sql = "select " + select
-        sql+= "  from " + (self.db.schema or self.db.cat) + "." + self.tbl.name
-        sql+= " " + join + "\n"
+        sql = "select " + select + "\n"
+        sql+= "from " + (self.db.schema or self.db.cat) + "." + self.tbl.name + "\n"
+        sql+= join + "\n"
         sql+= "" if not conds else "where " + conds + "\n"
         sql+= order
 
@@ -743,16 +743,38 @@ class Grid:
         filters = query.split(" AND ")
         for fltr in filters:
             parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|IS NULL|IS NOT NULL)\s*", fltr, 2)
-            field = parts[0]
-            if "." not in field:
-                field = self.tbl.name + "." + field
-            operator = parts[1].strip()
-            value = parts[2].replace("*", "%")
-            if operator == "IN":
-                value = value.strip().split(",")
-            if value == "":
-                value = None
-            self.add_cond(field, operator, value)
+            if len(parts) == 1:
+                # Simple search in any text field
+                value = parts[0]
+                case_sensitive = value.lower() != value
+                value = '%' + value + "%"
+
+                fields = self.tbl.get_fields()
+                conds = []
+                params = []
+                for field in fields.values():
+                    if field.datatype == "string":
+                        if case_sensitive:
+                            conds.append(f"{self.tbl.name}.{field.name} LIKE ?")
+                        else:
+                            conds.append(f"lower({self.tbl.name}.{field.name}) LIKE ?")
+                        params.append(value)
+                expr = "(" + " OR ".join(conds) + ")"
+                self.add_cond(expr=expr, value=params)
+            else:
+                field = parts[0]
+                if "." not in field:
+                    field = self.tbl.name + "." + field
+                operator = parts[1].strip()
+                value = parts[2].replace("*", "%")
+                case_sensitive = value.lower() != value
+                if not case_sensitive:
+                    field = f"lower({field})"
+                if operator == "IN":
+                    value = value.strip().split(",")
+                if value == "":
+                    value = None
+                self.add_cond(field, operator, value)
 
     def add_cond(self, expr, operator=None, value=None):
         """Add condition used in grid queries"""
@@ -771,7 +793,11 @@ class Grid:
             self.cond.stmnts.append(f"{expr} {operator} {value}")
         elif operator is None:
             self.cond.prep_stmnts.append(expr)
-            self.cond.params.append(value)
+            if isinstance(value, str):
+                self.cond.params.append(value)
+            elif isinstance(value, list):
+                print('type er liste')
+                self.cond.params.extend(value)
         else:
             self.cond.prep_stmnts.append(f"{expr} {operator} ?")
             self.cond.params.append(value)

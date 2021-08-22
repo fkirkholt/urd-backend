@@ -768,7 +768,7 @@ class Grid:
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
                 case_sensitive = value.lower() != value
-                if not case_sensitive:
+                if (not case_sensitive and value.lower() != value.upper()):
                     field = f"lower({field})"
                 if operator == "IN":
                     value = value.strip().split(",")

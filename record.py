@@ -27,6 +27,8 @@ class Record:
         displays = self.get_display_values()
 
         new = True if not values else False
+        if new:
+            values = self.pk
 
         fields = {}
         tbl_fields = self.tbl.get_fields()
@@ -139,6 +141,7 @@ class Record:
 
         # Add condition to fetch only rows that link to record
         conds = Dict()
+        pkey = {}
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
@@ -147,6 +150,7 @@ class Record:
             else:
                 grid.add_cond(f"{rel.table}.{col}", "=", val)
             conds[col] = val
+            pkey[col] = val
             # grid.add_cond(f"coalesce({rel.table}.{col}, '-')", "IN", [val, '-'])
 
         relation = grid.get()
@@ -167,7 +171,7 @@ class Record:
 
         # If foreign key columns contains primary key
         if set(tbl_rel.pkey) <= set(rel.foreign):
-            rec = Record(self.db, tbl_rel, pk)
+            rec = Record(self.db, tbl_rel, pkey)
             relation.records = [rec.get()]
             relation.relationship = "1:1"
         else:

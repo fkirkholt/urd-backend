@@ -68,7 +68,7 @@ async def get_table(request: Request):
 
     # todo: handle sort
     pkey_vals = None
-    if 'prim_key' in req:
+    if ('prim_key' in req and req.prim_key):
         pkey_vals = json.loads(req.prim_key)
     return {'data': grid.get(pkey_vals)}
 

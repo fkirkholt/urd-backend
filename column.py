@@ -77,7 +77,6 @@ class Column:
                     field.column_view = field.view
                 field.options = self.get_options(field)
         if (type_ in ['integer', 'float'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
-            print(self.name + ' er autoinc')
             field.extra = "auto_increment"
 
         if col.column_def and not col.auto_increment:
@@ -175,7 +174,7 @@ class Column:
             search = search.lower()
             conds.append(f"lower(cast({view} as varchar)) like '%{search}%'")
 
-        cond = " and ".join(conds) if len(conds) else col + "IS NOT NULL"
+        cond = " and ".join(conds) if len(conds) else col + " IS NOT NULL"
 
         val_col = req.alias + "." + col
 

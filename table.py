@@ -793,11 +793,11 @@ class Grid:
             self.cond.stmnts.append(f"{expr} {operator} {value}")
         elif operator is None:
             self.cond.prep_stmnts.append(expr)
-            if isinstance(value, str):
-                self.cond.params.append(value)
-            elif isinstance(value, list):
-                print('type er liste')
+            if isinstance(value, list):
                 self.cond.params.extend(value)
+            else:
+                self.cond.params.append(value)
+
         else:
             self.cond.prep_stmnts.append(f"{expr} {operator} ?")
             self.cond.params.append(value)

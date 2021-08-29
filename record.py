@@ -389,7 +389,7 @@ class Record:
 
             sql = f"select case when max({inc_col}) is null then 1 "
             sql+= f"else floor(max({inc_col}) +1) end from {self.tbl.name} "
-            sql+= "where " + " and ".join(conditions)
+            sql+= "" if len(cols) == 0 else "where " + " and ".join(conditions)
 
             values[inc_col] = self.db.query(sql, params).fetchval()
             self.pk[inc_col] = values[inc_col]

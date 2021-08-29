@@ -103,15 +103,15 @@ class Record:
                 'relationship': relationship
             })
 
+            # Tables with suffixes that's part of types
+            # should just be shown when the specific type is chosen
             parts = tbl_rel.name.split("_")
             suffix_1 = parts[-1]
-            suffix_2 = None if len(parts) == 1 else parts[-2]
-            if types and (len(types) and suffix_1 in types):
-                show_if = {'type_': suffix_1}
-            elif types and (len(types) and suffix_2 in types):
-                show_if = {'type_': suffix_2}
-            else:
-                show_if = None
+            suffix_2 = '' if len(parts) == 1 else parts[-2]
+            show_if = None
+            for type_ in types:
+                if (suffix_1.startswith(type_) or suffix_2.startswith(type_)):
+                    show_if = {'type_': type_}
 
             if show_if:
                 relation.show_if = show_if

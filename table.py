@@ -909,10 +909,10 @@ class Grid:
                     if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
                         rel.type_ = 'xref'
                         rel.order = 5 + rel.order
-                        rel.label = pk_field
-                        rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
-                        if len(rest):
-                            rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
+                        # rel.label = pk_field
+                        # rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
+                        # if len(rest):
+                            # rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
 
                 rel.label = rel.label.replace('_' + self.tbl.name, '')
                 rel.label = self.db.get_label(rel.label).strip()

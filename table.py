@@ -232,7 +232,11 @@ class Table:
         for fkey in keys.values():
             alias = fkey.foreign[-1]
             if alias in foreign_keys:
-                alias = alias + "_2"
+                if len(fkey.foreign) < len(foreign_keys[alias].foreign):
+                    alias_2 = alias + "_2"
+                    foreign_keys[alias_2] = foreign_keys[alias]
+                else:
+                    alias = alias + "_2"
             foreign_keys[alias] = fkey
 
         self.cache.foreign_keys = foreign_keys

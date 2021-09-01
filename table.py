@@ -38,22 +38,25 @@ class Table:
 
     def get_type(self):
         """Return table type - 'data' or 'reference'"""
-        # cascade = 0
-        restrict = 1
-        # set_null = 2
-        no_action = 3
-        # set_default = 4
 
-        type_ = 'data'
+        indexes = self.get_indexes()
+        cols = [col.column_name for col in self.get_columns() if col.column_name[0:1] != '_']
 
-        # Only databases with metadata table are expected to follow these rules
-        if len(self.db.metadata):
-            relations = self.get_relations()
-            for rel in relations.values():
-                if rel.delete_rule in [restrict, no_action]:
-                    type_ = 'reference'
-            if self.name.startswith("meta_"):
+        index_cols = []
+        for index in indexes.values():
+            if index.unique:
+                index_cols = index_cols + index.columns
+
+        if len(set(index_cols)) == len(cols):
+            # if unique indexes cover all columns
+            if (len(self.get_primary_key())) == len(cols):
+                type_ = 'xref'
+            else:
                 type_ = 'reference'
+        elif self.name[0:4] == "ref_" or self.name[:-4] == "_ref" or self.name[0:5] == "meta_":
+            type_ = "reference"
+        else:
+            type_ = "data"
 
         return type_
 
@@ -184,6 +187,8 @@ class Table:
                 # Set value of fkey columns to matched colums of record
                 fkey = rel_table.get_fkey(rel.fkey)
                 for rel_rec in rel.records:
+                    if 'values' not in rel_rec:
+                        continue
                     for idx, col in enumerate(fkey.foreign):
                         pkcol = fkey.primary[idx]
                         rel_rec['values'][col] = record.get_value(pkcol)
@@ -232,13 +237,7 @@ class Table:
 
         self.cache.foreign_keys = foreign_keys
 
-    def init_fields(self):
-        """Store Dict of fields in table object"""
-        if self.db.metadata.get("cache", None):
-            self.cache.fields = self.db.metadata.cache[self.name].fields
-            return
-        fields = Dict()
-        indexes = self.get_indexes()
+    def get_columns(self):
         cursor = self.db.cnxn.cursor()
         if self.db.cnxn.system == 'oracle':
             # cursor.columns doesn't work for all types of oracle columns
@@ -247,6 +246,17 @@ class Table:
         else:
             cols = cursor.columns(table=self.name, catalog=self.db.cat,
                                   schema=self.db.schema).fetchall()
+
+        return cols
+
+    def init_fields(self):
+        """Store Dict of fields in table object"""
+        if self.db.metadata.get("cache", None):
+            self.cache.fields = self.db.metadata.cache[self.name].fields
+            return
+        fields = Dict()
+        indexes = self.get_indexes()
+        cols = self.get_columns()
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
@@ -328,6 +338,7 @@ class Table:
 
     def export_ddl(self, system):
         """Return ddl for table"""
+        pkey = self.get_primary_key()
         ddl = f"create table {self.name} (\n"
         coldefs = []
         for col in self.get_fields().values():
@@ -338,7 +349,20 @@ class Table:
                 coldef += " NOT NULL"
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
-        ddl += ")"
+        ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"
+
+        for fkey in self.get_fkeys().values():
+            ddl += ",\n    foreign key (" + ", ".join(fkey.foreign) + ") references "
+            ddl += fkey.table + "(" + ", ".join(fkey.primary) + ")"
+        ddl += ");\n\n"
+
+        for idx in self.get_indexes().values():
+            if idx.columns == pkey:
+                continue
+            ddl += "create "
+            if idx.unique:
+                ddl += "unique "
+            ddl += f"index {idx.name} on {self.name} (" + ",".join(idx.columns) + ");\n"
 
         return ddl
 
@@ -388,7 +412,7 @@ class Grid:
             selects['count_children'] = self.select_children_count(fkey)
 
             # Filters on highest level if not filtered by user
-            if not self.user_filtered:
+            if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
                 self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
 
         recs = []
@@ -533,10 +557,17 @@ class Grid:
         if grid_idx:
             columns = [col.lower() for col in grid_idx.columns]
         else:
+            pkey = self.tbl.get_primary_key()
+            fkeys = self.tbl.get_fkeys()
+            tbl_type = self.tbl.get_type()
             columns = []
             for key, field in self.tbl.get_fields().items():
                 # Don't show hdden columns
                 if field.name[0:1] == '_':
+                    continue
+                if ([field.name] == pkey and field.datatype == "integer"
+                    and field.name not in fkeys
+                    and tbl_type != "reference"):
                     continue
                 columns.append(key)
                 if len(columns) == 5:
@@ -640,9 +671,9 @@ class Grid:
             alias_selects[key] = value + ' as ' + key
         select = ', '.join(alias_selects.values())
 
-        sql = "select " + select
-        sql+= "  from " + (self.db.schema or self.db.cat) + "." + self.tbl.name
-        sql+= " " + join + "\n"
+        sql = "select " + select + "\n"
+        sql+= "from " + (self.db.schema or self.db.cat) + "." + self.tbl.name + "\n"
+        sql+= join + "\n"
         sql+= "" if not conds else "where " + conds + "\n"
         sql+= order
 
@@ -670,7 +701,7 @@ class Grid:
         if len(cols) > 0:
             selects = []
             for col in cols:
-                selects.append(f"sum({col}) as {col}")
+                selects.append(f"sum({self.tbl.name}.{col}) as {col}")
             select = ', '.join(selects)
 
             sql = "select " + select + "\n"
@@ -712,17 +743,38 @@ class Grid:
         filters = query.split(" AND ")
         for fltr in filters:
             parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|IS NULL|IS NOT NULL)\s*", fltr, 2)
-            field = parts[0]
-            if "." not in field:
-                field = self.tbl.name + "." + field
-            operator = parts[1].strip()
-            value = parts[2].replace("*", "%")
-            if operator == "IN":
-                value = "('" + value.strip().split(",").join("','") + "')"
-            value = value.strip()
-            if value == "":
-                value = None
-            self.add_cond(field, operator, value)
+            if len(parts) == 1:
+                # Simple search in any text field
+                value = parts[0]
+                case_sensitive = value.lower() != value
+                value = '%' + value + "%"
+
+                fields = self.tbl.get_fields()
+                conds = []
+                params = []
+                for field in fields.values():
+                    if field.datatype == "string":
+                        if case_sensitive:
+                            conds.append(f"{self.tbl.name}.{field.name} LIKE ?")
+                        else:
+                            conds.append(f"lower({self.tbl.name}.{field.name}) LIKE ?")
+                        params.append(value)
+                expr = "(" + " OR ".join(conds) + ")"
+                self.add_cond(expr=expr, value=params)
+            else:
+                field = parts[0]
+                if "." not in field:
+                    field = self.tbl.name + "." + field
+                operator = parts[1].strip()
+                value = parts[2].replace("*", "%")
+                case_sensitive = value.lower() != value
+                if not case_sensitive:
+                    field = f"lower({field})"
+                if operator == "IN":
+                    value = value.strip().split(",")
+                if value == "":
+                    value = None
+                self.add_cond(field, operator, value)
 
     def add_cond(self, expr, operator=None, value=None):
         """Add condition used in grid queries"""
@@ -733,11 +785,23 @@ class Grid:
                 self.cond.prep_stmnts.append(f"{expr} IS NULL")
             else:
                 self.cond.prep_stmnts.append(expr)
+        elif operator == "IN":
+            marks = ",".join(['?' for val in value])
+            self.cond.prep_stmnts.append(f"{expr} {operator} ({marks})")
+            self.cond.params.extend(value)
+            value = "('" + "','".join(str(value)) + "')"
+            self.cond.stmnts.append(f"{expr} {operator} {value}")
+        elif operator is None:
+            self.cond.prep_stmnts.append(expr)
+            if isinstance(value, str):
+                self.cond.params.append(value)
+            elif isinstance(value, list):
+                print('type er liste')
+                self.cond.params.extend(value)
         else:
             self.cond.prep_stmnts.append(f"{expr} {operator} ?")
             self.cond.params.append(value)
             self.cond.stmnts.append(f"{expr} {operator} {value}")
-        #TODO: Handle "in" operator
 
     def get_cond_expr(self):
         """Return expression with all query conditions"""
@@ -776,7 +840,7 @@ class Grid:
     def get_form(self):
         """Return form as Dict for displaying record"""
 
-        form = Dict({'items': {}}) #TODO: vurder 'subitems'
+        form = Dict({'items': {}})
         fields = self.tbl.get_fields()
         field_groups = self.get_field_groups(fields)
 
@@ -807,39 +871,62 @@ class Grid:
 
                 form['items'][group_label] = Dict({
                     'inline': inline,
-                    'items': subitems  #TODO vurder 'subitems' også for nøkkel
+                    'items': subitems
                 })
 
-        # Add relations to form
-        relations = self.tbl.get_relations()
+        form = self.relations_form(form)
 
+        return form
+
+    def relations_form(self, form):
+        """Add relations to form"""
+        relations = self.tbl.get_relations()
         for alias, rel in relations.items():
+            rel.order = 10
             #TODO: Finn faktisk database det lenkes fra
             rel_table = Table(self.db, rel.table)
 
             # Find indexes that can be used to get relation
-            #TODO: Har jeg ikke gjort liknende lenger opp?
-            # Se "Find if there exists an index to find foreign key"
             index_exist = False
-            s = slice(0, len(rel.foreign))
+            slice_obj = slice(0, len(rel.foreign))
             rel_indexes = rel_table.get_indexes()
             for index in rel_indexes.values():
-                if index.columns[s] == rel.foreign:
+                if index.columns[slice_obj] == rel.foreign:
                     index_exist = True
 
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_primary_key()
-                label = rel_table.name.replace(self.tbl.name + '_', '')
+                rel.label = rel_table.name.replace(self.tbl.name + '_', '')
                 if set(rel_pkey) > set(rel.foreign):
+                    # Set order priority
+                    idx = rel_pkey.index(rel.foreign[-1])
+                    rel.order = len(rel_pkey) - idx
                     # If foreign key is part of primary key, and the other
                     # pk field is also a foreign key, we have a xref table
                     rel_fkeys = rel_table.get_fkeys()
                     rest = [col for col in rel_pkey if col not in rel.foreign]
                     pk_field = list(rest)[-1]
                     if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
-                        label = pk_field
-                label = label.replace('_' + self.tbl.name, '')
-                label = self.db.get_label(label).strip()
-                form['items'][label] = "relations." + alias
+                        rel.type_ = 'xref'
+                        rel.order = 5 + rel.order
+                        rel.label = pk_field
+                        rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
+                        if len(rest):
+                            rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
+
+                rel.label = rel.label.replace('_' + self.tbl.name, '')
+                rel.label = self.db.get_label(rel.label).strip()
+                if (rel.get('type_', None) != 'xref' and rel.foreign[-1] != self.tbl.name):
+                    rel.label += " (" + self.db.get_label(rel.foreign[-1]).lower() + ")"
+            else:
+                rel.hidden = True
+
+            relations[alias] = rel
+
+        sorted_rels = dict(sorted(relations.items(), key=lambda tup: tup[1].order))
+
+        for alias, rel in sorted_rels.items():
+            if not rel.hidden:
+                form['items'][rel.label] = "relations." + alias
 
         return form

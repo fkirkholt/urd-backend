@@ -46,7 +46,8 @@ class Record:
             'table_name': self.tbl.name,
             'primary_key': self.pk,
             'fields': fields,
-            'new': new
+            'new': new,
+            'loaded': True
         })
 
     def get_relation_count(self, types: list = None):
@@ -59,38 +60,54 @@ class Record:
                 base_name = rel.base or rel.schema
             db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
+            tbl_rel.fields = tbl_rel.get_fields()
             grid = Grid(tbl_rel)
 
             # todo: filtrate on highest level
 
             # Don't get values for new records that's not saved
             if hasattr(self, 'pk') and len(set(self.pk)):
-                rec_values = self.get_values()
+                rec_values = self.get_values() or self.pk
 
             # Add condition to fetch only rows that link to record
+            conds = Dict()
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                grid.add_cond(f"{rel.table}.{col}", "=", val)
+                if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
+                    grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
+                else:
+                    grid.add_cond(f"{rel.table}.{col}", "=", val)
+                conds[col] = val
 
             if len(self.pk):
                 count_records = grid.get_rowcount()
             else:
                 count_records = 0
 
+            tbl_rel.pkey = tbl_rel.get_primary_key()
+            if set(tbl_rel.pkey) <= set(rel.foreign):
+                relationship = "1:1"
+            else:
+                relationship = "1:M"
+
             relation = Dict({
                 'count_records': count_records,
                 'name': rel.table,
                 'conditions': grid.get_client_conditions(),
+                'conds': conds,
                 'base_name': rel.base,
                 'schema_name': rel.schema,
-                'relationship': rel.type
+                'relationship': relationship
             })
-            
+
             parts = tbl_rel.name.split("_")
-            suffix = parts[-1]
-            if types and (len(types) and suffix in types):
-                show_if = {'type_': suffix}
+            suffix_1 = parts[-1]
+            suffix_2 = None if len(parts) == 1 else parts[-2]
+            if types and (len(types) and suffix_1 in types):
+                show_if = {'type_': suffix_1}
+            elif types and (len(types) and suffix_2 in types):
+                show_if = {'type_': suffix_2}
             else:
                 show_if = None
 
@@ -112,41 +129,39 @@ class Record:
         tbl_rel = Table(db, rel.table)
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
+        tbl_rel.fields = tbl_rel.get_fields()
         
         # todo: filter
 
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
-            rec_values = self.get_values()
+            rec_values = self.get_values() or self.pk
 
         # Add condition to fetch only rows that link to record
+        conds = Dict()
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            grid.add_cond(f"{rel.table}.{col}", "=", val)
+            if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
+                grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
+            else:
+                grid.add_cond(f"{rel.table}.{col}", "=", val)
+            conds[col] = val
+            # grid.add_cond(f"coalesce({rel.table}.{col}, '-')", "IN", [val, '-'])
 
         relation = grid.get()
+        relation.conds = conds
 
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
             rec_values = self.get_values()
 
         values = [None if len(self.pk) == 0 else rec_values[key]
-                  for key in rel.foreign]
+                  for key in rel.primary]
 
         for idx, col in enumerate(rel.foreign):
             relation.fields[col].default = values[idx]
             relation.fields[col].defines_relation = True
-
-        pk = {}
-        # Add condition to fetch only rows that link to record
-        # todo: Hvorfor er dette nødvendig her og ikke for
-        #       telling av relasjoner?
-        for idx, col in enumerate(rel.primary):
-            ref_key = rel.foreign[idx]
-            val = None if len(self.pk) == 0 else rec_values[ref_key]
-            grid.add_cond(f"{rel.table}.{col}", "=", val)
-            pk[col] = val
 
         tbl_rel.pkey = tbl_rel.get_primary_key()
 
@@ -175,7 +190,7 @@ class Record:
         # Don't get values for new records that's not saved
         if hasattr(self, 'pk') and len(set(self.pk)):
             rec_values = self.get_values()      
-        
+
         relations = {}
 
         for key, rel in self.tbl.get_relations().items():
@@ -336,7 +351,6 @@ class Record:
 
         for idx, colname in enumerate(rel.primary):
             foreign = rel.foreign[idx]
-            print('foreign', foreign)
             value = rec.fields[colname].value
             grid.add_cond(f"{rel.table}.{foreign}", "=", value)
 

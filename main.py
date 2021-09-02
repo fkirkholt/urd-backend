@@ -16,7 +16,7 @@ from addict import Dict
 class Settings(BaseSettings):
     db_system: str = "postgres"
     db_server: str = "localhost"
-    db_name  : str = "urd"
+    db_name  : str = "postgres"
     db_uid   : str = "urd"
     db_pwd   : str = "urd"
 
@@ -37,22 +37,32 @@ def home(request: Request):
 
 @app.get("/database")
 def db_info(base: str):
+    if base == cfg.db_name:
+        #TODO Fix user
+        return {'data': {
+            'base': {
+                'name': cfg.db_name
+            },
+            'user': {
+                'name': 'Admin',
+                'id': 'admin',
+                "admin": 0
+            }
+        }}
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base)
     dbo = Database(cnxn, base)
     info = dbo.get_info()
-    json.dumps(info)
+
     return {'data': info}
 
 @app.get("/table")
 async def get_table(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    print('request', req)
-    # base: str, table: str, schema: str = None, sort: str = None, limit: int = 30, offset: int = 0, filter: str = None
-    if (req.base == 'urd' and req.table == 'database_'):
-        cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd) #TODO
+    if (req.base == cfg.db_name and req.table == 'database_'):
+        cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, cfg.db_name)
         return {'data': {'records': cnxn.get_databases()}}
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base) #TODO
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base)
     schema = req.get('schema', None)
     if cnxn.system == 'postgres' and schema:
         base_path = req.base + '.' + req.schema

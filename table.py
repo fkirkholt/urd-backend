@@ -323,6 +323,8 @@ class Table:
 
         for row in cursor.foreignKeys(table=self.name, catalog=self.db.cat,
                                       schema=self.db.schema):
+            delete_rules = ["cascade", "restrict", "set null", "no action",
+                            "set default"]
             name = row.fk_name
             if name not in relations:
                 relations[name] = Dict({
@@ -330,7 +332,7 @@ class Table:
                     'table': row.fktable_name,
                     'base': row.fktable_cat,
                     'schema': row.fktable_schem,
-                    'delete_rule': row.delete_rule,
+                    'delete_rule': delete_rules[row.delete_rule],
                     'foreign': [],
                     'primary': []
                 })

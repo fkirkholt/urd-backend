@@ -64,6 +64,7 @@ class Record:
             tbl_rel = Table(db, rel.table)
             tbl_rel.fields = tbl_rel.get_fields()
             grid = Grid(tbl_rel)
+            grid2 = Grid(tbl_rel) # Used to count inherited records
 
             # todo: filtrate on highest level
 
@@ -77,15 +78,18 @@ class Record:
                 ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
                 if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
-                    grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
-                else:
-                    grid.add_cond(f"{rel.table}.{col}", "=", val)
+                    grid2.add_cond(expr = f"{rel.table}.{col}", operator = "IS NULL")
+                grid.add_cond(f"{rel.table}.{col}", "=", val)
                 conds[col] = val
 
             if len(self.pk):
                 count_records = grid.get_rowcount()
             else:
                 count_records = 0
+
+            count_inherited = 0
+            if len(grid2.cond.prep_stmnts):
+                count_inherited = grid2.get_rowcount()
 
             tbl_rel.pkey = tbl_rel.get_primary_key()
             if set(tbl_rel.pkey) <= set(rel.foreign):
@@ -95,12 +99,14 @@ class Record:
 
             relation = Dict({
                 'count_records': count_records,
+                'count_inherited': count_inherited,
                 'name': rel.table,
                 'conditions': grid.get_client_conditions(),
                 'conds': conds,
                 'base_name': rel.base,
                 'schema_name': rel.schema,
-                'relationship': relationship
+                'relationship': relationship,
+                'delete_rule': rel.delete_rule
             })
 
             # Tables with suffixes that's part of types
@@ -145,7 +151,7 @@ class Record:
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
+            if (len(self.pk) and tbl_rel.fields[col].nullable and col != rel.foreign[0]):
                 grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
             else:
                 grid.add_cond(f"{rel.table}.{col}", "=", val)

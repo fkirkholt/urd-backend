@@ -17,9 +17,9 @@ class Table:
     def user_privileges(self):
         """Return privileges of database user"""
         privileges = Dict({
-            'view': 0,
-            'add': 0,
-            'edit': 0,
+            'select': 0,
+            'insert': 0,
+            'update': 0,
             'delete': 0
         })
         sql = self.db.expr.table_privileges()
@@ -448,7 +448,7 @@ class Grid:
                 'sort_columns': self.get_sort_columns()
             },
             'form': self.get_form(),
-            'permission': self.tbl.user_privileges(),
+            'privilege': self.tbl.user_privileges(),
             'type': self.tbl.get_type(),
             'primary_key': pkey,
             'foreign_keys': self.tbl.get_fkeys(),

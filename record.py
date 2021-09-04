@@ -381,7 +381,6 @@ class Record:
         inc_col = pkey[-1]
         if (
             inc_col not in values and
-            len(pkey) > 1 and
             fields[inc_col].extra == "auto_increment"
         ):
             s = slice(0, len(pkey) - 1)
@@ -412,8 +411,6 @@ class Record:
                 value = datetime.now()
 
             inserts[key] = value
-
-        # todo: Vet ikke om jeg trenger å håndtere autoinc igjen
 
         sql = f"""
         insert into {self.tbl.name} ({','.join(inserts.keys())})

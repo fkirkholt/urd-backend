@@ -35,6 +35,8 @@ class Expression:
                 return "varchar(" + str(size) + ")" if size else "longtext"
             elif type_ == "integer":
                 return "int(" + str(size) + ")"
+            elif type_ == "decimal":
+                return "decimal(" + size + ") "
             elif type_ == "float":
                 return "float(" + str(size) + ")"
             elif type_ == "date":
@@ -50,6 +52,8 @@ class Expression:
                 return "text"
             elif type_ in ["integer", "boolean"]:
                 return "integer"
+            elif type_ == "decimal":
+                return "decimal"
             elif type_ == "float":
                 return "real"
             elif type_ == "binary":
@@ -61,6 +65,8 @@ class Expression:
                 return "bigint"
             elif type_ == "integer":
                 return "integer"
+            elif type_ == "decimal":
+                return "decimal(" + size + ")"
             elif type_ == "float":
                 return "float(" + str(size) + ")"
             elif type_ == "date":
@@ -79,7 +85,9 @@ class Expression:
                 return "string"
             elif re.search("int", type_):
                 return "integer"
-            elif re.search("float|double|decimal", type_):
+            elif re.search("double|decimal", type_):
+                return "decimal"
+            elif re.search("float", type_):
                 return "float"
             elif re.search("date|time", type_):
                 return "date"
@@ -92,9 +100,11 @@ class Expression:
                 return "string"
             elif type_ == "number":
                 return "integer"
+            elif type_ in ["decimal"]:
+                return "decimal"
             elif type_ in ["date", "timestamp", "timestamp(6)"]:
                 return "date"
-            elif type_ in ["decimal", "float"]:
+            elif type_ in ["float"]:
                 return "float"
             elif type_ in ["blob"]:
                 return "binary"
@@ -105,7 +115,9 @@ class Expression:
                 return "string"
             elif type_ in ["integer", "int4", "int8"]:
                 return "integer"
-            elif type_ in ["numeric", "float8"]:
+            elif type_ in ["numeric", "decimal"]:
+                return "decimal"
+            elif type_ in ["float8"]:
                 return "float"
             elif type_ == "blob":
                 return "binary"

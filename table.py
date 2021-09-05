@@ -349,7 +349,10 @@ class Table:
         coldefs = []
         for col in self.get_fields().values():
             expr = Expression(system)
-            datatype = expr.to_native_type(col.datatype, col.size)
+            size = col.size
+            if 'scale' in col:
+                size = str(col.size) + "," + str(col.scale)
+            datatype = expr.to_native_type(col.datatype, size)
             coldef = f"    {col.name} {datatype}"
             if not col.nullable:
                 coldef += " NOT NULL"

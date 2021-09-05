@@ -50,6 +50,8 @@ class Column:
 
         if 'column_size' in col:
             field.size = int(col.column_size)
+        if 'scale' in col and col.scale:
+            field.scale = int(col.scale)
         if col.get('auto_increment', None):
             field.extra = "auto_increment"
         if element == "select" and len(options):
@@ -76,7 +78,7 @@ class Column:
                 if 'column_view' not in field:
                     field.column_view = field.view
                 field.options = self.get_options(field)
-        if (type_ in ['integer', 'float'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
+        if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
             field.extra = "auto_increment"
 
         if col.column_def and not col.auto_increment:

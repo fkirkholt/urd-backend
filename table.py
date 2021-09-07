@@ -26,11 +26,11 @@ class Table:
         rows = self.db.query(sql, [self.db.cnxn.user, self.name]).fetchall()
         for row in rows:
             if row.privilege_type == 'SELECT':
-                privileges.view = 1
+                privileges.select = 1
             elif row.privilege_type == 'INSERT':
-                privileges.add = 1
+                privileges.insert = 1
             elif row.privilege_type == 'UPDATE':
-                privileges.edit = 1
+                privileges['update'] = 1
             elif row.privilege_type == 'DELETE':
                 privileges.delete = 1
 
@@ -242,6 +242,7 @@ class Table:
         self.cache.foreign_keys = foreign_keys
 
     def get_columns(self):
+        """ Return all columns in table by reflection """
         cursor = self.db.cnxn.cursor()
         if self.db.cnxn.system == 'oracle':
             # cursor.columns doesn't work for all types of oracle columns
@@ -892,7 +893,6 @@ class Grid:
         relations = self.tbl.get_relations()
         for alias, rel in relations.items():
             rel.order = 10
-            #TODO: Finn faktisk database det lenkes fra
             rel_table = Table(self.db, rel.table)
 
             # Find indexes that can be used to get relation
@@ -908,8 +908,8 @@ class Grid:
                 rel.label = rel_table.name.replace(self.tbl.name + '_', '')
                 if set(rel_pkey) > set(rel.foreign):
                     # Set order priority
-                    idx = rel_pkey.index(rel.foreign[-1])
-                    rel.order = len(rel_pkey) - idx
+                    rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])
+
                     # If foreign key is part of primary key, and the other
                     # pk field is also a foreign key, we have a xref table
                     rel_fkeys = rel_table.get_fkeys()

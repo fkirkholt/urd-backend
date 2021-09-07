@@ -349,12 +349,6 @@ class Database:
         sub_tables = Dict()
         for tbl_key, table in self.tables.items():
 
-            #TODO: Legg til Table.get_type isteden
-            if len(table.primary_key):
-                last_pk_col = table.primary_key[-1]
-                if last_pk_col in table.foreign_keys: #TODO extends
-                    table.type = "xref"
-
             for colname in table.primary_key:
                 if colname in table.foreign_keys:
                     key = table.foreign_keys[colname]

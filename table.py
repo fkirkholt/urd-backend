@@ -81,6 +81,16 @@ class Table:
 
         return self.cache.foreign_keys[key]
 
+    def get_fkey_by_name(self, name):
+        """Return foreign from name"""
+        if not self.cache.get('foreign_keys', None):
+            self.init_foreign_keys()
+
+        for fkey in self.cache.foreign_keys.values():
+            if fkey.name == name:
+                return fkey
+
+
     def get_fields(self):
         """Return all fields of table"""
         if not self.cache.get('fields', None):
@@ -179,13 +189,13 @@ class Table:
                     record.update(rec['values'])
 
             # Iterates over all the relations to the record
-            for rel in rec.relations.values():
+            for key, rel in rec.relations.items():
 
                 rel_db = Database(self.db.cnxn, rel.base_name)
                 rel_table = Table(rel_db, rel.table_name)
 
                 # Set value of fkey columns to matched colums of record
-                fkey = rel_table.get_fkey(rel.fkey)
+                fkey = rel_table.get_fkey_by_name(key)
                 for rel_rec in rel.records:
                     if 'values' not in rel_rec:
                         continue

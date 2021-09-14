@@ -156,6 +156,13 @@ class Table:
 
         return self.cache.relations
 
+    def get_rel_tbl_names(self):
+        tbl_names = []
+        for rel in self.cache.relations.values():
+            tbl_names.append(rel.table)
+
+        return tbl_names
+
     def get_ref_relations(self):
         """ Interim function needed to support old schema """
         relations = {}
@@ -901,9 +908,12 @@ class Grid:
     def relations_form(self, form):
         """Add relations to form"""
         relations = self.tbl.get_relations()
+        rel_tbl_names = self.tbl.get_rel_tbl_names()
+
         for alias, rel in relations.items():
             rel.order = 10
             rel_table = Table(self.db, rel.table)
+            name_parts = rel.table.split("_")
 
             # Find indexes that can be used to get relation
             index_exist = False
@@ -916,6 +926,13 @@ class Grid:
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_primary_key()
                 rel.label = rel_table.name.replace(self.tbl.name + '_', '')
+                rel_fkeys = rel_table.get_fkeys()
+
+                if (len(name_parts) > 1 and
+                    name_parts[0] in rel_tbl_names
+                ):
+                    continue
+
                 if set(rel_pkey) > set(rel.foreign):
                     # Set order priority
                     rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])

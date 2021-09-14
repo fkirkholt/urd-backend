@@ -348,10 +348,17 @@ class Database:
     def get_sub_tables(self):
         sub_tables = Dict()
         for tbl_key, table in self.tables.items():
+            name_parts = tbl_key.split("_")
 
             for colname in table.primary_key:
                 if colname in table.foreign_keys:
                     key = table.foreign_keys[colname]
+
+                    if (len(name_parts) > 1 and
+                        name_parts[0] in self.tables and
+                        name_parts[0] != key.table
+                    ):
+                        continue
 
                     if table.type == "xref":
                         break

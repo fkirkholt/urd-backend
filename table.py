@@ -41,6 +41,8 @@ class Table:
 
         indexes = self.get_indexes()
         cols = [col.column_name for col in self.get_columns() if col.column_name[0:1] != '_']
+        pkey = self.get_primary_key()
+
 
         index_cols = []
         for index in indexes.values():
@@ -49,7 +51,7 @@ class Table:
 
         if len(set(index_cols)) == len(cols):
             # if unique indexes cover all columns
-            if (len(self.get_primary_key())) == len(cols):
+            if len(pkey) == len(cols):
                 type_ = 'xref'
             else:
                 type_ = 'reference'
@@ -942,7 +944,6 @@ class Grid:
 
                     # If foreign key is part of primary key, and the other
                     # pk field is also a foreign key, we have a xref table
-                    rel_fkeys = rel_table.get_fkeys()
                     rest = [col for col in rel_pkey if col not in rel.foreign]
                     pk_field = list(rest)[-1]
                     if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):

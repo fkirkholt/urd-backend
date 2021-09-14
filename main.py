@@ -75,6 +75,8 @@ async def get_table(request: Request):
     table.offset = req.get('offset', 0)
     if req.get('filter', None):
         grid.set_search_cond(req['filter'])
+    if req.get('sort', None):
+        grid.sort_columns = json.loads(req.sort)
 
     # todo: handle sort
     pkey_vals = None

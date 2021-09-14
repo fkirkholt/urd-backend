@@ -403,6 +403,7 @@ class Grid:
         self.user_filtered = False
         self.offset = 0
         self.limit = 30
+        self.sort_columns = []
         self.cond = Dict({
             'prep_stmnts': [],
             'params': [],
@@ -466,7 +467,7 @@ class Grid:
             'grid': {
                 'columns': self.get_grid_columns(),
                 'sums': self.get_sums(),
-                'sort_columns': self.get_sort_columns()
+                'sort_columns': self.sort_columns
             },
             'form': self.get_form(),
             'privilege': self.tbl.user_privileges(),
@@ -608,7 +609,9 @@ class Grid:
 
         order_by = "order by "
         sort_fields = Dict()
-        for sort in self.get_sort_columns():
+        if len(self.sort_columns) == 0:
+            self.sort_columns = self.get_sort_columns()
+        for sort in self.sort_columns:
             # Split into field and sort order
             parts = sort.split(' ')
             key = parts[0]

@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime
 
 class Expression:
     def __init__(self, platform):
@@ -134,6 +134,8 @@ class Expression:
 
         if "current_date" in sql.lower():
             sql = date.today().strftime("%Y-%m-%d")
+        elif "current_timestamp" in sql.lower():
+            sql = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         return sql
         # todo:t Må ha autentisering på plass før denne kan lages

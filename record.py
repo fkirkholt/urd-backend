@@ -1,4 +1,5 @@
 from database import Database
+from column import Column
 import re
 from addict import Dict
 import json
@@ -42,6 +43,15 @@ class Record:
             field.alias = field.name
 
             fields[key] = field
+
+        # Add options to selects
+        for key, field in fields.items():
+            if 'view' in field:
+                column = Column(self.tbl, field.name)
+                field.options = column.get_options(field, fields)
+
+                fields[key] = field
+
 
         return Dict({
             'base_name': self.db.name,

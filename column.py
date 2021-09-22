@@ -143,8 +143,8 @@ class Column:
             return False
 
         sql = "select " + value_field + " as value, "
-        sql+= "(" + field.view + ") as label, "
-        sql+= "(" + field.column_view + ") as coltext "
+        sql+= "(" + (field.view or value_field) + ") as label, "
+        sql+= "(" + (field.column_view or value_field) + ") as coltext "
         sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition + "\n" + order
 

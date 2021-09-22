@@ -46,7 +46,7 @@ class Record:
 
         # Add options to selects
         for key, field in fields.items():
-            if 'view' in field:
+            if 'foreign_key' in field:
                 column = Column(self.tbl, field.name)
                 field.options = column.get_options(field, fields)
 
@@ -393,7 +393,8 @@ class Record:
 
         # todo: Get values for auto and auto_update fields
 
-        # Get autoinc values for compound primary keys
+        # Get autoinc values for primary keys
+        # Supports simple and compound primary keys
         pkey = self.tbl.get_primary_key()
         for colname in pkey:
             if colname in values:

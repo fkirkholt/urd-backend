@@ -70,14 +70,13 @@ class Column:
                     # Only last pk column is used in display value,
                     # other pk columns are usually foreign keys
                     cols = [self.name+"."+col for col in index.columns if col not in ref_pk[0:-1]]
-                    field.view = " || ', ' || ".join(cols)
+                    field.view = " || ' - ' || ".join(cols)
                     if index.name.endswith("_sort_idx"):
                         break
 
-            if 'view' in field:
-                if 'column_view' not in field:
-                    field.column_view = field.view
-                field.options = self.get_options(field)
+            if 'column_view' not in field and 'view' in field:
+                field.column_view = field.view
+            field.options = self.get_options(field)
         if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
             field.extra = "auto_increment"
 

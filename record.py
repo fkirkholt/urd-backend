@@ -85,6 +85,7 @@ class Record:
 
             # Add condition to fetch only rows that link to record
             conds = Dict()
+            count_null_conds = 0
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
@@ -94,6 +95,10 @@ class Record:
                     tbl_rel.pkey[0] != list(self.pk.keys())[0]
                 ):
                     grid2.add_cond(expr = f"{rel.table}.{col}", operator = "IS NULL")
+                    count_null_conds += 1
+                else:
+                    grid2.add_cond(f"{rel.table}.{col}", "=", val)
+
                 grid.add_cond(f"{rel.table}.{col}", "=", val)
                 conds[col] = val
 
@@ -103,7 +108,7 @@ class Record:
                 count_records = 0
 
             count_inherited = 0
-            if len(grid2.cond.prep_stmnts):
+            if count_null_conds:
                 count_inherited = grid2.get_rowcount()
 
             tbl_rel.pkey = tbl_rel.get_primary_key()

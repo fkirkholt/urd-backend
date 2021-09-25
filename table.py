@@ -966,6 +966,9 @@ class Grid:
         sorted_rels = dict(sorted(relations.items(), key=lambda tup: tup[1].order))
 
         for alias, rel in sorted_rels.items():
+            name_parts = rel.table.split("_")
+            if (len(name_parts) > 1 and name_parts[0] in rel_tbl_names):
+                continue
             if not rel.hidden:
                 form['items'][rel.label] = "relations." + alias
 

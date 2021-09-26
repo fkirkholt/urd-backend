@@ -73,9 +73,17 @@ class Record:
             db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
             tbl_rel.fields = tbl_rel.get_fields()
-            tbl_rel.pkey = tbl_rel.get_primary_key()
             grid = Grid(tbl_rel)
             grid2 = Grid(tbl_rel) # Used to count inherited records
+
+            # Find index used
+            slice_obj = slice(0, len(rel.foreign))
+            rel_indexes = tbl_rel.get_indexes()
+            for index in rel_indexes.values():
+                if index.columns[slice_obj] == rel.foreign:
+                    rel.index = index
+                    if index.unique:
+                        break
 
             # todo: filtrate on highest level
 
@@ -92,7 +100,7 @@ class Record:
                 if (tbl_rel.fields[col].nullable and
                     col != rel.foreign[0] and
                     rel.primary == list(self.pk.keys()) and
-                    tbl_rel.pkey[0] != list(self.pk.keys())[0]
+                    rel.index.unique is True
                 ):
                     grid2.add_cond(expr = f"{rel.table}.{col}", operator = "IS NULL")
                     count_null_conds += 1
@@ -160,6 +168,14 @@ class Record:
         tbl_rel.fields = tbl_rel.get_fields()
         tbl_rel.pkey = tbl_rel.get_primary_key()
 
+        # Find index used
+        slice_obj = slice(0, len(rel.foreign))
+        rel_indexes = tbl_rel.get_indexes()
+        for index in rel_indexes.values():
+            if index.columns[slice_obj] == rel.foreign:
+                rel.index = index
+                break
+
         # todo: filter
 
         # Don't get values for new records that's not saved
@@ -175,7 +191,7 @@ class Record:
             if (len(self.pk) and tbl_rel.fields[col].nullable and
                 col != rel.foreign[0] and
                 rel.primary == list(self.pk.keys()) and
-                tbl_rel.pkey[0] != list(self.pk.keys())[0]
+                rel.index.unique is True
             ):
                 grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
             else:

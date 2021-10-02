@@ -1,4 +1,6 @@
 import pyodbc
+from fastapi import HTTPException
+from starlette import status
 import os
 import json
 from schema import Schema
@@ -22,7 +24,12 @@ class Connection:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + user + ';Pwd=' + pwd + ';'
         pyodbc.lowercase = True
-        cnxn = pyodbc.connect(cnxnstr)
+        try:
+            cnxn = pyodbc.connect(cnxnstr)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication"
+            )
         self.cursor = cnxn.cursor
         self.user = user
         self.expr = Expression(self.system)

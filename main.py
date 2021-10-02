@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Response, Form
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseSettings
 import io
@@ -12,13 +12,17 @@ from column import Column
 import json
 import os
 from addict import Dict
+from jose import jwt
+import time
 
 class Settings(BaseSettings):
-    db_system: str = "postgres"
-    db_server: str = "localhost"
-    db_name  : str = "postgres"
-    db_uid   : str = "urd"
-    db_pwd   : str = "urd"
+    secret_key: str = "some_secret_key"
+    timeout   : int = 15 * 60 # 15 minutes
+    db_system : str = "postgres"
+    db_server : str = "localhost"
+    db_name   : str = "postgres"
+    db_uid    : str = None
+    db_pwd    : str = None
 
 cfg = Settings()
 
@@ -29,11 +33,48 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/bundle.js")
 
+@app.middleware("http")
+async def check_login(request: Request, call_next):
+    session: str = request.cookies.get("session")
+    if session:
+        payload = jwt.decode(session, cfg.secret_key)
+        now = time.time()
+        if 'uid' in payload and (payload["timestamp"] + cfg.timeout) > now :
+            cfg.db_uid = payload["uid"]
+            cfg.db_pwd = payload["pwd"]
+    else:
+        cfg.db_uid = None
+        cfg.db_pwd = None
+
+    if (cfg.db_uid is None and request.url.path != "/" and request.url.path != "/login" and not request.url.path.startswith('/static')):
+        return JSONResponse(content={
+            "message": "login"
+        }, status_code=401)
+
+    response = await call_next(request)
+    if cfg.db_uid is not None:
+        token = jwt.encode({"uid": cfg.db_uid, "pwd": cfg.db_pwd, "timestamp": now}, cfg.secret_key)
+        response.set_cookie(key="session", value=token, expires=cfg.timeout)
+    return response
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("urd.html", {
         "request": request, "v": mod, "base": cfg.db_name
     })
+
+@app.post("/login")
+def login(response: Response, brukernavn: str = Form(...), passord: str = Form(...)):
+    Connection(cfg.db_system, cfg.db_server, brukernavn, passord, cfg.db_name)
+    timestamp = time.time()
+    token = jwt.encode({"uid": brukernavn, "pwd": passord, "timestamp": timestamp}, cfg.secret_key)
+    response.set_cookie(key="session", value=token, expires=cfg.timeout)
+    return {"success": True}
+
+@app.get("/logout")
+def logout(response: Response):
+    response.delete_cookie("session")
+    return {"success": True}
 
 @app.get("/database")
 def db_info(base: str):

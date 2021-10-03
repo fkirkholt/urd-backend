@@ -137,7 +137,7 @@ class Database:
             privilege.create = 0
         else:
             priv = cursor.execute(sql, self.schema or self.cat).fetchone()
-            privilege.create = priv.create
+            privilege.create = int(priv.create)
             privilege.usage = 0
 
         return privilege

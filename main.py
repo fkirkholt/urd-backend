@@ -52,7 +52,7 @@ async def check_login(request: Request, call_next):
         }, status_code=401)
 
     response = await call_next(request)
-    if cfg.db_uid is not None:
+    if cfg.db_uid is not None and request.url.path != "/logout":
         token = jwt.encode({"uid": cfg.db_uid, "pwd": cfg.db_pwd, "timestamp": now}, cfg.secret_key)
         response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return response

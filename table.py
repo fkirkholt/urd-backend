@@ -920,6 +920,10 @@ class Grid:
             rel_table = Table(self.db, rel.table)
             name_parts = rel.table.split("_")
 
+            priv = rel_table.user_privileges()
+            if priv.select == 0:
+                rel.hidden = True
+
             # Find indexes that can be used to get relation
             index_exist = False
             slice_obj = slice(0, len(rel.foreign))

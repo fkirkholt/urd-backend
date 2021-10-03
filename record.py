@@ -72,6 +72,10 @@ class Record:
                 base_name = rel.base or rel.schema
             db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
+            priv = tbl_rel.user_privileges()
+            if priv.select == 0:
+                continue
+
             tbl_rel.fields = tbl_rel.get_fields()
             grid = Grid(tbl_rel)
             grid2 = Grid(tbl_rel) # Used to count inherited records

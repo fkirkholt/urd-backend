@@ -246,6 +246,9 @@ class Database:
             tbl_name = tbl.table_name
 
             table = Table(self, tbl_name)
+            priv = table.user_privileges()
+            if priv.select == 0:
+                continue
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,

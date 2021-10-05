@@ -85,18 +85,21 @@ class Database:
         return self.metadata
 
     def init_metadata(self):
+        from table import Table
         cursor = self.cnxn.cursor()
         metadata = Dict()
         md_table= cursor.tables(table='meta_data', catalog=self.cat, schema=self.schema).fetchone()
-        tables = cursor.tables(catalog=self.cat).fetchall()
-        if (md_table):
-            sql = f"select * from {self.schema or self.cat}.meta_data"
-            rows = cursor.execute(sql).fetchall()
-            for row in rows:
-                if row.key_ == "cache" and row.value_:
-                    metadata[row.key_] = Dict(json.loads(row.value_))
-                else:
-                    metadata[row.key_] = row.value_
+        if md_table:
+            table = Table(self, 'meta_data')
+            priv = table.user_privileges()
+            if priv.select == 1:
+                sql = f"select * from {self.schema or self.cat}.meta_data"
+                rows = cursor.execute(sql).fetchall()
+                for row in rows:
+                    if row.key_ == "cache" and row.value_:
+                        metadata[row.key_] = Dict(json.loads(row.value_))
+                    else:
+                        metadata[row.key_] = row.value_
 
         self.metadata = metadata
 

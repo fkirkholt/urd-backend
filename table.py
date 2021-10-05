@@ -937,11 +937,6 @@ class Grid:
                 rel.label = rel_table.name.replace(self.tbl.name + '_', '')
                 rel_fkeys = rel_table.get_fkeys()
 
-                if (len(name_parts) > 1 and
-                    name_parts[0] in rel_tbl_names
-                ):
-                    continue
-
                 if set(rel_pkey) > set(rel.foreign):
                     # Set order priority
                     rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])

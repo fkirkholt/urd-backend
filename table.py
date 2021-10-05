@@ -850,7 +850,7 @@ class Grid:
             # Don't add column to form if it's part of primary key but not shown in grid
             if (field.name in self.tbl.get_primary_key() and
                 field.name not in self.get_grid_columns()
-            ): continue
+            ): field.hidden = True
 
             # Group by prefix
             parts = field.name.split("_")

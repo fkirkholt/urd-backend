@@ -64,7 +64,7 @@ def home(request: Request):
     })
 
 @app.post("/login")
-def login(response: Response, brukernavn: str = Form(...), passord: str = Form(...)):
+def login(response: Response, brukernavn: str, passord: str):
     Connection(cfg.db_system, cfg.db_server, brukernavn, passord, cfg.db_name)
     timestamp = time.time()
     token = jwt.encode({"uid": brukernavn, "pwd": passord, "timestamp": timestamp}, cfg.secret_key)

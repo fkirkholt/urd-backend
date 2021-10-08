@@ -103,6 +103,28 @@ class Database:
 
         self.metadata = metadata
 
+    def get_terms(self):
+        if not hasattr(self, 'terms'):
+            self.init_terms()
+        return self.terms
+
+    def init_terms(self):
+        from table import Table
+        cursor = self.cnxn.cursor()
+        terms = Dict()
+        terms_table = cursor.tables(table='meta_term', catalog=self.cat, schema=self.schema).fetchone()
+        if terms_table:
+            sql = f"select * from {self.schema or self.cat}.meta_term"
+            try:
+                rows = cursor.execute(sql).fetchall()
+                colnames = [column[0] for column in cursor.description]
+                for row in rows:
+                    terms[row.term] = Dict(zip(colnames, row))
+            except:
+                pass
+
+        self.terms = terms
+
     def get_info(self):
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
@@ -385,7 +407,7 @@ class Database:
         return sub_tables
 
     def get_label(self, term):
-        terms = Dict() #TODO
+        terms = self.get_terms()
         if term in terms:
             label = terms[term].label
         else:
@@ -400,6 +422,14 @@ class Database:
         label = label.capitalize()
 
         return label
+
+    def get_description(self, term):
+        terms = self.get_terms()
+        description = None
+        if term in terms:
+            description = terms[term].description
+
+        return description
 
     def get_content_items(self, tbl_alias, sub_tables, contents):
         label = self.get_label(tbl_alias)

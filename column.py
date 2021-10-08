@@ -45,7 +45,7 @@ class Column:
             'element': element,
             'nullable': col.nullable == True,
             'label': self.db.get_label(self.name),
-            'description': None #TODO
+            'description': self.db.get_description(self.name)
         })
 
         if 'column_size' in col:

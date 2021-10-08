@@ -70,7 +70,10 @@ class Record:
                 base_name = rel.base + '.' + rel.schema
             else:
                 base_name = rel.base or rel.schema
-            db = Database(self.db.cnxn, base_name)
+            if rel.base == self.db.cat and rel.schema == self.db.schema:
+                db = self.db
+            else:
+                db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
             priv = tbl_rel.user_privileges()
             if priv.select == 0:

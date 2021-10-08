@@ -96,7 +96,10 @@ class Column:
         from table import Table, Grid
 
         fk = self.tbl.get_fkey(field.name)
-        base = Database(self.db.cnxn, fk.base or fk.schema)
+        if fk.base == self.db.cat and fk.schema == self.db.schema:
+            base = self.db
+        else:
+            base = Database(self.db.cnxn, fk.base or fk.schema)
         cand_tbl = Table(base, fk.table)
         grid = Grid(cand_tbl)
 

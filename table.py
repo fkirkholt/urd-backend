@@ -200,7 +200,10 @@ class Table:
             # Iterates over all the relations to the record
             for key, rel in rec.relations.items():
 
-                rel_db = Database(self.db.cnxn, rel.base_name)
+                if rel.base_name == self.db.name:
+                    rel_db = self.db
+                else:
+                    rel_db = Database(self.db.cnxn, rel.base_name)
                 rel_table = Table(rel_db, rel.table_name)
 
                 # Set value of fkey columns to matched colums of record

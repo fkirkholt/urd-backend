@@ -60,23 +60,24 @@ class Column:
             fk = foreign_keys[self.name]
             field.foreign_key = fk
             ref_tbl = Table(self.db, fk.table)
-            ref_pk = ref_tbl.get_primary_key()
+            if fk.table in self.db.user_tables:
+                ref_pk = ref_tbl.get_primary_key()
 
-            if (ref_tbl.get_type() == "data"):
-                field.expandable = True
+                if (ref_tbl.get_type() == "data"):
+                    field.expandable = True
 
-            for index in ref_tbl.get_indexes().values():
-                if index.columns != ref_pk and index.unique:
-                    # Only last pk column is used in display value,
-                    # other pk columns are usually foreign keys
-                    cols = [self.name+"."+col for col in index.columns if col not in ref_pk[0:-1]]
-                    field.view = " || ' - ' || ".join(cols)
-                    if index.name.endswith("_sort_idx"):
-                        break
+                for index in ref_tbl.get_indexes().values():
+                    if index.columns != ref_pk and index.unique:
+                        # Only last pk column is used in display value,
+                        # other pk columns are usually foreign keys
+                        cols = [self.name+"."+col for col in index.columns if col not in ref_pk[0:-1]]
+                        field.view = " || ' - ' || ".join(cols)
+                        if index.name.endswith("_sort_idx"):
+                            break
 
-            if 'column_view' not in field and 'view' in field:
-                field.column_view = field.view
-            field.options = self.get_options(field)
+                if 'column_view' not in field and 'view' in field:
+                    field.column_view = field.view
+                field.options = self.get_options(field)
         if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
             field.extra = "auto_increment"
 

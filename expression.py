@@ -231,6 +231,28 @@ class Expression:
         else:
             return None
 
+    def user_tables(self):
+        if self.platform == 'sqlite':
+            return """
+            SELECT name
+            FROM   sqlite_master
+            WHERE  type IN ('table', 'view');
+            """
+        elif self.platform == 'oracle':
+            return """
+            SELECT object_name
+            FROM   all_objects
+            WHERE  object_type in ('TABLE', 'VIEW')
+                   AND owner = ?;
+            """
+        else:
+            return """
+            SELECT table_name
+            FROM   information_schema.tables
+            WHERE  table_schema = ?;
+            """
+
+
     def table_privileges(self):
         if self.platform == 'postgres':
             return """

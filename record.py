@@ -75,8 +75,7 @@ class Record:
             else:
                 db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
-            priv = tbl_rel.user_privileges()
-            if priv.select == 0:
+            if rel.table not in self.db.user_tables:
                 continue
 
             tbl_rel.fields = tbl_rel.get_fields()

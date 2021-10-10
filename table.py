@@ -923,8 +923,7 @@ class Grid:
             rel_table = Table(self.db, rel.table)
             name_parts = rel.table.split("_")
 
-            priv = rel_table.user_privileges()
-            if priv.select == 0:
+            if rel.table not in self.db.user_tables:
                 rel.hidden = True
 
             # Find indexes that can be used to get relation

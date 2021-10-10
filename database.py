@@ -77,6 +77,7 @@ class Database:
             self.cat = None
         self.expr   = Expression(cnxn.system)
         self.use_cache = False #TODO
+        self.user_tables = self.get_user_tables()
         self.metadata = self.get_metadata()
 
     def get_metadata(self):
@@ -89,17 +90,14 @@ class Database:
         cursor = self.cnxn.cursor()
         metadata = Dict()
         md_table= cursor.tables(table='meta_data', catalog=self.cat, schema=self.schema).fetchone()
-        if md_table:
-            table = Table(self, 'meta_data')
-            priv = table.user_privileges()
-            if priv.select == 1:
-                sql = f"select * from {self.schema or self.cat}.meta_data"
-                rows = cursor.execute(sql).fetchall()
-                for row in rows:
-                    if row.key_ == "cache" and row.value_:
-                        metadata[row.key_] = Dict(json.loads(row.value_))
-                    else:
-                        metadata[row.key_] = row.value_
+        if md_table and 'meta_data' in self.user_tables:
+            sql = f"select * from {self.schema or self.cat}.meta_data"
+            rows = cursor.execute(sql).fetchall()
+            for row in rows:
+                if row.key_ == "cache" and row.value_:
+                    metadata[row.key_] = Dict(json.loads(row.value_))
+                else:
+                    metadata[row.key_] = row.value_
 
         self.metadata = metadata
 
@@ -257,6 +255,17 @@ class Database:
 
         return tables
 
+    def get_user_tables(self):
+        sql = self.expr.user_tables()
+        cursor = self.cnxn.cursor()
+        user_tables = []
+
+        rows = cursor.execute(sql, self.schema or self.cat).fetchall()
+        for row in rows:
+            user_tables.append(row.table_name)
+
+        return user_tables
+
     def get_tables(self):
         from table import Table
         if self.metadata.get('cache', None):
@@ -271,8 +280,7 @@ class Database:
             tbl_name = tbl.table_name
 
             table = Table(self, tbl_name)
-            priv = table.user_privileges()
-            if priv.select == 0:
+            if tbl_name not in self.user_tables:
                 continue
 
             tables[tbl_name] = Dict({

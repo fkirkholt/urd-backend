@@ -6,6 +6,7 @@ import json
 from schema import Schema
 from expression import Expression
 from addict import Dict
+import time
 
 class Connection:
     def __init__(self, system, server, user, pwd, db_name=None):
@@ -86,6 +87,7 @@ class Database:
         return self.metadata
 
     def init_metadata(self):
+        start = time.time()
         from table import Table
         cursor = self.cnxn.cursor()
         metadata = Dict()
@@ -99,6 +101,8 @@ class Database:
                 else:
                     metadata[row.key_] = row.value_
 
+        end = time.time()
+        print('init_metadata:', end - start)
         self.metadata = metadata
 
     def get_terms(self):
@@ -124,6 +128,7 @@ class Database:
         self.terms = terms
 
     def get_info(self):
+        start = time.time()
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
@@ -148,10 +153,13 @@ class Database:
                 "admin": self.get_privileges().create
             }
         }
+        end = time.time()
+        print('get_info', end - start)
 
         return info
 
     def get_privileges(self):
+        start = time.time()
         privilege = Dict()
         sql = self.expr.privilege()
         cursor = self.cnxn.cursor()
@@ -162,11 +170,14 @@ class Database:
             priv = cursor.execute(sql, self.schema or self.cat).fetchone()
             privilege.create = int(priv.create)
             privilege.usage = 0
+        end = time.time()
+        print('get_privileges', end - start)
 
         return privilege
 
 
     def get_schemata(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         schemata = []
 
@@ -175,6 +186,8 @@ class Database:
             rows = cursor.execute(sql).fetchall()
             for row in rows:
                 schemata.append(row.schema_name)
+        end = time.time()
+        print('get_schemata', end - start)
 
         return schemata
 
@@ -256,6 +269,7 @@ class Database:
         return tables
 
     def get_user_tables(self):
+        start = time.time()
         sql = self.expr.user_tables()
         cursor = self.cnxn.cursor()
         user_tables = []
@@ -263,10 +277,13 @@ class Database:
         rows = cursor.execute(sql, self.schema or self.cat).fetchall()
         for row in rows:
             user_tables.append(row.table_name)
+        end = time.time()
+        print('get_user_tables', end - start)
 
         return user_tables
 
     def get_tables(self):
+        start_function = time.time()
         from table import Table
         if self.metadata.get('cache', None):
             self.tables = self.metadata.cache
@@ -274,7 +291,10 @@ class Database:
         cursor = self.cnxn.cursor()
         tables = Dict()
 
+        start = time.time()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+        end = time.time()
+        print('cursor.tables', end - start)
 
         for tbl in rows:
             tbl_name = tbl.table_name
@@ -308,6 +328,8 @@ class Database:
             result = cursor.execute(sql, json.dumps(tables), 'cache').commit()
 
         self.tables = tables
+        end_function = time.time()
+        print('get_tables', end_function - start_function)
         return tables
 
     def is_top_level(self, table):
@@ -456,6 +478,7 @@ class Database:
         return contents
 
     def get_contents(self):
+        start = time.time()
         contents = Dict()
         modules = []
         for table in self.tables.values():
@@ -494,6 +517,8 @@ class Database:
                     'class_content': "ml3",
                     'subitems': table_names
                 }
+        end = time.time()
+        print('get_contents', end - start)
 
         return contents
 
@@ -535,6 +560,7 @@ class Database:
         return cursor.execute(sql, params)
 
     def init_indexes(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         indexes = Dict()
         if self.cnxn.system in ["oracle"]:
@@ -557,6 +583,8 @@ class Database:
                     if not 'columns' in indexes[tbl.table_name][name]:
                         indexes[tbl.table_name][name].columns = []
                     indexes[tbl.table_name][name].columns.append(row.column_name)
+        end = time.time()
+        print('init_indexes', end - start)
 
         self.indexes = indexes
 
@@ -572,6 +600,7 @@ class Database:
         self.columns = columns
 
     def init_pkeys(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         pkeys = Dict()
         if self.cnxn.system in ["oracle"]:
@@ -587,10 +616,13 @@ class Database:
                 rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
                 pkey = [row.column_name for row in rows]
                 pkeys[tbl.table_name] = pkey
+        end = time.time()
+        print('init_pkeys', end - start)
 
         self.pkeys = pkeys
 
     def init_foreign_keys(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         fkeys = Dict()
         foreign_keys = Dict()
@@ -620,10 +652,13 @@ class Database:
             for row in rows:
                 tbl = Table(self, row.table_name)
                 foreign_keys[row.table_name] = tbl.get_fkeys()
+        end = time.time()
+        print('init_fkeys', end - start)
 
         self.fkeys = foreign_keys
 
     def init_relations(self):
+        start = time.time()
         if not hasattr(self, 'fkeys'):
             self.init_foreign_keys()
 
@@ -643,5 +678,7 @@ class Database:
                         "primary": key.foreign,
                         "label": self.get_label(key.table) #TODO: Fix
                     })
+        end = time.time()
+        print('init_relations', end - start)
 
         self.relations = relations

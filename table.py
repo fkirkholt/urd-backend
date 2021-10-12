@@ -38,24 +38,12 @@ class Table:
 
     def get_type(self):
         """Return table type - 'data' or 'reference'"""
-
-        indexes = self.get_indexes()
-        cols = [col.column_name for col in self.get_columns() if col.column_name[0:1] != '_']
-        pkey = self.get_primary_key()
-
-
-        index_cols = []
-        for index in indexes.values():
-            if index.unique:
-                index_cols = index_cols + index.columns
-
-        if len(set(index_cols)) == len(cols):
-            # if unique indexes cover all columns
-            if len(pkey) == len(cols):
-                type_ = 'xref'
-            else:
-                type_ = 'reference'
-        elif self.name[0:4] == "ref_" or self.name[:-4] == "_ref" or self.name[0:5] == "meta_":
+        if (
+            self.name[0:1] == "_" or
+            self.name[0:4] == "ref_" or
+            self.name[:-4] == "_ref" or
+            self.name[0:5] == "meta_"
+        ):
             type_ = "reference"
         else:
             type_ = "data"

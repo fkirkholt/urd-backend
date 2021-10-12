@@ -299,9 +299,18 @@ class Database:
         for tbl in rows:
             tbl_name = tbl.table_name
 
-            table = Table(self, tbl_name)
             if tbl_name not in self.user_tables:
                 continue
+
+            if (
+                tbl_name[0:1] == "_" or
+                tbl_name[0:4] == "ref_" or
+                tbl_name[:-4] == "_ref" or
+                tbl_name[0:5] == "meta_"
+            ):
+                type_ = "reference"
+            else:
+                type_ = "data"
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,
@@ -313,12 +322,11 @@ class Database:
                 'indexes': self.get_indexes(tbl_name),
                 'foreign_keys': self.get_foreign_keys(tbl_name),
                 'relations': self.get_relations(tbl_name),
-                'type': table.get_type(),
+                'type': type_,
                 # fields are needed only when creating cache
                 'fields': None if 'cache' not in self.metadata
                            else self.get_columns(tbl_name),
             })
-
 
         if 'cache' in self.metadata:
             cursor = self.cnxn.cursor()
@@ -386,7 +394,11 @@ class Database:
         tbl_groups = Dict()
         terms = Dict() #TODO: lag self.terms
         for tbl_key, table in self.tables.items():
-            group = tbl_key.split("_")[0]
+            if tbl_key[0:1] == "_":
+                name = tbl_key[1:]
+            else:
+                name = tbl_key
+            group = name.split("_")[0]
 
             # Find if the table is subordinate to other tables
             # i.e. the primary key also has a foreign key
@@ -536,7 +548,7 @@ class Database:
 
     def get_pkey(self, tbl_name):
         if not hasattr(self, 'pkeys'):
-            self. init_pkeys()
+            self.init_pkeys()
 
         return self.pkeys[tbl_name]
 

@@ -638,13 +638,13 @@ class Database:
         cursor = self.cnxn.cursor()
         fkeys = Dict()
         foreign_keys = Dict()
-        if self.cnxn.system in ["oracle"]:
+        if self.cnxn.system in ["oracle", "postgres"]:
             sql = self.expr.fkeys()
             for row in cursor.execute(sql, self.schema):
                 name = row.fk_name
                 fkeys[row.fktable_name][name].name = row.fk_name
                 fkeys[row.fktable_name][name].table = row.pktable_name
-                fkeys[row.fktable_name][name].schema = row.pktable_cat #TODO: merkelig
+                fkeys[row.fktable_name][name].schema = row.pktable_schema
                 fkeys[row.fktable_name][name].delete_rule = row.delete_rule
                 if not 'foreign' in fkeys[row.fktable_name][name]:
                     fkeys[row.fktable_name][name].foreign = []

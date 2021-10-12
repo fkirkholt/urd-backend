@@ -191,7 +191,7 @@ class Expression:
                    a.constraint_name as fk_name, a.table_name as fktable_name,
                     c.owner, c.delete_rule,
                     -- referenced pk
-                    c.r_owner as pktable_cat, c_pk.table_name as pktable_name,
+                    c.r_owner as pktable_schema, c_pk.table_name as pktable_name,
                     c_pk.constraint_name r_pk,
                     ra.column_name pkcolumn_name
             FROM all_cons_columns a
@@ -209,6 +209,61 @@ class Expression:
             AND   a.owner = ?
             ORDER BY a.position
             """
+        elif self.platform == 'postgres':
+            return """
+            select
+                con.relname as fktable_name,
+                att2.attname as fkcolumn_name,
+                ns.nspname as pktable_schema,
+                cl.relname as pktable_name,
+                att.attname as pkcolumn_name,
+                conname as fk_name,
+                CASE con.confdeltype
+                    WHEN 'a' THEN 'NO ACTION'
+                    WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE'
+                    WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT'
+                    ELSE 'UNKNOWN'
+                END AS delete_rule,
+                CASE con.confupdtype
+                    WHEN 'a' THEN 'NO ACTION'
+                    WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE'
+                    WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT'
+                    ELSE 'UNKNOWN'
+                END AS update_rule
+            from
+            (select
+                    unnest(con1.conkey) as "parent",
+                    unnest(con1.confkey) as "child",
+                    cl.relname,
+                    con1.confrelid,
+                    con1.conrelid,
+                    con1.conname,
+                    con1.confdeltype,
+                    con1.confupdtype
+                from
+                    pg_class cl
+                    join pg_namespace ns on cl.relnamespace = ns.oid
+                    join pg_constraint con1 on con1.conrelid = cl.oid
+                where
+                    con1.contype = 'f'
+                    and ns.nspname = ?
+
+            ) con
+            join pg_attribute att on
+                att.attrelid = con.confrelid and att.attnum = con.child
+            join pg_class cl on
+                cl.oid = con.confrelid
+            join pg_attribute att2 on
+                att2.attrelid = con.conrelid and att2.attnum = con.parent
+            join pg_namespace ns on
+                ns.oid=cl.relnamespace
+
+            """
+
     def columns(self):
         if self.platform == 'oracle':
             return """

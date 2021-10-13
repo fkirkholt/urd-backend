@@ -650,12 +650,6 @@ class Schema:
             if config.urd_structure:
                 group = tbl_key.split("_")[0]
 
-                # Check if this is a crossreference table
-                # todo: Brukes dette til noe?
-                last_pk_col = table.primary_key[-1]
-                if last_pk_col in table.foreign_keys and 'extends' not in table:
-                    table.type = "xref"
-                
                 # Find if the table is subordinate to other tables
                 # i.e. the primary key also has a foreign key
                 subordinate = False
@@ -665,9 +659,6 @@ class Schema:
                     if colname in table.foreign_keys:
                         subordinate = True
                         key = table.foreign_keys[colname]
-
-                        if table.type == "xref": 
-                            break
 
                         if key.table not in sub_tables:
                             sub_tables[key.table] = []

@@ -437,9 +437,6 @@ class Database:
                     ):
                         continue
 
-                    if table.type == "xref":
-                        break
-
                     if key.table not in sub_tables:
                         sub_tables[key.table] = []
 

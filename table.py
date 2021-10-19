@@ -412,14 +412,15 @@ class Grid:
     def get(self, pkey_vals = None):
         """Return all metadata and data to display grid"""
         selects = {} # dict of select expressions
-
         pkey = self.tbl.get_primary_key()
+        user_tables = self.db.get_user_tables()
         fields = self.tbl.get_fields()
 
         for col in pkey:
             selects[col] = self.tbl.name + '.' + col
 
-        for colname in self.get_grid_columns():
+        grid_columns = self.get_grid_columns()
+        for colname in grid_columns:
 
             col = fields[colname]
 
@@ -442,8 +443,28 @@ class Grid:
             if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
                 self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
 
+        values = self.get_values(selects)
+
+        if (self.tbl.name + '_grid') in user_tables:
+            view_name = self.tbl.name + '_grid'
+            view = Table(self.db, view_name)
+            cols = view.get_columns()
+            display_columns = [view_name + '.' + column.column_name for column in cols]
+            grid_columns = [col.column_name for col in cols]
+            display_values = self.get_display_values_from_view(display_columns)
+            view_fields = view.get_fields()
+            print('view_fields: ', view_fields)
+            for field_name, field in view_fields.items():
+                if field_name not in fields:
+                    field.virtual = True
+                    field.table_name = view_name
+                    fields[field_name] = field
+
+        else:
+            display_values = self.get_display_values(selects)
+
         recs = []
-        for row in self.get_display_values(selects):
+        for row in display_values:
             if 'count_children' in row:
                 recs.append({
                     'count_children': row['count_children'],
@@ -453,7 +474,7 @@ class Grid:
             else:
                 recs.append({'columns': row})
 
-        values = self.get_values(selects)
+
         for index, row in enumerate(values):
             recs[index]['values'] = row
             recs[index]['primary_key'] = {key: row[key] for key in pkey}
@@ -464,7 +485,7 @@ class Grid:
             'count_records': self.get_rowcount(),
             'fields': fields,
             'grid': {
-                'columns': self.get_grid_columns(),
+                'columns': grid_columns,
                 'sums': self.get_sums(),
                 'sort_columns': self.sort_columns
             },
@@ -615,7 +636,11 @@ class Grid:
             parts = sort.split(' ')
             key = parts[0]
             direction = 'asc' if len(parts) == 1 else parts[1]
-            sort_fields[key].field = self.tbl.name + "." + key
+            if key in self.tbl.get_fields():
+                tbl_name = self.tbl.name
+            else:
+                tbl_name = self.tbl.name + '_grid'
+            sort_fields[key].field = tbl_name + "." + key
             if key in selects:
                 sort_fields[key].field = selects[key]
             sort_fields[key].order = direction
@@ -654,9 +679,17 @@ class Grid:
         cond = self.get_cond_expr()
         order = self.make_order_by(selects)
 
+        user_tables = self.db.get_user_tables()
+        if (self.tbl.name + '_grid') in user_tables:
+            pkey = self.tbl.get_primary_key()
+            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
+        else:
+            join_view = ""
+
         sql = "select " + select + "\n"
         sql+= "from " + (self.db.schema or self.db.cat) + "." + self.tbl.name + "\n"
         sql+= join + "\n"
+        sql+= join_view
         sql+= "" if not cond else "where " + cond +"\n"
         sql+= order
 
@@ -678,15 +711,47 @@ class Grid:
         join = self.tbl.get_join()
         namespace = self.db.schema or self.db.cat
 
+        user_tables = self.db.get_user_tables()
+        if (self.tbl.name + '_grid') in user_tables:
+            pkey = self.tbl.get_primary_key()
+            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
+        else:
+            join_view = ""
+
         sql  = "select count(*)\n"
         sql += f"from {namespace}.{self.tbl.name}\n"
         sql += join + "\n"
+        sql += join_view
         sql += "" if not conds else f"where {conds}\n"
 
         cursor = self.db.cnxn.cursor()
         count = cursor.execute(sql, self.cond.params).fetchval()
 
         return count
+
+    def get_display_values_from_view(self, selects):
+        view_name = self.tbl.name + '_grid'
+        pkeys = self.tbl.get_primary_key()
+        order = self.make_order_by(selects)
+        conds = self.get_cond_expr()
+
+        sql  = "select " + ', '.join(selects) + "\n"
+        sql += "from " + view_name + "\n"
+        sql += "join " + self.tbl.name + " using (" + ', '.join(pkeys) + ")\n"
+        sql+= "" if not conds else "where " + conds + "\n"
+        sql += order
+
+        cursor = self.db.cnxn.cursor()
+        cursor.execute(sql, self.cond.params)
+        cursor.skip(self.offset)
+        rows = cursor.fetchmany(self.limit)
+
+        result = []
+        colnames = [column[0] for column in cursor.description]
+        for row in rows:
+            result.append(dict(zip(colnames, row)))
+
+        return result
 
     def get_display_values(self, selects):
         """Return display values for columns in grid"""
@@ -793,7 +858,11 @@ class Grid:
             else:
                 field = parts[0]
                 if "." not in field:
-                    field = self.tbl.name + "." + field
+                    if field in self.tbl.get_fields():
+                        tbl_name = self.tbl.name
+                    else:
+                        tbl_name = self.tbl.name + '_grid'
+                    field = tbl_name + "." + field
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
                 case_sensitive = value.lower() != value

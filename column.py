@@ -89,6 +89,8 @@ class Column:
             #TODO: Sjekk om jeg trenger å endre current_timestamp()
 
             field.default = self.db.expr.replace_vars(default)
+            if (field.default != default):
+                field.default_expr = default
 
         return field
 

@@ -367,6 +367,12 @@ class Table:
             coldef = f"    {col.name} {datatype}"
             if not col.nullable:
                 coldef += " NOT NULL"
+            if col.default:
+                default = col.default if not col.default_expr else col.default_expr
+                if col.datatype in ['string', 'date'] and default != 'CURRENT_DATE':
+                    coldef += " DEFAULT '" + default + "'"
+                else:
+                    coldef += " DEFAULT " + default
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
         ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"

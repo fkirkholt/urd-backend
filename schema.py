@@ -64,8 +64,8 @@ class Schema:
             del self.tables[tbl_name]
 
         terms = Dict()
-        if 'meta_term' in tables:
-            sql = "select * from meta_term"
+        if '_meta_term' in tables:
+            sql = "select * from _meta_term"
             cursor.execute(sql)
             colnames = [column[0] for column in cursor.description]
             for row in cursor:
@@ -391,7 +391,7 @@ class Schema:
                 
                 if len(set(index_cols)) == len(table.fields):
                     table.type = 'reference'
-                elif tbl_name[0:4] == "ref_" or tbl_name[:-4] == "_ref" or tbl_name[0:5] == "meta_":
+                elif tbl_name[0:4] == "ref_" or tbl_name[:-4] == "_ref" or tbl_name[0:5] == "_meta":
                     table.type = "reference"
                 else:
                     table.type = "data"

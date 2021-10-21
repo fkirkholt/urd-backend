@@ -91,9 +91,9 @@ class Database:
         from table import Table
         cursor = self.cnxn.cursor()
         metadata = Dict()
-        md_table= cursor.tables(table='meta_data', catalog=self.cat, schema=self.schema).fetchone()
-        if md_table and 'meta_data' in self.user_tables:
-            sql = f"select * from {self.schema or self.cat}.meta_data"
+        md_table= cursor.tables(table='_meta_data', catalog=self.cat, schema=self.schema).fetchone()
+        if md_table and '_meta_data' in self.user_tables:
+            sql = f"select * from {self.schema or self.cat}._meta_data"
             rows = cursor.execute(sql).fetchall()
             for row in rows:
                 if row.key_ == "cache" and row.value_:
@@ -114,9 +114,9 @@ class Database:
         from table import Table
         cursor = self.cnxn.cursor()
         terms = Dict()
-        terms_table = cursor.tables(table='meta_term', catalog=self.cat, schema=self.schema).fetchone()
+        terms_table = cursor.tables(table='_meta_term', catalog=self.cat, schema=self.schema).fetchone()
         if terms_table:
-            sql = f"select * from {self.schema or self.cat}.meta_term"
+            sql = f"select * from {self.schema or self.cat}._meta_term"
             try:
                 rows = cursor.execute(sql).fetchall()
                 colnames = [column[0] for column in cursor.description]
@@ -305,8 +305,7 @@ class Database:
             if (
                 tbl_name[0:1] == "_" or
                 tbl_name[0:4] == "ref_" or
-                tbl_name[:-4] == "_ref" or
-                tbl_name[0:5] == "meta_"
+                tbl_name[:-4] == "_ref"
             ):
                 type_ = "reference"
             else:
@@ -331,7 +330,7 @@ class Database:
         if 'cache' in self.metadata:
             cursor = self.cnxn.cursor()
             self.cache = tables
-            sql = "update meta_data set value_ = ?\n"
+            sql = "update _meta_data set value_ = ?\n"
             sql+= "where key_ = ?"
             result = cursor.execute(sql, json.dumps(tables), 'cache').commit()
 

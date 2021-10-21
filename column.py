@@ -52,6 +52,7 @@ class Column:
             field.size = int(col.column_size)
         if 'scale' in col and col.scale:
             field.scale = int(col.scale)
+            field.precision = int(col.precision)
         if col.get('auto_increment', None):
             field.extra = "auto_increment"
         if element == "select" and len(options):

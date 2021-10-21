@@ -362,7 +362,7 @@ class Table:
             expr = Expression(system)
             size = col.size
             if 'scale' in col:
-                size = str(col.size) + "," + str(col.scale)
+                size = str(col.precision) + "," + str(col.scale)
             datatype = expr.to_native_type(col.datatype, size)
             coldef = f"    {col.name} {datatype}"
             if not col.nullable:

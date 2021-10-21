@@ -120,6 +120,9 @@ class Table:
             if key not in fields:
                 continue
 
+            if fkey.table not in self.db.user_tables:
+                continue
+
             # Get the ON statement in the join
             ons = [key+'.'+fkey.primary[idx] + " = " + self.name + "." + col
                    for idx, col in enumerate(fkey.foreign)]

@@ -47,6 +47,8 @@ class Record:
         # Add options to selects
         for key, field in fields.items():
             if 'foreign_key' in field:
+                if field.foreign_key.table not in self.db.user_tables:
+                    continue
                 column = Column(self.tbl, field.name)
                 field.options = column.get_options(field, fields)
 

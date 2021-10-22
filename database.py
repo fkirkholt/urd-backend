@@ -94,12 +94,9 @@ class Database:
         md_table= cursor.tables(table='_meta_data', catalog=self.cat, schema=self.schema).fetchone()
         if md_table and '_meta_data' in self.user_tables:
             sql = f"select * from {self.schema or self.cat}._meta_data"
-            rows = cursor.execute(sql).fetchall()
-            for row in rows:
-                if row.key_ == "cache" and row.value_:
-                    metadata[row.key_] = Dict(json.loads(row.value_))
-                else:
-                    metadata[row.key_] = row.value_
+            row = cursor.execute(sql).fetchone()
+            colnames = [col[0] for col in cursor.description]
+            metadata = Dict(zip(colnames, row))
 
         end = time.time()
         print('init_metadata:', end - start)

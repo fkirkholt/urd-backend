@@ -326,10 +326,10 @@ class Database:
 
         if 'cache' in self.metadata:
             cursor = self.cnxn.cursor()
-            self.cache = tables
-            sql = "update _meta_data set value_ = ?\n"
-            sql+= "where key_ = ?"
-            result = cursor.execute(sql, json.dumps(tables), 'cache').commit()
+            # self.cache = tables
+            sql = "update _meta_data set cache = ?\n"
+            sql+= "where name = ?"
+            result = cursor.execute(sql, json.dumps(tables), self.name).commit()
 
         self.tables = tables
         end_function = time.time()

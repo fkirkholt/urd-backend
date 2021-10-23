@@ -125,6 +125,8 @@ class Expression:
                 return "date"
             elif type_ in ["bool"]:
                 return "boolean"
+            elif type_ in ["json", "jsonb"]:
+                return "json"
             else:
                 raise ValueError(f"Type {type_} not supported yet")
     

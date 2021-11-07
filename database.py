@@ -466,8 +466,12 @@ class Database:
 
         return description
 
-    def get_content_items(self, tbl_alias, sub_tables, contents):
-        label = self.get_label(tbl_alias)
+    def get_content_items(self, tbl_alias, sub_tables, contents, parent = None):
+        if parent:
+            label = tbl_alias.replace(parent + '_', '')
+            label = self.get_label(label)
+        else:
+            label = self.get_label(tbl_alias)
 
         if tbl_alias not in sub_tables:
             contents[label] = "tables." + tbl_alias
@@ -478,7 +482,7 @@ class Database:
 
             for subtable in sub_tables[tbl_alias]:
                 contents[label].subitems = self.get_content_items(
-                    subtable, sub_tables, contents[label].subitems)
+                    subtable, sub_tables, contents[label].subitems, tbl_alias)
 
         return contents
 
@@ -514,8 +518,6 @@ class Database:
                 contents = self.get_content_items(group_name, sub_tables, contents)
             else:
                 label = self.get_label(group_name)
-                if label == "Ref":
-                    label = "Oppslagstabeller"
 
                 contents[label] = {
                     'class_label': "b",

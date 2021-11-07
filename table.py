@@ -529,7 +529,7 @@ class Grid:
         if len(self.cond.prep_stmnts):
             cond = "WHERE " + " AND ".join(self.cond.prep_stmnts)
 
-        order_by = self.make_order_by(selects)
+        order_by = self.make_order_by()
 
         sql = f"""
         select rownum - 1
@@ -626,7 +626,7 @@ class Grid:
 
         return columns
 
-    def make_order_by(self, selects):
+    def make_order_by(self):
         """Return 'order by'-clause"""
         pkey = self.tbl.get_primary_key()
 
@@ -644,8 +644,6 @@ class Grid:
             else:
                 tbl_name = self.tbl.name + '_grid'
             sort_fields[key].field = tbl_name + "." + key
-            if key in selects:
-                sort_fields[key].field = selects[key]
             sort_fields[key].order = direction
 
         if (len(pkey) == 0 and len(sort_fields) == 0):
@@ -680,7 +678,7 @@ class Grid:
         select = ', '.join(cols)
         join = self.tbl.get_join()
         cond = self.get_cond_expr()
-        order = self.make_order_by(selects)
+        order = self.make_order_by()
 
         user_tables = self.db.get_user_tables()
         if (self.tbl.name + '_grid') in user_tables:
@@ -735,7 +733,7 @@ class Grid:
     def get_display_values_from_view(self, selects):
         view_name = self.tbl.name + '_grid'
         pkeys = self.tbl.get_primary_key()
-        order = self.make_order_by(selects)
+        order = self.make_order_by()
         conds = self.get_cond_expr()
 
         sql  = "select " + ', '.join(selects) + "\n"
@@ -759,7 +757,7 @@ class Grid:
     def get_display_values(self, selects):
         """Return display values for columns in grid"""
 
-        order = self.make_order_by(selects)
+        order = self.make_order_by()
         join = self.tbl.get_join()
         conds = self.get_cond_expr()
 

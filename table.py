@@ -17,20 +17,20 @@ class Table:
     def user_privileges(self):
         """Return privileges of database user"""
         privileges = Dict({
-            'view': 0,
-            'add': 0,
-            'edit': 0,
+            'select': 0,
+            'insert': 0,
+            'update': 0,
             'delete': 0
         })
         sql = self.db.expr.table_privileges()
         rows = self.db.query(sql, [self.db.cnxn.user, self.name]).fetchall()
         for row in rows:
             if row.privilege_type == 'SELECT':
-                privileges.view = 1
+                privileges.select = 1
             elif row.privilege_type == 'INSERT':
-                privileges.add = 1
+                privileges.insert = 1
             elif row.privilege_type == 'UPDATE':
-                privileges.edit = 1
+                privileges['update'] = 1
             elif row.privilege_type == 'DELETE':
                 privileges.delete = 1
 
@@ -38,22 +38,12 @@ class Table:
 
     def get_type(self):
         """Return table type - 'data' or 'reference'"""
-
-        indexes = self.get_indexes()
-        cols = [col.column_name for col in self.get_columns() if col.column_name[0:1] != '_']
-
-        index_cols = []
-        for index in indexes.values():
-            if index.unique:
-                index_cols = index_cols + index.columns
-
-        if len(set(index_cols)) == len(cols):
-            # if unique indexes cover all columns
-            if (len(self.get_primary_key())) == len(cols):
-                type_ = 'xref'
-            else:
-                type_ = 'reference'
-        elif self.name[0:4] == "ref_" or self.name[:-4] == "_ref" or self.name[0:5] == "meta_":
+        if (
+            self.name[0:1] == "_" or
+            self.name[0:4] == "ref_" or
+            self.name[:-4] == "_ref" or
+            self.name[0:5] == "meta_"
+        ):
             type_ = "reference"
         else:
             type_ = "data"
@@ -80,6 +70,16 @@ class Table:
             self.init_foreign_keys()
 
         return self.cache.foreign_keys[key]
+
+    def get_fkey_by_name(self, name):
+        """Return foreign from name"""
+        if not self.cache.get('foreign_keys', None):
+            self.init_foreign_keys()
+
+        for fkey in self.cache.foreign_keys.values():
+            if fkey.name == name:
+                return fkey
+
 
     def get_fields(self):
         """Return all fields of table"""
@@ -120,6 +120,9 @@ class Table:
             if key not in fields:
                 continue
 
+            if fkey.table not in self.db.user_tables:
+                continue
+
             # Get the ON statement in the join
             ons = [key+'.'+fkey.primary[idx] + " = " + self.name + "." + col
                    for idx, col in enumerate(fkey.foreign)]
@@ -145,6 +148,13 @@ class Table:
             self.init_relations()
 
         return self.cache.relations
+
+    def get_rel_tbl_names(self):
+        tbl_names = []
+        for rel in self.cache.relations.values():
+            tbl_names.append(rel.table)
+
+        return tbl_names
 
     def get_ref_relations(self):
         """ Interim function needed to support old schema """
@@ -179,13 +189,16 @@ class Table:
                     record.update(rec['values'])
 
             # Iterates over all the relations to the record
-            for rel in rec.relations.values():
+            for key, rel in rec.relations.items():
 
-                rel_db = Database(self.db.cnxn, rel.base_name)
+                if rel.base_name == self.db.name:
+                    rel_db = self.db
+                else:
+                    rel_db = Database(self.db.cnxn, rel.base_name)
                 rel_table = Table(rel_db, rel.table_name)
 
                 # Set value of fkey columns to matched colums of record
-                fkey = rel_table.get_fkey(rel.fkey)
+                fkey = rel_table.get_fkey_by_name(key)
                 for rel_rec in rel.records:
                     if 'values' not in rel_rec:
                         continue
@@ -232,12 +245,17 @@ class Table:
         for fkey in keys.values():
             alias = fkey.foreign[-1]
             if alias in foreign_keys:
-                alias = alias + "_2"
+                if len(fkey.foreign) < len(foreign_keys[alias].foreign):
+                    alias_2 = alias + "_2"
+                    foreign_keys[alias_2] = foreign_keys[alias]
+                else:
+                    alias = alias + "_2"
             foreign_keys[alias] = fkey
 
         self.cache.foreign_keys = foreign_keys
 
     def get_columns(self):
+        """ Return all columns in table by reflection """
         cursor = self.db.cnxn.cursor()
         if self.db.cnxn.system == 'oracle':
             # cursor.columns doesn't work for all types of oracle columns
@@ -319,6 +337,8 @@ class Table:
 
         for row in cursor.foreignKeys(table=self.name, catalog=self.db.cat,
                                       schema=self.db.schema):
+            delete_rules = ["cascade", "restrict", "set null", "no action",
+                            "set default"]
             name = row.fk_name
             if name not in relations:
                 relations[name] = Dict({
@@ -326,7 +346,7 @@ class Table:
                     'table': row.fktable_name,
                     'base': row.fktable_cat,
                     'schema': row.fktable_schem,
-                    'delete_rule': row.delete_rule,
+                    'delete_rule': delete_rules[row.delete_rule],
                     'foreign': [],
                     'primary': []
                 })
@@ -343,10 +363,19 @@ class Table:
         coldefs = []
         for col in self.get_fields().values():
             expr = Expression(system)
-            datatype = expr.to_native_type(col.datatype, col.size)
+            size = col.size
+            if 'scale' in col:
+                size = str(col.precision) + "," + str(col.scale)
+            datatype = expr.to_native_type(col.datatype, size)
             coldef = f"    {col.name} {datatype}"
             if not col.nullable:
                 coldef += " NOT NULL"
+            if col.default:
+                default = col.default if not col.default_expr else col.default_expr
+                if col.datatype in ['string', 'date'] and default != 'CURRENT_DATE':
+                    coldef += " DEFAULT '" + default + "'"
+                else:
+                    coldef += " DEFAULT " + default
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
         ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"
@@ -376,6 +405,7 @@ class Grid:
         self.user_filtered = False
         self.offset = 0
         self.limit = 30
+        self.sort_columns = []
         self.cond = Dict({
             'prep_stmnts': [],
             'params': [],
@@ -385,14 +415,15 @@ class Grid:
     def get(self, pkey_vals = None):
         """Return all metadata and data to display grid"""
         selects = {} # dict of select expressions
-
         pkey = self.tbl.get_primary_key()
+        user_tables = self.db.get_user_tables()
         fields = self.tbl.get_fields()
 
         for col in pkey:
             selects[col] = self.tbl.name + '.' + col
 
-        for colname in self.get_grid_columns():
+        grid_columns = self.get_grid_columns()
+        for colname in grid_columns:
 
             col = fields[colname]
 
@@ -415,8 +446,28 @@ class Grid:
             if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
                 self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
 
+        values = self.get_values(selects)
+
+        if (self.tbl.name + '_grid') in user_tables:
+            view_name = self.tbl.name + '_grid'
+            view = Table(self.db, view_name)
+            cols = view.get_columns()
+            display_columns = [view_name + '.' + column.column_name for column in cols]
+            grid_columns = [col.column_name for col in cols]
+            display_values = self.get_display_values_from_view(display_columns)
+            view_fields = view.get_fields()
+            print('view_fields: ', view_fields)
+            for field_name, field in view_fields.items():
+                if field_name not in fields:
+                    field.virtual = True
+                    field.table_name = view_name
+                    fields[field_name] = field
+
+        else:
+            display_values = self.get_display_values(selects)
+
         recs = []
-        for row in self.get_display_values(selects):
+        for row in display_values:
             if 'count_children' in row:
                 recs.append({
                     'count_children': row['count_children'],
@@ -426,10 +477,20 @@ class Grid:
             else:
                 recs.append({'columns': row})
 
-        values = self.get_values(selects)
+
         for index, row in enumerate(values):
             recs[index]['values'] = row
             recs[index]['primary_key'] = {key: row[key] for key in pkey}
+
+        row_formats = self.get_format()
+        for idx, row in enumerate(row_formats.rows):
+            classes = []
+            for key, value in row.items():
+                id_ = int(key[1:])
+                if int(value):
+                    classes.append(row_formats.formats[id_]['class'])
+            class_ = " ".join(classes)
+            recs[idx]['class'] = class_
 
         data = Dict({
             'name': self.tbl.name,
@@ -437,12 +498,12 @@ class Grid:
             'count_records': self.get_rowcount(),
             'fields': fields,
             'grid': {
-                'columns': self.get_grid_columns(),
+                'columns': grid_columns,
                 'sums': self.get_sums(),
-                'sort_columns': self.get_sort_columns()
+                'sort_columns': self.sort_columns
             },
             'form': self.get_form(),
-            'permission': self.tbl.user_privileges(),
+            'privilege': self.tbl.user_privileges(),
             'type': self.tbl.get_type(),
             'primary_key': pkey,
             'foreign_keys': self.tbl.get_fkeys(),
@@ -478,7 +539,7 @@ class Grid:
         if len(self.cond.prep_stmnts):
             cond = "WHERE " + " AND ".join(self.cond.prep_stmnts)
 
-        order_by = self.make_order_by(selects)
+        order_by = self.make_order_by()
 
         sql = f"""
         select rownum - 1
@@ -575,20 +636,24 @@ class Grid:
 
         return columns
 
-    def make_order_by(self, selects):
+    def make_order_by(self):
         """Return 'order by'-clause"""
         pkey = self.tbl.get_primary_key()
 
         order_by = "order by "
         sort_fields = Dict()
-        for sort in self.get_sort_columns():
+        if len(self.sort_columns) == 0:
+            self.sort_columns = self.get_sort_columns()
+        for sort in self.sort_columns:
             # Split into field and sort order
             parts = sort.split(' ')
             key = parts[0]
             direction = 'asc' if len(parts) == 1 else parts[1]
-            sort_fields[key].field = self.tbl.name + "." + key
-            if key in selects:
-                sort_fields[key].field = selects[key]
+            if key in self.tbl.get_fields():
+                tbl_name = self.tbl.name
+            else:
+                tbl_name = self.tbl.name + '_grid'
+            sort_fields[key].field = tbl_name + "." + key
             sort_fields[key].order = direction
 
         if (len(pkey) == 0 and len(sort_fields) == 0):
@@ -623,11 +688,19 @@ class Grid:
         select = ', '.join(cols)
         join = self.tbl.get_join()
         cond = self.get_cond_expr()
-        order = self.make_order_by(selects)
+        order = self.make_order_by()
+
+        user_tables = self.db.get_user_tables()
+        if (self.tbl.name + '_grid') in user_tables:
+            pkey = self.tbl.get_primary_key()
+            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
+        else:
+            join_view = ""
 
         sql = "select " + select + "\n"
         sql+= "from " + (self.db.schema or self.db.cat) + "." + self.tbl.name + "\n"
         sql+= join + "\n"
+        sql+= join_view
         sql+= "" if not cond else "where " + cond +"\n"
         sql+= order
 
@@ -649,9 +722,17 @@ class Grid:
         join = self.tbl.get_join()
         namespace = self.db.schema or self.db.cat
 
+        user_tables = self.db.get_user_tables()
+        if (self.tbl.name + '_grid') in user_tables:
+            pkey = self.tbl.get_primary_key()
+            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
+        else:
+            join_view = ""
+
         sql  = "select count(*)\n"
         sql += f"from {namespace}.{self.tbl.name}\n"
         sql += join + "\n"
+        sql += join_view
         sql += "" if not conds else f"where {conds}\n"
 
         cursor = self.db.cnxn.cursor()
@@ -659,10 +740,34 @@ class Grid:
 
         return count
 
+    def get_display_values_from_view(self, selects):
+        view_name = self.tbl.name + '_grid'
+        pkeys = self.tbl.get_primary_key()
+        order = self.make_order_by()
+        conds = self.get_cond_expr()
+
+        sql  = "select " + ', '.join(selects) + "\n"
+        sql += "from " + view_name + "\n"
+        sql += "join " + self.tbl.name + " using (" + ', '.join(pkeys) + ")\n"
+        sql+= "" if not conds else "where " + conds + "\n"
+        sql += order
+
+        cursor = self.db.cnxn.cursor()
+        cursor.execute(sql, self.cond.params)
+        cursor.skip(self.offset)
+        rows = cursor.fetchmany(self.limit)
+
+        result = []
+        colnames = [column[0] for column in cursor.description]
+        for row in rows:
+            result.append(dict(zip(colnames, row)))
+
+        return result
+
     def get_display_values(self, selects):
         """Return display values for columns in grid"""
 
-        order = self.make_order_by(selects)
+        order = self.make_order_by()
         join = self.tbl.get_join()
         conds = self.get_cond_expr()
 
@@ -764,11 +869,15 @@ class Grid:
             else:
                 field = parts[0]
                 if "." not in field:
-                    field = self.tbl.name + "." + field
+                    if field in self.tbl.get_fields():
+                        tbl_name = self.tbl.name
+                    else:
+                        tbl_name = self.tbl.name + '_grid'
+                    field = tbl_name + "." + field
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
                 case_sensitive = value.lower() != value
-                if not case_sensitive:
+                if (not case_sensitive and value.lower() != value.upper()):
                     field = f"lower({field})"
                 if operator == "IN":
                     value = value.strip().split(",")
@@ -793,11 +902,11 @@ class Grid:
             self.cond.stmnts.append(f"{expr} {operator} {value}")
         elif operator is None:
             self.cond.prep_stmnts.append(expr)
-            if isinstance(value, str):
-                self.cond.params.append(value)
-            elif isinstance(value, list):
-                print('type er liste')
+            if isinstance(value, list):
                 self.cond.params.extend(value)
+            else:
+                self.cond.params.append(value)
+
         else:
             self.cond.prep_stmnts.append(f"{expr} {operator} ?")
             self.cond.params.append(value)
@@ -818,7 +927,7 @@ class Grid:
             # Don't add column to form if it's part of primary key but not shown in grid
             if (field.name in self.tbl.get_primary_key() and
                 field.name not in self.get_grid_columns()
-            ): continue
+            ): field.hidden = True
 
             # Group by prefix
             parts = field.name.split("_")
@@ -864,7 +973,7 @@ class Grid:
                     elif field.datatype in ["date", "integer"]:
                         sum_size += 10
 
-                if sum_size < 50:
+                if sum_size <= 50:
                     inline = True
 
                 group_label = self.db.get_label(group_name)
@@ -878,13 +987,68 @@ class Grid:
 
         return form
 
+    def get_format(self):
+        sql = """
+        select id, class, filter
+        from   _meta_format
+        where  table_ = ?
+        """
+
+        cursor = self.db.cnxn.cursor()
+        rows = cursor.execute(sql, self.tbl.name).fetchall()
+        colnames = [column[0] for column in cursor.description]
+        selects = []
+        formats = {}
+        for row in rows:
+            selects.append("(" + row.filter + ") AS f" + str(row.id))
+            formats[row.id] = dict(zip(colnames, row))
+
+        if len(selects) == 0:
+            return Dict({
+                'formats': [],
+                'rows': []
+            })
+
+        select = ", ".join(selects)
+        join = self.tbl.get_join()
+        cond = self.get_cond_expr()
+        ordr = self.make_order_by()
+
+        sql = f"""
+        select {select}
+        from {self.tbl.name}
+        {join}
+        {cond}
+        {ordr}
+        """
+
+        cursor = self.db.cnxn.cursor()
+        cursor.execute(sql)
+        cursor.skip(self.offset)
+        rows = cursor.fetchmany(self.limit)
+
+        result = []
+        colnames = [column[0] for column in cursor.description]
+        for row in rows:
+            result.append(dict(zip(colnames, row)))
+
+        return Dict({
+            'formats': formats,
+            'rows': result
+        })
+
     def relations_form(self, form):
         """Add relations to form"""
         relations = self.tbl.get_relations()
+        rel_tbl_names = self.tbl.get_rel_tbl_names()
+
         for alias, rel in relations.items():
             rel.order = 10
-            #TODO: Finn faktisk database det lenkes fra
             rel_table = Table(self.db, rel.table)
+            name_parts = rel.table.split("_")
+
+            if rel.table not in self.db.user_tables:
+                rel.hidden = True
 
             # Find indexes that can be used to get relation
             index_exist = False
@@ -897,22 +1061,23 @@ class Grid:
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_primary_key()
                 rel.label = rel_table.name.replace(self.tbl.name + '_', '')
+                rel_fkeys = rel_table.get_fkeys()
+
                 if set(rel_pkey) > set(rel.foreign):
                     # Set order priority
-                    idx = rel_pkey.index(rel.foreign[-1])
-                    rel.order = len(rel_pkey) - idx
+                    rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])
+
                     # If foreign key is part of primary key, and the other
                     # pk field is also a foreign key, we have a xref table
-                    rel_fkeys = rel_table.get_fkeys()
                     rest = [col for col in rel_pkey if col not in rel.foreign]
                     pk_field = list(rest)[-1]
                     if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
                         rel.type_ = 'xref'
                         rel.order = 5 + rel.order
-                        rel.label = pk_field
-                        rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
-                        if len(rest):
-                            rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
+                        # rel.label = pk_field
+                        # rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
+                        # if len(rest):
+                            # rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
 
                 rel.label = rel.label.replace('_' + self.tbl.name, '')
                 rel.label = self.db.get_label(rel.label).strip()
@@ -926,6 +1091,9 @@ class Grid:
         sorted_rels = dict(sorted(relations.items(), key=lambda tup: tup[1].order))
 
         for alias, rel in sorted_rels.items():
+            name_parts = rel.table.split("_")
+            if (len(name_parts) > 1 and name_parts[0] in rel_tbl_names):
+                continue
             if not rel.hidden:
                 form['items'][rel.label] = "relations." + alias
 

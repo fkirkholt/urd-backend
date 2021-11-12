@@ -64,8 +64,8 @@ class Schema:
             del self.tables[tbl_name]
 
         terms = Dict()
-        if 'meta_term' in tables:
-            sql = "select * from meta_term"
+        if '_meta_term' in tables:
+            sql = "select * from _meta_term"
             cursor.execute(sql)
             colnames = [column[0] for column in cursor.description]
             for row in cursor:
@@ -391,7 +391,7 @@ class Schema:
                 
                 if len(set(index_cols)) == len(table.fields):
                     table.type = 'reference'
-                elif tbl_name[0:4] == "ref_" or tbl_name[:-4] == "_ref" or tbl_name[0:5] == "meta_":
+                elif tbl_name[0:4] == "ref_" or tbl_name[:-4] == "_ref" or tbl_name[0:5] == "_meta":
                     table.type = "reference"
                 else:
                     table.type = "data"
@@ -650,12 +650,6 @@ class Schema:
             if config.urd_structure:
                 group = tbl_key.split("_")[0]
 
-                # Check if this is a crossreference table
-                # todo: Brukes dette til noe?
-                last_pk_col = table.primary_key[-1]
-                if last_pk_col in table.foreign_keys and 'extends' not in table:
-                    table.type = "xref"
-                
                 # Find if the table is subordinate to other tables
                 # i.e. the primary key also has a foreign key
                 subordinate = False
@@ -665,9 +659,6 @@ class Schema:
                     if colname in table.foreign_keys:
                         subordinate = True
                         key = table.foreign_keys[colname]
-
-                        if table.type == "xref": 
-                            break
 
                         if key.table not in sub_tables:
                             sub_tables[key.table] = []

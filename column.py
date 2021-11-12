@@ -45,11 +45,14 @@ class Column:
             'element': element,
             'nullable': col.nullable == True,
             'label': self.db.get_label(self.name),
-            'description': None #TODO
+            'description': self.db.get_description(self.name)
         })
 
         if 'column_size' in col:
             field.size = int(col.column_size)
+        if 'scale' in col and col.scale:
+            field.scale = int(col.scale)
+            field.precision = int(col.precision)
         if col.get('auto_increment', None):
             field.extra = "auto_increment"
         if element == "select" and len(options):
@@ -58,26 +61,25 @@ class Column:
             fk = foreign_keys[self.name]
             field.foreign_key = fk
             ref_tbl = Table(self.db, fk.table)
-            ref_pk = ref_tbl.get_primary_key()
+            if fk.table in self.db.user_tables:
+                ref_pk = ref_tbl.get_primary_key()
 
-            if (ref_tbl.get_type() == "data"):
-                field.expandable = True
+                if (ref_tbl.get_type() == "data"):
+                    field.expandable = True
 
-            for index in ref_tbl.get_indexes().values():
-                if index.columns != ref_pk and index.unique:
-                    # Only last pk column is used in display value,
-                    # other pk columns are usually foreign keys
-                    cols = [self.name+"."+col for col in index.columns if col not in ref_pk[0:-1]]
-                    field.view = " || ', ' || ".join(cols)
-                    if index.name.endswith("_sort_idx"):
-                        break
+                for index in ref_tbl.get_indexes().values():
+                    if index.columns != ref_pk and index.unique:
+                        # Only last pk column is used in display value,
+                        # other pk columns are usually foreign keys
+                        cols = [self.name+"."+col for col in index.columns if col not in ref_pk[0:-1]]
+                        field.view = " || ' - ' || ".join(cols)
+                        if index.name.endswith("_sort_idx"):
+                            break
 
-            if 'view' in field:
-                if 'column_view' not in field:
+                if 'column_view' not in field and 'view' in field:
                     field.column_view = field.view
                 field.options = self.get_options(field)
-        if (type_ in ['integer', 'float'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
-            print(self.name + ' er autoinc')
+        if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
             field.extra = "auto_increment"
 
         if col.column_def and not col.auto_increment:
@@ -88,6 +90,8 @@ class Column:
             #TODO: Sjekk om jeg trenger å endre current_timestamp()
 
             field.default = self.db.expr.replace_vars(default)
+            if (field.default != default):
+                field.default_expr = default
 
         return field
 
@@ -96,7 +100,10 @@ class Column:
         from table import Table, Grid
 
         fk = self.tbl.get_fkey(field.name)
-        base = Database(self.db.cnxn, fk.base or fk.schema)
+        if fk.base == self.db.cat and fk.schema == self.db.schema:
+            base = self.db
+        else:
+            base = Database(self.db.cnxn, fk.base or fk.schema)
         cand_tbl = Table(base, fk.table)
         grid = Grid(cand_tbl)
 
@@ -142,8 +149,8 @@ class Column:
             return False
 
         sql = "select " + value_field + " as value, "
-        sql+= "(" + field.view + ") as label, "
-        sql+= "(" + field.column_view + ") as coltext "
+        sql+= "(" + (field.view or value_field) + ") as label, "
+        sql+= "(" + (field.column_view or value_field) + ") as coltext "
         sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition + "\n" + order
 
@@ -175,7 +182,7 @@ class Column:
             search = search.lower()
             conds.append(f"lower(cast({view} as varchar)) like '%{search}%'")
 
-        cond = " and ".join(conds) if len(conds) else col + "IS NOT NULL"
+        cond = " and ".join(conds) if len(conds) else col + " IS NOT NULL"
 
         val_col = req.alias + "." + col
 

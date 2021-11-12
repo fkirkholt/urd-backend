@@ -1,9 +1,12 @@
 import pyodbc
+from fastapi import HTTPException
+from starlette import status
 import os
 import json
 from schema import Schema
 from expression import Expression
 from addict import Dict
+import time
 
 class Connection:
     def __init__(self, system, server, user, pwd, db_name=None):
@@ -22,7 +25,12 @@ class Connection:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + user + ';Pwd=' + pwd + ';'
         pyodbc.lowercase = True
-        cnxn = pyodbc.connect(cnxnstr)
+        try:
+            cnxn = pyodbc.connect(cnxnstr)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication"
+            )
         self.cursor = cnxn.cursor
         self.user = user
         self.expr = Expression(self.system)
@@ -70,6 +78,7 @@ class Database:
             self.cat = None
         self.expr   = Expression(cnxn.system)
         self.use_cache = False #TODO
+        self.user_tables = self.get_user_tables()
         self.metadata = self.get_metadata()
 
     def get_metadata(self):
@@ -78,22 +87,45 @@ class Database:
         return self.metadata
 
     def init_metadata(self):
+        start = time.time()
+        from table import Table
         cursor = self.cnxn.cursor()
         metadata = Dict()
-        md_table= cursor.tables(table='meta_data', catalog=self.cat, schema=self.schema).fetchone()
-        tables = cursor.tables(catalog=self.cat).fetchall()
-        if (md_table):
-            sql = f"select * from {self.schema or self.cat}.meta_data"
-            rows = cursor.execute(sql).fetchall()
-            for row in rows:
-                if row.key_ == "cache" and row.value_:
-                    metadata[row.key_] = Dict(json.loads(row.value_))
-                else:
-                    metadata[row.key_] = row.value_
+        md_table= cursor.tables(table='_meta_data', catalog=self.cat, schema=self.schema).fetchone()
+        if md_table and '_meta_data' in self.user_tables:
+            sql = f"select * from {self.schema or self.cat}._meta_data"
+            row = cursor.execute(sql).fetchone()
+            colnames = [col[0] for col in cursor.description]
+            metadata = Dict(zip(colnames, row))
 
+        end = time.time()
+        print('init_metadata:', end - start)
         self.metadata = metadata
 
+    def get_terms(self):
+        if not hasattr(self, 'terms'):
+            self.init_terms()
+        return self.terms
+
+    def init_terms(self):
+        from table import Table
+        cursor = self.cnxn.cursor()
+        terms = Dict()
+        terms_table = cursor.tables(table='_meta_term', catalog=self.cat, schema=self.schema).fetchone()
+        if terms_table:
+            sql = f"select * from {self.schema or self.cat}._meta_term"
+            try:
+                rows = cursor.execute(sql).fetchall()
+                colnames = [column[0] for column in cursor.description]
+                for row in rows:
+                    terms[row.term] = Dict(zip(colnames, row))
+            except:
+                pass
+
+        self.terms = terms
+
     def get_info(self):
+        start = time.time()
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
@@ -118,10 +150,13 @@ class Database:
                 "admin": self.get_privileges().create
             }
         }
+        end = time.time()
+        print('get_info', end - start)
 
         return info
 
     def get_privileges(self):
+        start = time.time()
         privilege = Dict()
         sql = self.expr.privilege()
         cursor = self.cnxn.cursor()
@@ -130,13 +165,16 @@ class Database:
             privilege.create = 0
         else:
             priv = cursor.execute(sql, self.schema or self.cat).fetchone()
-            privilege.create = priv.create
+            privilege.create = int(priv.create)
             privilege.usage = 0
+        end = time.time()
+        print('get_privileges', end - start)
 
         return privilege
 
 
     def get_schemata(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         schemata = []
 
@@ -145,6 +183,8 @@ class Database:
             rows = cursor.execute(sql).fetchall()
             for row in rows:
                 schemata.append(row.schema_name)
+        end = time.time()
+        print('get_schemata', end - start)
 
         return schemata
 
@@ -225,7 +265,22 @@ class Database:
 
         return tables
 
+    def get_user_tables(self):
+        start = time.time()
+        sql = self.expr.user_tables()
+        cursor = self.cnxn.cursor()
+        user_tables = []
+
+        rows = cursor.execute(sql, self.schema or self.cat).fetchall()
+        for row in rows:
+            user_tables.append(row.table_name)
+        end = time.time()
+        print('get_user_tables', end - start)
+
+        return user_tables
+
     def get_tables(self):
+        start_function = time.time()
         from table import Table
         if self.metadata.get('cache', None):
             self.tables = self.metadata.cache
@@ -233,12 +288,25 @@ class Database:
         cursor = self.cnxn.cursor()
         tables = Dict()
 
+        start = time.time()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+        end = time.time()
+        print('cursor.tables', end - start)
 
         for tbl in rows:
             tbl_name = tbl.table_name
 
-            table = Table(self, tbl_name)
+            if tbl_name not in self.user_tables:
+                continue
+
+            if (
+                tbl_name[0:1] == "_" or
+                tbl_name[0:4] == "ref_" or
+                tbl_name[:-4] == "_ref"
+            ):
+                type_ = "reference"
+            else:
+                type_ = "data"
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,
@@ -250,21 +318,22 @@ class Database:
                 'indexes': self.get_indexes(tbl_name),
                 'foreign_keys': self.get_foreign_keys(tbl_name),
                 'relations': self.get_relations(tbl_name),
-                'type': table.get_type(),
+                'type': type_,
                 # fields are needed only when creating cache
                 'fields': None if 'cache' not in self.metadata
                            else self.get_columns(tbl_name),
             })
 
-
         if 'cache' in self.metadata:
             cursor = self.cnxn.cursor()
-            self.cache = tables
-            sql = "update meta_data set value_ = ?\n"
-            sql+= "where key_ = ?"
-            result = cursor.execute(sql, json.dumps(tables), 'cache').commit()
+            # self.cache = tables
+            sql = "update _meta_data set cache = ?\n"
+            sql+= "where name = ?"
+            result = cursor.execute(sql, json.dumps(tables), self.name).commit()
 
         self.tables = tables
+        end_function = time.time()
+        print('get_tables', end_function - start_function)
         return tables
 
     def is_top_level(self, table):
@@ -321,7 +390,11 @@ class Database:
         tbl_groups = Dict()
         terms = Dict() #TODO: lag self.terms
         for tbl_key, table in self.tables.items():
-            group = tbl_key.split("_")[0]
+            if tbl_key[0:1] == "_":
+                name = tbl_key[1:]
+            else:
+                name = tbl_key
+            group = name.split("_")[0]
 
             # Find if the table is subordinate to other tables
             # i.e. the primary key also has a foreign key
@@ -348,19 +421,17 @@ class Database:
     def get_sub_tables(self):
         sub_tables = Dict()
         for tbl_key, table in self.tables.items():
-
-            #TODO: Legg til Table.get_type isteden
-            if len(table.primary_key):
-                last_pk_col = table.primary_key[-1]
-                if last_pk_col in table.foreign_keys: #TODO extends
-                    table.type = "xref"
+            name_parts = tbl_key.split("_")
 
             for colname in table.primary_key:
                 if colname in table.foreign_keys:
                     key = table.foreign_keys[colname]
 
-                    if table.type == "xref":
-                        break
+                    if (len(name_parts) > 1 and
+                        name_parts[0] in self.tables and
+                        name_parts[0] != key.table
+                    ):
+                        continue
 
                     if key.table not in sub_tables:
                         sub_tables[key.table] = []
@@ -371,7 +442,7 @@ class Database:
         return sub_tables
 
     def get_label(self, term):
-        terms = Dict() #TODO
+        terms = self.get_terms()
         if term in terms:
             label = terms[term].label
         else:
@@ -387,8 +458,20 @@ class Database:
 
         return label
 
-    def get_content_items(self, tbl_alias, sub_tables, contents):
-        label = self.get_label(tbl_alias)
+    def get_description(self, term):
+        terms = self.get_terms()
+        description = None
+        if term in terms:
+            description = terms[term].description
+
+        return description
+
+    def get_content_items(self, tbl_alias, sub_tables, contents, parent = None):
+        if parent:
+            label = tbl_alias.replace(parent + '_', '')
+            label = self.get_label(label)
+        else:
+            label = self.get_label(tbl_alias)
 
         if tbl_alias not in sub_tables:
             contents[label] = "tables." + tbl_alias
@@ -399,11 +482,12 @@ class Database:
 
             for subtable in sub_tables[tbl_alias]:
                 contents[label].subitems = self.get_content_items(
-                    subtable, sub_tables, contents[label].subitems)
+                    subtable, sub_tables, contents[label].subitems, tbl_alias)
 
         return contents
 
     def get_contents(self):
+        start = time.time()
         contents = Dict()
         modules = []
         for table in self.tables.values():
@@ -434,14 +518,14 @@ class Database:
                 contents = self.get_content_items(group_name, sub_tables, contents)
             else:
                 label = self.get_label(group_name)
-                if label == "Ref":
-                    label = "Oppslagstabeller"
 
                 contents[label] = {
                     'class_label': "b",
                     'class_content': "ml3",
                     'subitems': table_names
                 }
+        end = time.time()
+        print('get_contents', end - start)
 
         return contents
 
@@ -459,7 +543,7 @@ class Database:
 
     def get_pkey(self, tbl_name):
         if not hasattr(self, 'pkeys'):
-            self. init_pkeys()
+            self.init_pkeys()
 
         return self.pkeys[tbl_name]
 
@@ -483,6 +567,7 @@ class Database:
         return cursor.execute(sql, params)
 
     def init_indexes(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         indexes = Dict()
         if self.cnxn.system in ["oracle"]:
@@ -505,6 +590,8 @@ class Database:
                     if not 'columns' in indexes[tbl.table_name][name]:
                         indexes[tbl.table_name][name].columns = []
                     indexes[tbl.table_name][name].columns.append(row.column_name)
+        end = time.time()
+        print('init_indexes', end - start)
 
         self.indexes = indexes
 
@@ -520,6 +607,7 @@ class Database:
         self.columns = columns
 
     def init_pkeys(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         pkeys = Dict()
         if self.cnxn.system in ["oracle"]:
@@ -535,20 +623,23 @@ class Database:
                 rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
                 pkey = [row.column_name for row in rows]
                 pkeys[tbl.table_name] = pkey
+        end = time.time()
+        print('init_pkeys', end - start)
 
         self.pkeys = pkeys
 
     def init_foreign_keys(self):
+        start = time.time()
         cursor = self.cnxn.cursor()
         fkeys = Dict()
         foreign_keys = Dict()
-        if self.cnxn.system in ["oracle"]:
+        if self.cnxn.system in ["oracle", "postgres"]:
             sql = self.expr.fkeys()
             for row in cursor.execute(sql, self.schema):
                 name = row.fk_name
                 fkeys[row.fktable_name][name].name = row.fk_name
                 fkeys[row.fktable_name][name].table = row.pktable_name
-                fkeys[row.fktable_name][name].schema = row.pktable_cat #TODO: merkelig
+                fkeys[row.fktable_name][name].schema = row.pktable_schema
                 fkeys[row.fktable_name][name].delete_rule = row.delete_rule
                 if not 'foreign' in fkeys[row.fktable_name][name]:
                     fkeys[row.fktable_name][name].foreign = []
@@ -568,10 +659,13 @@ class Database:
             for row in rows:
                 tbl = Table(self, row.table_name)
                 foreign_keys[row.table_name] = tbl.get_fkeys()
+        end = time.time()
+        print('init_fkeys', end - start)
 
         self.fkeys = foreign_keys
 
     def init_relations(self):
+        start = time.time()
         if not hasattr(self, 'fkeys'):
             self.init_foreign_keys()
 
@@ -591,5 +685,7 @@ class Database:
                         "primary": key.foreign,
                         "label": self.get_label(key.table) #TODO: Fix
                     })
+        end = time.time()
+        print('init_relations', end - start)
 
         self.relations = relations

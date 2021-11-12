@@ -1,4 +1,5 @@
 from database import Database
+from column import Column
 import re
 from addict import Dict
 import json
@@ -27,6 +28,8 @@ class Record:
         displays = self.get_display_values()
 
         new = True if not values else False
+        if new:
+            values = self.pk
 
         fields = {}
         tbl_fields = self.tbl.get_fields()
@@ -40,6 +43,17 @@ class Record:
             field.alias = field.name
 
             fields[key] = field
+
+        # Add options to selects
+        for key, field in fields.items():
+            if 'foreign_key' in field:
+                if field.foreign_key.table not in self.db.user_tables:
+                    continue
+                column = Column(self.tbl, field.name)
+                field.options = column.get_options(field, fields)
+
+                fields[key] = field
+
 
         return Dict({
             'base_name': self.db.name,
@@ -58,10 +72,26 @@ class Record:
                 base_name = rel.base + '.' + rel.schema
             else:
                 base_name = rel.base or rel.schema
-            db = Database(self.db.cnxn, base_name)
+            if rel.base == self.db.cat and rel.schema == self.db.schema:
+                db = self.db
+            else:
+                db = Database(self.db.cnxn, base_name)
             tbl_rel = Table(db, rel.table)
+            if rel.table not in self.db.user_tables:
+                continue
+
             tbl_rel.fields = tbl_rel.get_fields()
             grid = Grid(tbl_rel)
+            grid2 = Grid(tbl_rel) # Used to count inherited records
+
+            # Find index used
+            slice_obj = slice(0, len(rel.foreign))
+            rel_indexes = tbl_rel.get_indexes()
+            for index in rel_indexes.values():
+                if index.columns[slice_obj] == rel.foreign:
+                    rel.index = index
+                    if index.unique:
+                        break
 
             # todo: filtrate on highest level
 
@@ -71,19 +101,31 @@ class Record:
 
             # Add condition to fetch only rows that link to record
             conds = Dict()
+            count_null_conds = 0
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
-                    grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
+                if (tbl_rel.fields[col].nullable and
+                    col != rel.foreign[0] and
+                    rel.primary == list(self.pk.keys()) and
+                    rel.index.unique is True
+                ):
+                    grid2.add_cond(expr = f"{rel.table}.{col}", operator = "IS NULL")
+                    count_null_conds += 1
                 else:
-                    grid.add_cond(f"{rel.table}.{col}", "=", val)
+                    grid2.add_cond(f"{rel.table}.{col}", "=", val)
+
+                grid.add_cond(f"{rel.table}.{col}", "=", val)
                 conds[col] = val
 
             if len(self.pk):
                 count_records = grid.get_rowcount()
             else:
                 count_records = 0
+
+            count_inherited = 0
+            if count_null_conds:
+                count_inherited = grid2.get_rowcount()
 
             tbl_rel.pkey = tbl_rel.get_primary_key()
             if set(tbl_rel.pkey) <= set(rel.foreign):
@@ -92,24 +134,26 @@ class Record:
                 relationship = "1:M"
 
             relation = Dict({
-                'count_records': count_records,
+                'count_records': count_records + count_inherited,
+                'count_inherited': count_inherited,
                 'name': rel.table,
                 'conditions': grid.get_client_conditions(),
                 'conds': conds,
                 'base_name': rel.base,
                 'schema_name': rel.schema,
-                'relationship': relationship
+                'relationship': relationship,
+                'delete_rule': rel.delete_rule
             })
 
+            # Tables with suffixes that's part of types
+            # should just be shown when the specific type is chosen
             parts = tbl_rel.name.split("_")
             suffix_1 = parts[-1]
-            suffix_2 = None if len(parts) == 1 else parts[-2]
-            if types and (len(types) and suffix_1 in types):
-                show_if = {'type_': suffix_1}
-            elif types and (len(types) and suffix_2 in types):
-                show_if = {'type_': suffix_2}
-            else:
-                show_if = None
+            suffix_2 = '' if len(parts) == 1 else parts[-2]
+            show_if = None
+            for type_ in types:
+                if (suffix_1.startswith(type_) or suffix_2.startswith(type_)):
+                    show_if = {'type_': type_}
 
             if show_if:
                 relation.show_if = show_if
@@ -130,7 +174,16 @@ class Record:
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
         tbl_rel.fields = tbl_rel.get_fields()
-        
+        tbl_rel.pkey = tbl_rel.get_primary_key()
+
+        # Find index used
+        slice_obj = slice(0, len(rel.foreign))
+        rel_indexes = tbl_rel.get_indexes()
+        for index in rel_indexes.values():
+            if index.columns[slice_obj] == rel.foreign:
+                rel.index = index
+                break
+
         # todo: filter
 
         # Don't get values for new records that's not saved
@@ -139,14 +192,20 @@ class Record:
 
         # Add condition to fetch only rows that link to record
         conds = Dict()
+        pkey = {}
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx].lower()
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            if (tbl_rel.fields[col].nullable and col != rel.foreign[0]):
+            if (len(self.pk) and tbl_rel.fields[col].nullable and
+                col != rel.foreign[0] and
+                rel.primary == list(self.pk.keys()) and
+                rel.index.unique is True
+            ):
                 grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
             else:
                 grid.add_cond(f"{rel.table}.{col}", "=", val)
             conds[col] = val
+            pkey[col] = val
             # grid.add_cond(f"coalesce({rel.table}.{col}, '-')", "IN", [val, '-'])
 
         relation = grid.get()
@@ -167,7 +226,7 @@ class Record:
 
         # If foreign key columns contains primary key
         if set(tbl_rel.pkey) <= set(rel.foreign):
-            rec = Record(self.db, tbl_rel, pk)
+            rec = Record(self.db, tbl_rel, pkey)
             relation.records = [rec.get()]
             relation.relationship = "1:1"
         else:
@@ -363,7 +422,8 @@ class Record:
 
         # todo: Get values for auto and auto_update fields
 
-        # Get autoinc values for compound primary keys
+        # Get autoinc values for primary keys
+        # Supports simple and compound primary keys
         pkey = self.tbl.get_primary_key()
         for colname in pkey:
             if colname in values:
@@ -371,7 +431,6 @@ class Record:
         inc_col = pkey[-1]
         if (
             inc_col not in values and
-            len(pkey) > 1 and
             fields[inc_col].extra == "auto_increment"
         ):
             s = slice(0, len(pkey) - 1)
@@ -385,7 +444,7 @@ class Record:
 
             sql = f"select case when max({inc_col}) is null then 1 "
             sql+= f"else floor(max({inc_col}) +1) end from {self.tbl.name} "
-            sql+= "where " + " and ".join(conditions)
+            sql+= "" if len(cols) == 0 else "where " + " and ".join(conditions)
 
             values[inc_col] = self.db.query(sql, params).fetchval()
             self.pk[inc_col] = values[inc_col]
@@ -402,8 +461,6 @@ class Record:
                 value = datetime.now()
 
             inserts[key] = value
-
-        # todo: Vet ikke om jeg trenger å håndtere autoinc igjen
 
         sql = f"""
         insert into {self.tbl.name} ({','.join(inserts.keys())})

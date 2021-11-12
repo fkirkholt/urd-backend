@@ -69,6 +69,21 @@ class Expression:
                 return "boolean"
             elif type_ == "binary":
                 return "bytea"
+        elif self.platform == 'oracle':
+            if type_ == "string":
+                return "varchar(" + str(size) + ")"
+            elif (type_ == "integer" and size > 11):
+                return "number(" + str(size) + ", 0)"
+            elif type_ == "integer":
+                return "integer"
+            elif type_ == "float":
+                return "float(" + str(size) + ")"
+            elif type_ == "date":
+                return "date"
+            elif type_ == "boolean":
+                return "number(1)"
+            elif type_ == "binary":
+                return "blob"
         else:
             raise ValueError(f"Type conversion for {self.platform} not implemented")
 

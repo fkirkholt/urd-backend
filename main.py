@@ -76,6 +76,11 @@ def logout(response: Response):
     response.delete_cookie("session")
     return {"success": True}
 
+@app.get("/dblist")
+def dblist():
+    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, cfg.db_name)
+    return {'data': {'records': cnxn.get_databases()}}
+
 @app.get("/database")
 def db_info(base: str):
     if base == cfg.db_name:
@@ -100,9 +105,6 @@ def db_info(base: str):
 async def get_table(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    if (req.base == cfg.db_name and req.table == 'database_'):
-        cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, cfg.db_name)
-        return {'data': {'records': cnxn.get_databases()}}
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base)
     schema = req.get('schema', None)
     if cnxn.system == 'postgres' and schema:
@@ -112,8 +114,8 @@ async def get_table(request: Request):
     dbo = Database(cnxn, base_path)
     table = Table(dbo, req.table)
     grid = Grid(table)
-    table.limit  = req.get('limit', 30)
-    table.offset = req.get('offset', 0)
+    table.limit  = int(req.get('limit', 30))
+    table.offset = int(req.get('offset', 0))
     if req.get('filter', None):
         grid.set_search_cond(req['filter'])
     if req.get('sort', None):

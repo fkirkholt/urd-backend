@@ -403,8 +403,6 @@ class Grid:
         self.tbl = table
         self.db = table.db
         self.user_filtered = False
-        self.offset = 0
-        self.limit = 30
         self.sort_columns = []
         self.cond = Dict({
             'prep_stmnts': [],
@@ -509,8 +507,8 @@ class Grid:
             'foreign_keys': self.tbl.get_fkeys(),
             'label': self.db.get_label(self.tbl.name),
             'actions': getattr(self, 'actions', []),
-            'limit': self.limit,
-            'offset': self.offset,
+            'limit': self.tbl.limit,
+            'offset': self.tbl.offset,
             'selection': self.get_selected_idx(pkey_vals, selects),
             'conditions': self.cond.stmnts,
             'expansion_column': expansion_column,
@@ -554,9 +552,9 @@ class Grid:
         params = self.cond.params + params
         idx = self.db.query(sql, params).fetchval()
         if idx is not None:
-            page_nr = math.floor(idx / self.limit)
-            self.offset = page_nr * self.limit
-            row_idx = idx - self.offset
+            page_nr = math.floor(idx / self.tbl.limit)
+            self.tbl.offset = page_nr * self.tbl.limit
+            row_idx = idx - self.tbl.offset
         else:
             row_idx = 0
 
@@ -706,8 +704,8 @@ class Grid:
 
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql, self.cond.params)
-        cursor.skip(self.offset)
-        rows = cursor.fetchmany(self.limit)
+        cursor.skip(self.tbl.offset)
+        rows = cursor.fetchmany(self.tbl.limit)
 
         result = []
         colnames = [column[0] for column in cursor.description]
@@ -754,8 +752,8 @@ class Grid:
 
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql, self.cond.params)
-        cursor.skip(self.offset)
-        rows = cursor.fetchmany(self.limit)
+        cursor.skip(self.tbl.offset)
+        rows = cursor.fetchmany(self.tbl.limit)
 
         result = []
         colnames = [column[0] for column in cursor.description]
@@ -784,8 +782,8 @@ class Grid:
 
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql, self.cond.params)
-        cursor.skip(self.offset)
-        rows = cursor.fetchmany(self.limit)
+        cursor.skip(self.tbl.offset)
+        rows = cursor.fetchmany(self.tbl.limit)
 
         result = []
         colnames = [column[0] for column in cursor.description]
@@ -1024,8 +1022,8 @@ class Grid:
 
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql)
-        cursor.skip(self.offset)
-        rows = cursor.fetchmany(self.limit)
+        cursor.skip(self.tbl.offset)
+        rows = cursor.fetchmany(self.tbl.limit)
 
         result = []
         colnames = [column[0] for column in cursor.description]

@@ -114,8 +114,8 @@ async def get_table(request: Request):
     dbo = Database(cnxn, base_path)
     table = Table(dbo, req.table)
     grid = Grid(table)
-    table.limit  = req.get('limit', 30)
-    table.offset = req.get('offset', 0)
+    table.limit  = int(req.get('limit', 30))
+    table.offset = int(req.get('offset', 0))
     if req.get('filter', None):
         grid.set_search_cond(req['filter'])
     if req.get('sort', None):

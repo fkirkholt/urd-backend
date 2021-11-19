@@ -173,6 +173,7 @@ class Record:
         tbl_rel = Table(db, rel.table)
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
+        tbl_rel.offset = 0
         tbl_rel.fields = tbl_rel.get_fields()
         tbl_rel.pkey = tbl_rel.get_primary_key()
 

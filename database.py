@@ -91,8 +91,7 @@ class Database:
         from table import Table
         cursor = self.cnxn.cursor()
         metadata = Dict()
-        md_table= cursor.tables(table='_meta_data', catalog=self.cat, schema=self.schema).fetchone()
-        if md_table and '_meta_data' in self.user_tables:
+        if '_meta_data' in self.user_tables:
             sql = f"select * from {self.schema or self.cat}._meta_data"
             row = cursor.execute(sql).fetchone()
             colnames = [col[0] for col in cursor.description]
@@ -111,8 +110,7 @@ class Database:
         from table import Table
         cursor = self.cnxn.cursor()
         terms = Dict()
-        terms_table = cursor.tables(table='_meta_term', catalog=self.cat, schema=self.schema).fetchone()
-        if terms_table:
+        if '_meta_terms' in self.user_tables:
             sql = f"select * from {self.schema or self.cat}._meta_term"
             try:
                 rows = cursor.execute(sql).fetchall()

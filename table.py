@@ -986,6 +986,13 @@ class Grid:
         return form
 
     def get_format(self):
+
+        if '_meta_format' not in self.db.user_tables:
+            return Dict({
+                'formats': [],
+                'rows': []
+            })
+
         sql = """
         select id, class, filter
         from   _meta_format

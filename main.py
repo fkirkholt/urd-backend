@@ -146,6 +146,8 @@ def get_children(base: str, table: str, primary_key: str):
     base_path = base or schema
     dbo = Database(cnxn, base_path)
     tbl = Table(dbo, table)
+    tbl.offset = 0
+    tbl.limit = 30
     pk = json.loads(primary_key)
     record = Record(dbo, tbl, pk)
     return {'data': record.get_children()}

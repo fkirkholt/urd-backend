@@ -1016,7 +1016,9 @@ class Grid:
 
         select = ", ".join(selects)
         join = self.tbl.get_join()
-        cond = self.get_cond_expr()
+        conds = self.get_cond_expr()
+        cond = "" if not conds else f"where {conds}\n"
+        params = self.cond.params
         ordr = self.make_order_by()
 
         sql = f"""
@@ -1028,7 +1030,7 @@ class Grid:
         """
 
         cursor = self.db.cnxn.cursor()
-        cursor.execute(sql)
+        cursor.execute(sql, params)
         cursor.skip(self.tbl.offset)
         rows = cursor.fetchmany(self.tbl.limit)
 

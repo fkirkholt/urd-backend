@@ -36,19 +36,19 @@ class Table:
 
         return privileges
 
-    def get_type(self):
-        """Return table type - 'data' or 'reference'"""
+    def is_hidden(self):
+        """Decide if this is a hidden table"""
         if (
             self.name[0:1] == "_" or
             self.name[0:4] == "ref_" or
             self.name[:-4] == "_ref" or
             self.name[0:5] == "meta_"
         ):
-            type_ = "reference"
+            hidden = True
         else:
-            type_ = "data"
+            hidden = False
 
-        return type_
+        return hidden
 
     def get_indexes(self):
         """Return all table indexes"""
@@ -502,7 +502,7 @@ class Grid:
             },
             'form': self.get_form(),
             'privilege': self.tbl.user_privileges(),
-            'type': self.tbl.get_type(),
+            'hidden': self.tbl.is_hidden(),
             'primary_key': pkey,
             'foreign_keys': self.tbl.get_fkeys(),
             'label': self.db.get_label(self.tbl.name),
@@ -618,7 +618,7 @@ class Grid:
         else:
             pkey = self.tbl.get_primary_key()
             fkeys = self.tbl.get_fkeys()
-            tbl_type = self.tbl.get_type()
+            hidden = self.tbl.is_hidden()
             columns = []
             for key, field in self.tbl.get_fields().items():
                 # Don't show hdden columns
@@ -626,7 +626,7 @@ class Grid:
                     continue
                 if ([field.name] == pkey and field.datatype == "integer"
                     and field.name not in fkeys
-                    and tbl_type != "reference"):
+                    and hidden is False):
                     continue
                 columns.append(key)
                 if len(columns) == 5:

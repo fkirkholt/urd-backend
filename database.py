@@ -302,9 +302,9 @@ class Database:
                 tbl_name[0:4] == "ref_" or
                 tbl_name[:-4] == "_ref"
             ):
-                type_ = "reference"
+                hidden = True
             else:
-                type_ = "data"
+                hidden = False
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,
@@ -316,7 +316,7 @@ class Database:
                 'indexes': self.get_indexes(tbl_name),
                 'foreign_keys': self.get_foreign_keys(tbl_name),
                 'relations': self.get_relations(tbl_name),
-                'type': type_,
+                'hidden': hidden,
                 # fields are needed only when creating cache
                 'fields': None if 'cache' not in self.metadata
                            else self.get_columns(tbl_name),
@@ -335,17 +335,18 @@ class Database:
         return tables
 
     def is_top_level(self, table):
-        if table.type == "reference":
+        if table.hidden is True:
             return False
 
         for fkey in table.foreign_keys.values():
-            if fkey.table not in self.tables: continue
+            if fkey.table not in self.tables:
+                continue
 
             # Not top level if has foreign keys to other table
-            # that is not a reference table
+            # that is not a hidden table
             if fkey.table != table.name:
                 fk_table = self.tables[fkey.table]
-                if fk_table.type != "reference":
+                if fk_table.hidden is False:
                     return False
 
         return True

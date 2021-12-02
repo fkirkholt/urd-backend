@@ -64,7 +64,7 @@ class Column:
             if fk.table in self.db.user_tables:
                 ref_pk = ref_tbl.get_primary_key()
 
-                if (ref_tbl.get_type() == "data"):
+                if ref_tbl.is_hidden() is False:
                     field.expandable = True
 
                 for index in ref_tbl.get_indexes().values():

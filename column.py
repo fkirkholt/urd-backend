@@ -100,18 +100,18 @@ class Column:
         from table import Table, Grid
 
         fk = self.tbl.get_fkey(field.name)
+        pkey_col = fk.primary[-1]
+
         if fk.base == self.db.cat and fk.schema == self.db.schema:
             base = self.db
         else:
             base = Database(self.db.cnxn, fk.base or fk.schema)
+
         cand_tbl = Table(base, fk.table)
         grid = Grid(cand_tbl)
 
-        # List of fields
-        kodefelter = [field.name + '.' + name for name in fk.primary]
-
         # Field that holds the value of the options
-        value_field = kodefelter[-1]
+        value_field = field.name + '.' + pkey_col
 
         # Sorting
         cand_sort_columns = grid.get_sort_columns()
@@ -124,15 +124,29 @@ class Column:
         if 'filter' in fk:
             conditions.append("("+self.db.expr.replace_vars(fk.filter)+")")
 
-        if fk.schema == 'urd' and 'schema_' in cand_tbl.fields:
-            admin_schemas = "'" + "', '".join(self.db.get_user_admin_schemas()) + "'"
-            conditions.append(f"schema_ in ({admin_schemas})")
+        fkeys = []
+        for fkey in self.tbl.get_fkeys().values():
+            if (field.name in fkey.foreign and fkey.foreign.index(field.name) > 0):
+                fkey.foreign_idx = fkey.foreign.index(field.name)
+                fkey.length = len(fkey.foreign)
+                fkeys.append(fkey)
 
-        # Adds condition if this select depends on other selects
-        if 'value' in field and len(fk.foreign) > 1:
-            for idx, key in enumerate(fk.foreign):
-                if key != field.name and fields[key].value:
-                    conditions.append(fk.primary[idx] + " = '" + str(fields[key].value) + "'")
+        params = []
+        # Holder liste over fremmednøkler, for å sjekke hierarki
+        fkeys_list = []
+        if 'value' in field:
+            for fkey in sorted(fkeys, key=lambda x: x['length']):
+                fkeys_list.append(fkey.foreign)
+
+                if fkey.foreign[:-1] in fkeys_list:
+                    continue
+
+                for idx, col in enumerate(fkey.foreign):
+                    if col != field.name and fields[col].value:
+                        cond = pkey_col + ' in (select ' + fkey.primary[fkey.foreign_idx]
+                        cond += ' from ' + fkey.table + ' where ' + fkey.foreign[idx] + " = ?)"
+                        conditions.append(cond)
+                        params.append(fields[col].value)
 
         condition = "where " + " AND ".join(conditions) if len(conditions) else ''
 
@@ -143,7 +157,7 @@ class Column:
         sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition
 
-        count = cursor.execute(sql).fetchval()
+        count = cursor.execute(sql, params).fetchval()
 
         if (count > 200):
             return False
@@ -154,7 +168,7 @@ class Column:
         sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition + "\n" + order
 
-        rows = cursor.execute(sql).fetchall()
+        rows = cursor.execute(sql, params).fetchall()
 
         result = []
         colnames = [column[0] for column in cursor.description]

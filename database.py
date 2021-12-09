@@ -187,21 +187,6 @@ class Database:
         return schemata
 
 
-    def get_user_admin_schemas(self):
-        user = 'admin' #TODO: Autentisering
-
-        sql = """
-        select schema_
-        from role_permission
-        where role_ in (select role_ from user_ where user_ = ?)
-          and admin = '1'
-        """
-
-        cursor = self.urd.cursor()
-        rows = cursor.execute(sql, user).fetchall()
-
-        return [row.schema_ for row in rows]
-
     def view_rights(self, user):
         """ Find the tables the user has permission to view"""
 

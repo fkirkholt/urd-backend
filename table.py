@@ -846,7 +846,13 @@ class Grid:
                 conds = []
                 params = []
                 for field in fields.values():
-                    if field.datatype == "string":
+                    if field.foreign_key:
+                        if case_sensitive:
+                            conds.append(f"{field.view} LIKE ?")
+                        else:
+                            conds.append(f"lower({field.view}) LIKE ?")
+                        params.append(value)
+                    elif field.datatype == "string":
                         if case_sensitive:
                             conds.append(f"{self.tbl.name}.{field.name} LIKE ?")
                         else:

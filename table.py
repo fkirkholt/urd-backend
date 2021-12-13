@@ -115,21 +115,20 @@ class Table:
             return self.cache.join
         joins = []
         foreign_keys = self.get_fkeys()
-        fields = self.get_fields()
-        for key, fkey in foreign_keys.items():
-            if key not in fields:
-                continue
 
+        for key, fkey in foreign_keys.items():
             if fkey.table not in self.db.user_tables:
                 continue
 
+            alias = fkey.foreign[-1]
+
             # Get the ON statement in the join
-            ons = [key+'.'+fkey.primary[idx] + " = " + self.name + "." + col
+            ons = [alias+'.'+fkey.primary[idx] + " = " + self.name + "." + col
                    for idx, col in enumerate(fkey.foreign)]
             on_list = ' AND '.join(ons)
 
             namespace = self.db.schema or self.db.cat
-            joins.append(f"left join {namespace}.{fkey.table} {key} on {on_list}")
+            joins.append(f"left join {namespace}.{fkey.table} {alias} on {on_list}")
 
         self.cache.join = "\n".join(joins)
 
@@ -221,8 +220,7 @@ class Table:
             self.cache.foreign_keys = self.db.metadata.cache[self.name].foreign_keys
             return
         cursor = self.db.cnxn.cursor()
-        foreign_keys = Dict()
-        keys = {}
+        keys = Dict()
 
         for row in cursor.foreignKeys(foreignTable=self.name,
                                       foreignCatalog=self.db.cat,
@@ -242,17 +240,7 @@ class Table:
             keys[name].foreign.append(row.fkcolumn_name.lower())
             keys[name].primary.append(row.pkcolumn_name.lower())
 
-        for fkey in keys.values():
-            alias = fkey.foreign[-1]
-            if alias in foreign_keys:
-                if len(fkey.foreign) < len(foreign_keys[alias].foreign):
-                    alias_2 = alias + "_2"
-                    foreign_keys[alias_2] = foreign_keys[alias]
-                else:
-                    alias = alias + "_2"
-            foreign_keys[alias] = fkey
-
-        self.cache.foreign_keys = foreign_keys
+        self.cache.foreign_keys = keys
 
     def get_columns(self):
         """ Return all columns in table by reflection """

@@ -48,6 +48,12 @@ class Column:
             'description': self.db.get_description(self.name)
         })
 
+        for fkey in foreign_keys.values():
+            if fkey.foreign[-1] == field.name:
+                if (not field.foreign_key or len(fkey.foreign) < len(field.foreign_key.foreign)):
+                    field.foreign_key = fkey
+                    field.element = 'select'
+
         if 'column_size' in col:
             field.size = int(col.column_size)
         if 'scale' in col and col.scale:
@@ -57,11 +63,9 @@ class Column:
             field.extra = "auto_increment"
         if element == "select" and len(options):
             field.options = options
-        elif self.name in foreign_keys:
-            fk = foreign_keys[self.name]
-            field.foreign_key = fk
-            ref_tbl = Table(self.db, fk.table)
-            if fk.table in self.db.user_tables:
+        elif field.foreign_key:
+            ref_tbl = Table(self.db, field.foreign_key.table)
+            if field.foreign_key.table in self.db.user_tables:
                 ref_pk = ref_tbl.get_primary_key()
 
                 if ref_tbl.is_hidden() is False:
@@ -99,7 +103,7 @@ class Column:
         from database import Database
         from table import Table, Grid
 
-        fk = self.tbl.get_fkey(field.name)
+        fk = field.foreign_key
         pkey_col = fk.primary[-1]
 
         if fk.base == self.db.cat and fk.schema == self.db.schema:

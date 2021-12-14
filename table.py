@@ -71,16 +71,6 @@ class Table:
 
         return self.cache.foreign_keys[key]
 
-    def get_fkey_by_name(self, name):
-        """Return foreign from name"""
-        if not self.cache.get('foreign_keys', None):
-            self.init_foreign_keys()
-
-        for fkey in self.cache.foreign_keys.values():
-            if fkey.name == name:
-                return fkey
-
-
     def get_fields(self):
         """Return all fields of table"""
         if not self.cache.get('fields', None):
@@ -101,11 +91,7 @@ class Table:
         # Find relation to child records
         relations = self.get_relations()
         rel = [rel for rel in relations.values() if rel.table == self.name][0]
-        key = rel.foreign[-1]
-
-        foreign_keys = self.get_fkeys()
-        fkey = foreign_keys[key]
-        fkey.alias = rel.foreign_key
+        fkey = self.get_fkey(rel.name)
 
         return fkey
 
@@ -197,7 +183,7 @@ class Table:
                 rel_table = Table(rel_db, rel.table_name)
 
                 # Set value of fkey columns to matched colums of record
-                fkey = rel_table.get_fkey_by_name(key)
+                fkey = rel_table.get_fkey(key)
                 for rel_rec in rel.records:
                     if 'values' not in rel_rec:
                         continue

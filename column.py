@@ -148,7 +148,7 @@ class Column:
                 for idx, col in enumerate(fkey.foreign):
                     if col != field.name and fields[col].value:
                         cond = pkey_col + ' in (select ' + fkey.primary[fkey.foreign_idx]
-                        cond += ' from ' + fkey.table + ' where ' + fkey.foreign[idx] + " = ?)"
+                        cond += ' from ' + fkey.table + ' where ' + fkey.primary[idx] + " = ?)"
                         conditions.append(cond)
                         params.append(fields[col].value)
 

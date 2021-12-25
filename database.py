@@ -673,8 +673,8 @@ class Database:
                         "schema": key.schema,
                         "foreign_key": alias,
                         "delete_rule": key.delete_rule,
-                        "foreign": key.primary,
-                        "primary": key.foreign,
+                        "foreign": key.foreign,
+                        "primary": key.primary,
                         "label": self.get_label(key.table) #TODO: Fix
                     })
         end = time.time()

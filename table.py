@@ -613,7 +613,7 @@ class Grid:
                 # Don't show hdden columns
                 if field.name[0:1] == '_':
                     continue
-                if field.size and field.size > 255:
+                if field.size and field.size >= 255:
                     continue
                 if ([field.name] == pkey and field.datatype == "integer"
                     and field.name not in fkeys

@@ -203,7 +203,7 @@ def dialog_schema(request: Request):
 async def update_schema(request: Request):
     req = await request.json()
     base = req['base']
-    config = json.loads(req['config'])
+    config = Dict(json.loads(req['config']))
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
     dbo = Database(cnxn, base)
     schema_name = dbo.schema

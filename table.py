@@ -71,10 +71,10 @@ class Table:
 
         return self.cache.foreign_keys[key]
 
-    def get_fields(self):
+    def get_fields(self, config=None):
         """Return all fields of table"""
         if not self.cache.get('fields', None):
-            self.init_fields()
+            self.init_fields(config)
 
         return self.cache.fields
 
@@ -203,7 +203,7 @@ class Table:
     def init_foreign_keys(self):
         """Store foreign keys in table object"""
         if self.db.metadata.get("cache", None):
-            self.cache.foreign_keys = self.db.metadata.cache[self.name].foreign_keys
+            self.cache.foreign_keys = self.db.metadata.cache.tables[self.name].foreign_keys
             return
         cursor = self.db.cnxn.cursor()
         keys = Dict()
@@ -241,10 +241,10 @@ class Table:
 
         return cols
 
-    def init_fields(self):
+    def init_fields(self, config=None):
         """Store Dict of fields in table object"""
-        if self.db.metadata.get("cache", None):
-            self.cache.fields = self.db.metadata.cache[self.name].fields
+        if (self.db.metadata.get("cache", None) and not config):
+            self.cache.fields = self.db.metadata.cache.tables[self.name].fields
             return
         fields = Dict()
         indexes = self.get_indexes()
@@ -258,6 +258,21 @@ class Table:
 
             column = Column(self, cname)
             fields[cname] = column.get_field(col)
+
+            if config:
+                # Find if column is (largely) empty
+
+                threshold = int(config.threshold)/100
+
+                sql = f"""
+                select count(*) from {self.name}
+                where {cname} is not null
+                """
+
+                cursor = self.db.cnxn.cursor()
+                count = cursor.execute(sql).fetchval()
+                if (self.rowcount and count/self.rowcount < threshold):
+                    fields[cname].hidden = True
 
         updated_idx = indexes.get(self.name + "_updated_idx", None)
         if updated_idx:
@@ -275,7 +290,7 @@ class Table:
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
         if self.db.metadata.get("cache", None):
-            self.cache.indexes= self.db.metadata.cache[self.name].indexes
+            self.cache.indexes= self.db.metadata.cache.tables[self.name].indexes
             return
         cursor = self.db.cnxn.cursor()
         indexes = Dict()
@@ -304,7 +319,7 @@ class Table:
             self.cache.relations = self.db.relations[self.name]
             return
         if self.db.metadata.get("cache", None):
-            self.cache.relations = self.db.metadata.cache[self.name].relations
+            self.cache.relations = self.db.metadata.cache.tables[self.name].relations
             return
         cursor = self.db.cnxn.cursor()
         relations = Dict()

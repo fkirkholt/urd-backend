@@ -2,7 +2,7 @@ import pyodbc
 from fastapi import HTTPException
 from starlette import status
 import os
-import json
+import simplejson as json
 from schema import Schema
 from expression import Expression
 from addict import Dict
@@ -97,6 +97,8 @@ class Database:
             colnames = [col[0] for col in cursor.description]
             metadata = Dict(zip(colnames, row))
 
+        if metadata.cache:
+            metadata.cache = Dict(json.loads(metadata.cache))
         end = time.time()
         print('init_metadata:', end - start)
         self.metadata = metadata
@@ -146,7 +148,8 @@ class Database:
                 "name": 'Admin', #TODO: Autentisering
                 "id": 'admin', #TODO: Autentisering
                 "admin": self.get_privileges().create
-            }
+            },
+            "config": None if not self.metadata.get('cache', None) else self.metadata.cache.config
         }
         end = time.time()
         print('get_info', end - start)
@@ -262,11 +265,11 @@ class Database:
 
         return user_tables
 
-    def get_tables(self):
+    def get_tables(self, config=None):
         start_function = time.time()
         from table import Table
-        if self.metadata.get('cache', None):
-            self.tables = self.metadata.cache
+        if (self.metadata.get('cache', None) and not config):
+            self.tables = self.metadata.cache.tables
             return self.tables
         cursor = self.cnxn.cursor()
         tables = Dict()
@@ -303,16 +306,20 @@ class Database:
                 'relations': self.get_relations(tbl_name),
                 'hidden': hidden,
                 # fields are needed only when creating cache
-                'fields': None if 'cache' not in self.metadata
-                           else self.get_columns(tbl_name),
+                'fields': None if ('cache' not in self.metadata and not config)
+                           else self.get_columns(tbl_name, config),
             })
 
-        if 'cache' in self.metadata:
+        if ('cache' in self.metadata and config):
             cursor = self.cnxn.cursor()
             # self.cache = tables
             sql = "update _meta_data set cache = ?\n"
-            sql+= "where name = ?"
-            result = cursor.execute(sql, json.dumps(tables), self.name).commit()
+            sql+= "where _name = ?"
+            cache = {
+                "tables": tables,
+                "config": config
+            }
+            result = cursor.execute(sql, json.dumps(cache), self.name).commit()
 
         self.tables = tables
         end_function = time.time()
@@ -519,9 +526,9 @@ class Database:
 
         return self.indexes[tbl_name]
 
-    def get_columns(self, tbl_name):
+    def get_columns(self, tbl_name, config=None):
         if not hasattr(self, 'columns'):
-            self.init_columns()
+            self.init_columns(config)
 
         return self.columns[tbl_name]
 
@@ -579,14 +586,15 @@ class Database:
 
         self.indexes = indexes
 
-    def init_columns(self):
+    def init_columns(self, config=None):
         from table import Table
         cursor = self.cnxn.cursor()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
         columns = Dict()
         for row in rows:
             tbl = Table(self, row.table_name)
-            columns[tbl.name] = tbl.get_fields()
+            tbl.rowcount = self.query(f"select * from {row.table_name}").rowcount
+            columns[tbl.name] = tbl.get_fields(config)
 
         self.columns = columns
 

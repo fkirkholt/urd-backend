@@ -265,7 +265,7 @@ class Database:
 
         return user_tables
 
-    def get_tables(self, config=None):
+    def get_tables(self, config=Dict()):
         start_function = time.time()
         from table import Table
         if (self.metadata.get('cache', None) and not config):
@@ -294,13 +294,22 @@ class Database:
             else:
                 hidden = False
 
+            # Hides table if user has marked the table to be hidden
+            if 'hidden' in config.tables[tbl_name]:
+                print('skjuler ' + tbl_name)
+                if hidden != config.tables[tbl_name].hidden:
+                    hidden = config.tables[tbl_name].hidden
+                else:
+                    del config.tables[tbl_name].hidden
+                    if not config.tables[tbl_name]:
+                        del config.tables[tbl_name]
+
             tables[tbl_name] = Dict({
                 'name': tbl_name,
                 'icon': None,
                 'label': self.get_label(tbl_name),
                 'primary_key': self.get_pkey(tbl_name),
                 'description': tbl.remarks,
-                'hidden': False,
                 'indexes': self.get_indexes(tbl_name),
                 'foreign_keys': self.get_foreign_keys(tbl_name),
                 'relations': self.get_relations(tbl_name),

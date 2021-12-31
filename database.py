@@ -379,7 +379,7 @@ class Database:
             if relation.get('hidden', False):
                 continue
 
-            if relation.table in relation_tables:
+            if relation.table not in relation_tables:
                 relation_tables.append(relation.table)
                 relation_tables = self.get_relation_tables(
                     relation.table, relation_tables)
@@ -681,6 +681,7 @@ class Database:
                 name = row.fk_name
                 fkeys[row.fktable_name][name].name = row.fk_name
                 fkeys[row.fktable_name][name].table = row.pktable_name
+                fkeys[row.fktable_name][name].base = self.cat
                 fkeys[row.fktable_name][name].schema = row.pktable_schema
                 fkeys[row.fktable_name][name].delete_rule = row.delete_rule
                 if not 'foreign' in fkeys[row.fktable_name][name]:

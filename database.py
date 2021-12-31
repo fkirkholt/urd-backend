@@ -486,7 +486,10 @@ class Database:
 
         return contents
 
-    def get_contents(self):
+    def get_contents(self, config=Dict()):
+        if (self.metadata.get('cache', None) and not config):
+            self.contents = self.metadata.cache.contents
+            return self.contents
         start = time.time()
         contents = Dict()
         modules = []
@@ -504,11 +507,37 @@ class Database:
         for group_name, table_names in tbl_groups.items():
             if len(table_names) == 1 and group_name != "meta":
                 table_alias = list(table_names.values())[0]
+                label = self.get_label(table_alias)
 
                 # Loop through modules to find which one the table belongs to
                 placed = False
 
-                contents = self.get_content_items(table_alias, sub_tables, contents)
+                if not config or config.urd_structure:
+                    contents = self.get_content_items(table_alias, sub_tables, contents)
+                    continue
+
+                # If not self documenting base, then group contents in modules
+                for idx, module in enumerate(modules):
+                    if len(module) > 2 and table_alias in module:
+                        mod = "Modul " + str(idx + 1)
+                        contents[mod].class_label = "b"
+                        contents[mod].class_content = "ml3"
+                        contents[mod].subitems[label] = "tables." + table_alias
+                        if 'count' not in contents[mod]:
+                            contents[mod].count = 0
+                        contents[mod].count += 1
+                        placed = True
+
+                if not placed:
+                    if 'Andre' not in contents:
+                        contents['Andre'] = Dict({
+                            'class_label': "b",
+                            'class_content': "ml3",
+                            'subitems': {},
+                            'count': 0
+                        })
+                    contents['Andre'].subitems[label] = "tables." + table_alias
+                    contents['Andre'].count += 1
             elif group_name in table_names.values():
                 table_names = {key:val for key, val in table_names.items() if val != group_name}
                 if group_name in sub_tables:
@@ -526,6 +555,18 @@ class Database:
                 }
         end = time.time()
         print('get_contents', end - start)
+
+        if ('cache' in self.metadata and config):
+            cursor = self.cnxn.cursor()
+            # self.cache = tables
+            sql = "update _meta_data set cache = ?\n"
+            sql+= "where _name = ?"
+            cache = {
+                "tables": self.tables,
+                "contents": contents,
+                "config": config
+            }
+            result = cursor.execute(sql, json.dumps(cache), self.name).commit()
 
         return contents
 

@@ -9,3 +9,4 @@ class Schema:
         config = Dict(config)
 
         self.tables = dbo.get_tables(config)
+        dbo.get_contents(config)

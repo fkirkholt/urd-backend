@@ -387,6 +387,7 @@ class Database:
         return relation_tables
 
     def get_tbl_groups(self):
+        """Group tables by prefix"""
         tbl_groups = Dict()
         terms = Dict() #TODO: lag self.terms
         for tbl_key, table in self.tables.items():
@@ -405,6 +406,7 @@ class Database:
             for colname in table.primary_key:
                 if colname in table.foreign_keys:
                     subordinate = True
+                    break
 
             if not subordinate:
                 # Remove group prefix from label
@@ -466,23 +468,46 @@ class Database:
 
         return description
 
-    def get_content_items(self, tbl_alias, sub_tables, contents, parent = None):
-        if parent:
-            label = tbl_alias.replace(parent + '_', '')
-            label = self.get_label(label)
-        else:
-            label = self.get_label(tbl_alias)
+    def get_content_item(self, tbl_name):
 
-        if tbl_alias not in sub_tables:
-            contents[label] = "tables." + tbl_alias
+        if tbl_name not in self.sub_tables:
+            node = "tables." + tbl_name
         else:
-            contents[label] = Dict()
-            contents[label].item = "tables." + tbl_alias
-            contents[label].subitems = Dict()
+            node = Dict()
+            node.item = "tables." + tbl_name
+            node.subitems = Dict()
 
-            for subtable in sub_tables[tbl_alias]:
-                contents[label].subitems = self.get_content_items(
-                    subtable, sub_tables, contents[label].subitems, tbl_alias)
+            for subtable in self.sub_tables[tbl_name]:
+                label = subtable.replace(tbl_name + '_', '')
+                label = self.get_label(label)
+                node.subitems[label] = self.get_content_item(subtable)
+
+        return node
+
+    def get_module_item(self, tbl_name, contents):
+        label = self.get_label(tbl_name)
+        placed = False
+        for idx, module in enumerate(self.modules):
+            if len(module) > 2 and tbl_name in module:
+                mod = "Modul " + str(idx + 1)
+                contents[mod].class_label = "b"
+                contents[mod].class_content = "ml3"
+                contents[mod].subitems[label] = self.get_content_item(tbl_name)
+                if 'count' not in contents[mod]:
+                    contents[mod].count = 0
+                contents[mod].count += 1
+                placed = True
+
+        if not placed:
+            if 'Andre' not in contents:
+                contents['Andre'] = Dict({
+                    'class_label': "b",
+                    'class_content': "ml3",
+                    'subitems': {},
+                    'count': 0
+                })
+            contents['Andre'].subitems[label] = self.get_content_item(tbl_name)
+            contents['Andre'].count += 1
 
         return contents
 
@@ -492,59 +517,44 @@ class Database:
             return self.contents
         start = time.time()
         contents = Dict()
+
         modules = []
         for table in self.tables.values():
             top_level = self.is_top_level(table)
             if top_level:
                 modules = self.add_module(table, modules)
 
-        tbl_groups = self.get_tbl_groups()
-        sub_tables = self.get_sub_tables()
-
         # Sort modules so that modules with most tables are listed first
         modules.sort(key=len, reverse=True)
+        self.modules = modules
+
+        tbl_groups = self.get_tbl_groups()
+        self.sub_tables = self.get_sub_tables()
 
         for group_name, table_names in tbl_groups.items():
             if len(table_names) == 1 and group_name != "meta":
-                table_alias = list(table_names.values())[0]
-                label = self.get_label(table_alias)
-
-                # Loop through modules to find which one the table belongs to
-                placed = False
+                tbl_name = list(table_names.values())[0]
+                label = self.get_label(tbl_name)
 
                 if not config or config.urd_structure:
-                    contents = self.get_content_items(table_alias, sub_tables, contents)
-                    continue
+                    contents[label] = self.get_content_item(tbl_name)
+                else:
+                    # group contents in modules
+                    self.get_module_item(tbl_name, contents)
 
-                # If not self documenting base, then group contents in modules
-                for idx, module in enumerate(modules):
-                    if len(module) > 2 and table_alias in module:
-                        mod = "Modul " + str(idx + 1)
-                        contents[mod].class_label = "b"
-                        contents[mod].class_content = "ml3"
-                        contents[mod].subitems[label] = "tables." + table_alias
-                        if 'count' not in contents[mod]:
-                            contents[mod].count = 0
-                        contents[mod].count += 1
-                        placed = True
-
-                if not placed:
-                    if 'Andre' not in contents:
-                        contents['Andre'] = Dict({
-                            'class_label': "b",
-                            'class_content': "ml3",
-                            'subitems': {},
-                            'count': 0
-                        })
-                    contents['Andre'].subitems[label] = "tables." + table_alias
-                    contents['Andre'].count += 1
             elif group_name in table_names.values():
                 table_names = {key:val for key, val in table_names.items() if val != group_name}
-                if group_name in sub_tables:
-                    sub_tables[group_name].extend(table_names.values())
+                if group_name in self.sub_tables:
+                    self.sub_tables[group_name].extend(table_names.values())
                 else:
-                    sub_tables[group_name] = table_names.values()
-                contents = self.get_content_items(group_name, sub_tables, contents)
+                    self.sub_tables[group_name] = table_names.values()
+
+                if not config or config.urd_structure:
+                    label = self.get_label(group_name)
+                    contents[label] = self.get_content_item(group_name)
+                else:
+                    self.get_module_item(group_name, contents)
+
             else:
                 label = self.get_label(group_name)
 

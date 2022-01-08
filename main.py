@@ -83,18 +83,6 @@ def dblist():
 
 @app.get("/database")
 def db_info(base: str):
-    if base == cfg.db_name:
-        #TODO Fix user
-        return {'data': {
-            'base': {
-                'name': cfg.db_name
-            },
-            'user': {
-                'name': 'Admin',
-                'id': 'admin',
-                "admin": 0
-            }
-        }}
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base)
     dbo = Database(cnxn, base)
     info = dbo.get_info()

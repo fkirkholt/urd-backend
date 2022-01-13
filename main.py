@@ -198,7 +198,7 @@ async def update_schema(request: Request):
     schema = Schema(schema_name)
     schema.update(dbo, config)
 
-    # return {'sucess': False}
+    return {'sucess': True, 'msg': "Cache oppdatert"}
 
 @app.get('/table_sql')
 def export_sql(base: str, table: str, dialect: str):

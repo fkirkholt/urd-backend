@@ -71,10 +71,10 @@ class Table:
 
         return self.cache.foreign_keys[key]
 
-    def get_fields(self, config=None):
+    def get_fields(self):
         """Return all fields of table"""
         if not self.cache.get('fields', None):
-            self.init_fields(config)
+            self.init_fields()
 
         return self.cache.fields
 
@@ -241,13 +241,14 @@ class Table:
 
         return cols
 
-    def init_fields(self, config=None):
+    def init_fields(self):
         """Store Dict of fields in table object"""
-        if (self.db.metadata.get("cache", None) and not config):
+        if (self.db.metadata.get("cache", None) and not self.db.config):
             self.cache.fields = self.db.metadata.cache.tables[self.name].fields
             return
         fields = Dict()
         indexes = self.get_indexes()
+        pkey = self.get_primary_key()
         cols = self.get_columns()
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
@@ -257,12 +258,13 @@ class Table:
             cname = col.column_name
 
             column = Column(self, cname)
-            fields[cname] = column.get_field(col)
+            field = column.get_field(col)
+            fields[cname] = field
 
-            if config:
+            if self.db.config and not self.db.config.urd_structure:
                 # Find if column is (largely) empty
 
-                threshold = int(config.threshold)/100
+                threshold = int(self.db.config.threshold)/100
 
                 sql = f"""
                 select count(*) from {self.name}
@@ -273,6 +275,40 @@ class Table:
                 count = cursor.execute(sql).fetchval()
                 if (self.rowcount and count/self.rowcount < threshold):
                     fields[cname].hidden = True
+
+                # Find if a value value is used very frequently, using threshold
+                #
+                if not col.size:
+                    print('col', col)
+                    print('field', field)
+
+                repeat = True
+                while repeat:
+                    if self.rowcount < 2:
+                        break
+                    if field.datatype not in ['integer', 'decimal', 'float', 'boolean', 'string']:
+                        break
+                    if (field.datatype == 'string' and (field.size > 12 and count/self.rowcount < threshold)):
+                        break
+                    if count == 0:
+                        break
+                    if cname in pkey:
+                        break
+
+                    repeat = False
+
+                    sql = f"""
+                    select count(*) as count, {cname} as value
+                    from {self.name}
+                    group by {cname}
+                    """
+
+                    distincts = cursor.execute(sql).fetchall()
+
+                    for distinct in distincts:
+                        if distinct.count/self.rowcount > (1 - threshold):
+                            fields[cname].hidden = True
+
 
         updated_idx = indexes.get(self.name + "_updated_idx", None)
         if updated_idx:

@@ -80,6 +80,7 @@ class Database:
         self.use_cache = False #TODO
         self.user_tables = self.get_user_tables()
         self.metadata = self.get_metadata()
+        self.config = Dict()
 
     def get_metadata(self):
         if not hasattr(self, 'metadata'):
@@ -265,10 +266,10 @@ class Database:
 
         return user_tables
 
-    def get_tables(self, config=Dict()):
+    def get_tables(self):
         start_function = time.time()
         from table import Table
-        if (self.metadata.get('cache', None) and not config):
+        if (self.metadata.get('cache', None) and not self.config):
             self.tables = self.metadata.cache.tables
             return self.tables
         cursor = self.cnxn.cursor()
@@ -295,19 +296,25 @@ class Database:
                 hidden = False
 
             # Hides table if user has marked the table to be hidden
-            if 'hidden' in config.tables[tbl_name]:
+            if 'hidden' in self.config.tables[tbl_name]:
                 print('skjuler ' + tbl_name)
-                if hidden != config.tables[tbl_name].hidden:
-                    hidden = config.tables[tbl_name].hidden
+                if hidden != self.config.tables[tbl_name].hidden:
+                    hidden = self.config.tables[tbl_name].hidden
                 else:
-                    del config.tables[tbl_name].hidden
-                    if not config.tables[tbl_name]:
-                        del config.tables[tbl_name]
+                    del self.config.tables[tbl_name].hidden
+                    if not self.config.tables[tbl_name]:
+                        del self.config.tables[tbl_name]
+
+            if self.config:
+                table = Table(self, tbl_name)
+                table.rowcount = self.query(f"select * from {tbl_name}").rowcount
+                table.fields = table.get_fields()
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,
                 'icon': None,
                 'label': self.get_label(tbl_name),
+                'rowcount': None if not self.config.count_rows else table.rowcount,
                 'primary_key': self.get_pkey(tbl_name),
                 'description': tbl.remarks,
                 'indexes': self.get_indexes(tbl_name),
@@ -315,18 +322,18 @@ class Database:
                 'relations': self.get_relations(tbl_name),
                 'hidden': hidden,
                 # fields are needed only when creating cache
-                'fields': None if ('cache' not in self.metadata and not config)
-                           else self.get_columns(tbl_name, config),
+                'fields': None if ('cache' not in self.metadata and not self.config)
+                           else table.fields,
             })
 
-        if ('cache' in self.metadata and config):
+        if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()
             # self.cache = tables
             sql = "update _meta_data set cache = ?\n"
             sql+= "where _name = ?"
             cache = {
                 "tables": tables,
-                "config": config
+                "config": self.config
             }
             result = cursor.execute(sql, json.dumps(cache), self.name).commit()
 
@@ -450,8 +457,7 @@ class Database:
         else:
             label = term.replace("_", " ")
 
-        norwegian_chars = True #TODO
-        if norwegian_chars:
+        if self.config.norwegian_chars:
             label = label.replace("ae", "æ")
             label = label.replace("oe", "ø")
             label = label.replace("aa", "å")
@@ -511,8 +517,8 @@ class Database:
 
         return contents
 
-    def get_contents(self, config=Dict()):
-        if (self.metadata.get('cache', None) and not config):
+    def get_contents(self):
+        if (self.metadata.get('cache', None) and not self.config):
             self.contents = self.metadata.cache.contents
             return self.contents
         start = time.time()
@@ -536,7 +542,7 @@ class Database:
                 tbl_name = list(table_names.values())[0]
                 label = self.get_label(tbl_name)
 
-                if not config or config.urd_structure:
+                if not self.config or self.config.urd_structure:
                     contents[label] = self.get_content_item(tbl_name)
                 else:
                     # group contents in modules
@@ -549,7 +555,7 @@ class Database:
                 else:
                     self.sub_tables[group_name] = table_names.values()
 
-                if not config or config.urd_structure:
+                if not self.config or self.config.urd_structure:
                     label = self.get_label(group_name)
                     contents[label] = self.get_content_item(group_name)
                 else:
@@ -566,7 +572,7 @@ class Database:
         end = time.time()
         print('get_contents', end - start)
 
-        if ('cache' in self.metadata and config):
+        if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()
             # self.cache = tables
             sql = "update _meta_data set cache = ?\n"
@@ -574,7 +580,7 @@ class Database:
             cache = {
                 "tables": self.tables,
                 "contents": contents,
-                "config": config
+                "config": self.config
             }
             result = cursor.execute(sql, json.dumps(cache), self.name).commit()
 
@@ -585,12 +591,6 @@ class Database:
             self.init_indexes()
 
         return self.indexes[tbl_name]
-
-    def get_columns(self, tbl_name, config=None):
-        if not hasattr(self, 'columns'):
-            self.init_columns(config)
-
-        return self.columns[tbl_name]
 
     def get_pkey(self, tbl_name):
         if not hasattr(self, 'pkeys'):
@@ -645,18 +645,6 @@ class Database:
         print('init_indexes', end - start)
 
         self.indexes = indexes
-
-    def init_columns(self, config=None):
-        from table import Table
-        cursor = self.cnxn.cursor()
-        rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
-        columns = Dict()
-        for row in rows:
-            tbl = Table(self, row.table_name)
-            tbl.rowcount = self.query(f"select * from {row.table_name}").rowcount
-            columns[tbl.name] = tbl.get_fields(config)
-
-        self.columns = columns
 
     def init_pkeys(self):
         start = time.time()

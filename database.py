@@ -672,7 +672,6 @@ class Database:
         start = time.time()
         cursor = self.cnxn.cursor()
         fkeys = Dict()
-        foreign_keys = Dict()
         if self.cnxn.system in ["oracle", "postgres"]:
             sql = self.expr.fkeys()
             for row in cursor.execute(sql, self.schema):
@@ -687,23 +686,16 @@ class Database:
                     fkeys[row.fktable_name][name].primary = []
                 fkeys[row.fktable_name][name].foreign.append(row.fkcolumn_name.lower())
                 fkeys[row.fktable_name][name].primary.append(row.pkcolumn_name.lower())
-
-            for tbl_name, keys in fkeys.items():
-                for fkey in keys.values():
-                    alias = fkey.foreign[-1]
-                    if alias in foreign_keys[tbl_name]:
-                        alias = alias + "_2"
-                    foreign_keys[tbl_name][alias] = fkey
         else:
             from table import Table
             rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
             for row in rows:
                 tbl = Table(self, row.table_name)
-                foreign_keys[row.table_name] = tbl.get_fkeys()
+                fkeys[row.table_name] = tbl.get_fkeys()
         end = time.time()
         print('init_fkeys', end - start)
 
-        self.fkeys = foreign_keys
+        self.fkeys = fkeys
 
     def init_relations(self):
         start = time.time()

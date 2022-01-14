@@ -44,20 +44,8 @@ class Connection:
     def get_databases(self):
         sql = self.expr.databases()
         rows = self.cursor().execute(sql).fetchall()
-        result = []
-        for row in rows:
-            base = Dict()
-            base.columns.name = row[0]
-            base.columns.label = row[0].capitalize()
-            result.append(base)
 
-        if self.system == 'oracle':
-            base = Dict()
-            base.columns.name = self.user
-            base.columns.label = self.user.capitalize()
-            result.append(base)
-
-        return result
+        return [row[0] for row in rows]
 
 class Database:
     def __init__(self, cnxn, db_name):

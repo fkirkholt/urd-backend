@@ -79,7 +79,17 @@ def logout(response: Response):
 @app.get("/dblist")
 def dblist():
     cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, cfg.db_name)
-    return {'data': {'records': cnxn.get_databases()}}
+    dbnames = cnxn.get_databases()
+    result = []
+    for dbname in dbnames:
+        cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, dbname)
+        dbo = Database(cnxn, dbname)
+        base = Dict()
+        base.columns.name = dbname
+        base.columns.label = dbo.metadata.label or dbname.capitalize()
+        base.columns.description = dbo.metadata.description or None
+        result.append(base)
+    return {'data': {'records': result}}
 
 @app.get("/database")
 def db_info(base: str):

@@ -314,17 +314,6 @@ class Database:
                            else table.fields,
             })
 
-        if ('cache' in self.metadata and self.config):
-            cursor = self.cnxn.cursor()
-            # self.cache = tables
-            sql = "update _meta_data set cache = ?\n"
-            sql+= "where _name = ?"
-            cache = {
-                "tables": tables,
-                "config": self.config
-            }
-            result = cursor.execute(sql, json.dumps(cache), self.name).commit()
-
         self.tables = tables
         end_function = time.time()
         print('get_tables', end_function - start_function)

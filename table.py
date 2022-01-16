@@ -1100,28 +1100,17 @@ class Grid:
 
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_primary_key()
-                rel.label = rel_table.name.replace(self.tbl.name + '_', '')
-                rel_fkeys = rel_table.get_fkeys()
 
                 if set(rel_pkey) > set(rel.foreign):
                     # Set order priority
                     rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])
 
-                    # If foreign key is part of primary key, and the other
-                    # pk field is also a foreign key, we have a xref table
-                    rest = [col for col in rel_pkey if col not in rel.foreign]
-                    pk_field = list(rest)[-1]
-                    if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
-                        rel.type_ = 'xref'
-                        rel.order = 5 + rel.order
-                        # rel.label = pk_field
-                        # rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
-                        # if len(rest):
-                            # rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
+                rel.label = self.db.get_label(rel_table.name
+                             .replace(self.tbl.name + '_', '')
+                             .replace('_' + self.tbl.name, ''))
 
-                rel.label = rel.label.replace('_' + self.tbl.name, '')
-                rel.label = self.db.get_label(rel.label).strip()
-                if (rel.get('type_', None) != 'xref' and rel.foreign[-1] != self.tbl.name):
+                # Add name of foreign key column if other than name of reference table
+                if rel.foreign[-1] != self.tbl.name:
                     rel.label += " (" + self.db.get_label(rel.foreign[-1]).lower() + ")"
             else:
                 rel.hidden = True

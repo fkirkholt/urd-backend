@@ -439,7 +439,7 @@ class Database:
             label = label.replace("oe", "ø")
             label = label.replace("aa", "å")
 
-        label = label.capitalize()
+        label = label.strip().capitalize()
 
         return label
 

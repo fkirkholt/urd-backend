@@ -388,7 +388,7 @@ class Database:
                 subordinate = True
 
             for colname in table.primary_key:
-                if colname in table.foreign_keys:
+                if self.get_col_fkey(colname, table.foreign_keys):
                     subordinate = True
                     break
 
@@ -410,22 +410,31 @@ class Database:
             name_parts = tbl_key.split("_")
 
             for colname in table.primary_key:
-                if colname in table.foreign_keys:
-                    key = table.foreign_keys[colname]
-
+                fkey = self.get_col_fkey(colname, table.foreign_keys)
+                if fkey:
                     if (len(name_parts) > 1 and
                         name_parts[0] in self.tables and
-                        name_parts[0] != key.table
+                        name_parts[0] != fkey.table
                     ):
                         continue
 
-                    if key.table not in sub_tables:
-                        sub_tables[key.table] = []
+                    if fkey.table not in sub_tables:
+                        sub_tables[fkey.table] = []
 
-                    sub_tables[key.table].append(tbl_key)
+                    sub_tables[fkey.table].append(tbl_key)
                     break
 
         return sub_tables
+
+    def get_col_fkey(self, colname, fkeys):
+        col_fkey = None
+        for fkey in fkeys.values():
+            if fkey.foreign[-1] == colname:
+                col_fkey = fkey
+                break
+
+        return col_fkey
+
 
     def get_label(self, term):
         terms = self.get_terms()

@@ -277,7 +277,8 @@ class Database:
             if (
                 tbl_name[0:1] == "_" or
                 tbl_name[0:4] == "ref_" or
-                tbl_name[:-4] == "_ref"
+                tbl_name[:-4] == "_ref" or
+                tbl_name[0:5] == "meta_"
             ):
                 hidden = True
             else:

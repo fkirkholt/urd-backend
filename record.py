@@ -102,6 +102,7 @@ class Record:
             # Add condition to fetch only rows that link to record
             conds = Dict()
             count_null_conds = 0
+            show_if = None
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx].lower()
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
@@ -117,6 +118,12 @@ class Record:
 
                 grid.add_cond(f"{rel.table}.{col}", "=", val)
                 conds[col] = val
+
+                # Check if relation depends on record value
+                if col[0:1] == "_":
+                    field = tbl_rel.fields[col]
+                    if not field.nullable and field.default:
+                        show_if = {ref_key: field.default}
 
             if len(self.pk):
                 count_records = grid.get_rowcount()
@@ -144,16 +151,6 @@ class Record:
                 'relationship': relationship,
                 'delete_rule': rel.delete_rule
             })
-
-            # Tables with suffixes that's part of types
-            # should just be shown when the specific type is chosen
-            parts = tbl_rel.name.split("_")
-            suffix_1 = parts[-1]
-            suffix_2 = '' if len(parts) == 1 else parts[-2]
-            show_if = None
-            for type_ in types:
-                if (suffix_1.startswith(type_) or suffix_2.startswith(type_)):
-                    show_if = {'type_': type_}
 
             if show_if:
                 relation.show_if = show_if

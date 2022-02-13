@@ -1,29 +1,30 @@
+"""Module for handling databases and connections"""
+import os
+import time
 import pyodbc
 from fastapi import HTTPException
 from starlette import status
-import os
 import simplejson as json
-from schema import Schema
-from expression import Expression
 from addict import Dict
-import time
+from expression import Expression
 
 class Connection:
-    def __init__(self, system, server, user, pwd, db_name=None):
-        self.system = system
+    """Connect to database"""
+    def __init__(self, cfg, db_name=None):
+        self.system = cfg.db_system
         driver = self.get_driver()
         cnxnstr = f'Driver={driver};'
-        if (db_name and system != 'oracle'):
+        if (db_name and cfg.db_system != 'oracle'):
             path = db_name.split('.')
             cnxnstr += 'Database=' + path[0] + ';'
-        if system == 'oracle':
-            cnxnstr += "DBQ=" + server + ';'
+        if cfg.db_system == 'oracle':
+            cnxnstr += "DBQ=" + cfg.db_server + ';'
         else:
-            srv_parts = server.split(':')
+            srv_parts = cfg.db_server.split(':')
             cnxnstr += 'Server=' + srv_parts[0] + ';'
             if len(srv_parts) == 2:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
-        cnxnstr += 'Uid=' + user + ';Pwd=' + pwd + ';'
+        cnxnstr += 'Uid=' + cfg.db_uid + ';Pwd=' + cfg.db_pwd + ';'
         pyodbc.lowercase = True
         try:
             cnxn = pyodbc.connect(cnxnstr)
@@ -32,22 +33,25 @@ class Connection:
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication"
             )
         self.cursor = cnxn.cursor
-        self.user = user
+        self.user = cfg.db_uid
         self.expr = Expression(self.system)
         self.string = cnxnstr
 
     def get_driver(self):
+        """Get ODBC driver"""
         drivers = [d for d in pyodbc.drivers() if self.system in d.lower()]
 
         return drivers[0]
 
     def get_databases(self):
+        """Get all databases in database system"""
         sql = self.expr.databases()
         rows = self.cursor().execute(sql).fetchall()
 
         return [row[0] for row in rows]
 
 class Database:
+    """Contains methods for getting data and metadata from database"""
     def __init__(self, cnxn, db_name):
         self.cnxn   = cnxn
         self.name   = db_name
@@ -65,19 +69,20 @@ class Database:
             self.schema = 'public'
             self.cat = None
         self.expr   = Expression(cnxn.system)
-        self.use_cache = False #TODO
         self.user_tables = self.get_user_tables()
         self.metadata = self.get_metadata()
         self.config = Dict()
 
     def get_metadata(self):
+        """Get data from table _meta_data"""
         if not hasattr(self, 'metadata'):
             self.init_metadata()
         return self.metadata
 
     def init_metadata(self):
+        """Store metadata in database object"""
         start = time.time()
-        from table import Table
+        # from table import Table
         cursor = self.cnxn.cursor()
         metadata = Dict()
         if '_meta_data' in self.user_tables:
@@ -93,12 +98,14 @@ class Database:
         self.metadata = metadata
 
     def get_terms(self):
+        """Get terms from table _meta_terms"""
         if not hasattr(self, 'terms'):
             self.init_terms()
         return self.terms
 
     def init_terms(self):
-        from table import Table
+        """Store terms in database object"""
+        # from table import Table
         cursor = self.cnxn.cursor()
         terms = Dict()
         if '_meta_terms' in self.user_tables:
@@ -114,6 +121,7 @@ class Database:
         self.terms = terms
 
     def get_info(self):
+        """Get info about database"""
         start = time.time()
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
@@ -128,10 +136,8 @@ class Database:
                 "schemata": self.get_schemata(),
                 "label": self.metadata.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
-                "reports": {}, #TODO
                 "contents": self.get_contents(),
                 "description": self.metadata.get('description', None),
-                #'contents': self.contents
             },
             "user": {
                 "name": 'Admin', #TODO: Autentisering
@@ -146,6 +152,7 @@ class Database:
         return info
 
     def get_privileges(self):
+        """Get user privileges"""
         start = time.time()
         privilege = Dict()
         sql = self.expr.privilege()
@@ -164,6 +171,7 @@ class Database:
 
 
     def get_schemata(self):
+        """Get all schemata in database"""
         start = time.time()
         cursor = self.cnxn.cursor()
         schemata = []
@@ -178,69 +186,8 @@ class Database:
 
         return schemata
 
-
-    def view_rights(self, user):
-        """ Find the tables the user has permission to view"""
-
-        sql = """
-        select table_, view_
-        from role_permission r
-        where role_ in (select role_ from user_role where user_ = ?)
-          and (schema_ = '*' or schema_ = ?)
-        """
-
-        cursor = self.urd.cursor()
-        rows = cursor.execute(sql, user, self.schema).fetchall()
-        return {row.table_: row.view_ for row in rows}
-
-    def filter_tables(self):
-        user = 'admin' #TODO: autentisering
-
-        rights = self.view_rights(user)
-
-        sql = """
-        select table_, expression exp
-        from filter f
-        where schema_ = ?
-          and user_ in (?, 'urd')
-          and standard = '1'
-        """
-
-        cursor = self.urd.cursor( )
-
-        rows = cursor.execute(sql, (self.schema, user)).fetchall()
-        filters = {row.table_: row.exp for row in rows}
-
-        # Make array of tables the user has access to
-        tables = {}
-        for key, table in self.tables.items():
-            if 'label' not in table:
-                table['label'] = table['name'].replace("_", " ").capitalize()
-
-            # Don't show tables the user doesn't have access to
-            view = False
-            if key in rights:
-                view = rights[key]
-            elif '*' in rights:
-                view = rights['*']
-
-            # Allow admins access to some tables in urd
-            urd_tables = ['filter', 'format', 'role', 'role_permission', 'user_']
-            #TODO: Prøv å sjekke på navn på urd-tabellen, slik registrert i config
-            if self.schema == 'urd' and self.user['admin'] and key in urd_tables:
-                view = True
-
-            if not view: continue
-
-            if key in filters:
-                table['default_filter'] = filters[key]
-                #TODO: Replace variables
-
-            tables[key] = table
-
-        return tables
-
     def get_user_tables(self):
+        """Get tables user has access to"""
         start = time.time()
         sql = self.expr.user_tables()
         cursor = self.cnxn.cursor()
@@ -255,6 +202,7 @@ class Database:
         return user_tables
 
     def get_tables(self):
+        """Return metadata for every table"""
         start_function = time.time()
         from table import Table
         if (self.metadata.get('cache', None) and not self.config):
@@ -274,15 +222,12 @@ class Database:
             if tbl_name not in self.user_tables:
                 continue
 
-            if (
+            hidden = (
                 tbl_name[0:1] == "_" or
                 tbl_name[0:4] == "ref_" or
                 tbl_name[:-4] == "_ref" or
                 tbl_name[0:5] == "meta_"
-            ):
-                hidden = True
-            else:
-                hidden = False
+            )
 
             # Hides table if user has marked the table to be hidden
             if 'hidden' in self.config.tables[tbl_name]:
@@ -321,6 +266,7 @@ class Database:
         return tables
 
     def is_top_level(self, table):
+        """Check if table is top level, i.e. not subordinate to other tables"""
         if table.hidden is True:
             return False
 
@@ -337,7 +283,8 @@ class Database:
 
         return True
 
-    def add_module(self, table, modules):
+    def attach_to_module(self, table, modules):
+        """Attach tables to module"""
         rel_tables = self.get_relation_tables(table.name, [])
         rel_tables.append(table.name)
 
@@ -345,19 +292,20 @@ class Database:
         for idx, module in enumerate(modules):
             common = [val for val in rel_tables if val in module]
             if len(common):
-                if module_id == None:
+                if module_id is None:
                     modules[idx] = list(set(module + rel_tables))
                     module_id = idx
                 else:
                     modules[module_id] = list(set(module + modules[module_id]))
                     del modules[idx]
 
-        if module_id == None:
+        if module_id is None:
             modules.append(rel_tables)
 
         return modules
 
     def get_relation_tables(self, table_name, relation_tables):
+        """Get all relation tables in hierarchy recursively"""
         table = self.tables[table_name]
 
         for relation in table.relations.values():
@@ -374,7 +322,7 @@ class Database:
     def get_tbl_groups(self):
         """Group tables by prefix"""
         tbl_groups = Dict()
-        terms = Dict() #TODO: lag self.terms
+        terms = self.get_terms()
         for tbl_key, table in self.tables.items():
             if tbl_key[0:1] == "_":
                 name = tbl_key[1:]
@@ -406,9 +354,10 @@ class Database:
         return tbl_groups
 
     def get_sub_tables(self):
+        """Return Dict of tables with subordinate tables"""
         sub_tables = Dict()
-        for tbl_key, table in self.tables.items():
-            name_parts = tbl_key.split("_")
+        for tbl_name, table in self.tables.items():
+            name_parts = tbl_name.split("_")
 
             for colname in table.primary_key:
                 fkey = self.get_col_fkey(colname, table.foreign_keys)
@@ -422,12 +371,13 @@ class Database:
                     if fkey.table not in sub_tables:
                         sub_tables[fkey.table] = []
 
-                    sub_tables[fkey.table].append(tbl_key)
+                    sub_tables[fkey.table].append(tbl_name)
                     break
 
         return sub_tables
 
     def get_col_fkey(self, colname, fkeys):
+        """Get foreign key based on last key column"""
         col_fkey = None
         for fkey in fkeys.values():
             if fkey.foreign[-1] == colname:
@@ -438,6 +388,7 @@ class Database:
 
 
     def get_label(self, term):
+        """Get label based on term"""
         terms = self.get_terms()
         if term in terms:
             label = terms[term].label
@@ -454,6 +405,7 @@ class Database:
         return label
 
     def get_description(self, term):
+        """Get description based on term"""
         terms = self.get_terms()
         description = None
         if term in terms:
@@ -461,8 +413,8 @@ class Database:
 
         return description
 
-    def get_content_item(self, tbl_name):
-
+    def get_content_node(self, tbl_name):
+        """Return a node in the content list, based on a table"""
         if tbl_name not in self.sub_tables:
             node = "tables." + tbl_name
         else:
@@ -473,11 +425,12 @@ class Database:
             for subtable in self.sub_tables[tbl_name]:
                 label = subtable.replace(tbl_name + '_', '')
                 label = self.get_label(label)
-                node.subitems[label] = self.get_content_item(subtable)
+                node.subitems[label] = self.get_content_node(subtable)
 
         return node
 
-    def get_module_item(self, tbl_name, contents):
+    def create_module_node(self, tbl_name, contents):
+        """Create node for module in contents"""
         label = self.get_label(tbl_name)
         placed = False
         for idx, module in enumerate(self.modules):
@@ -485,7 +438,7 @@ class Database:
                 mod = "Modul " + str(idx + 1)
                 contents[mod].class_label = "b"
                 contents[mod].class_content = "ml3"
-                contents[mod].subitems[label] = self.get_content_item(tbl_name)
+                contents[mod].subitems[label] = self.get_content_node(tbl_name)
                 if 'count' not in contents[mod]:
                     contents[mod].count = 0
                 contents[mod].count += 1
@@ -499,12 +452,13 @@ class Database:
                     'subitems': {},
                     'count': 0
                 })
-            contents['Andre'].subitems[label] = self.get_content_item(tbl_name)
+            contents['Andre'].subitems[label] = self.get_content_node(tbl_name)
             contents['Andre'].count += 1
 
         return contents
 
     def get_contents(self):
+        """Get list of contents"""
         if (self.metadata.get('cache', None) and not self.config):
             self.contents = self.metadata.cache.contents
             return self.contents
@@ -515,7 +469,7 @@ class Database:
         for table in self.tables.values():
             top_level = self.is_top_level(table)
             if top_level:
-                modules = self.add_module(table, modules)
+                modules = self.attach_to_module(table, modules)
 
         # Sort modules so that modules with most tables are listed first
         modules.sort(key=len, reverse=True)
@@ -530,10 +484,10 @@ class Database:
                 label = self.get_label(tbl_name)
 
                 if not self.config or self.config.urd_structure:
-                    contents[label] = self.get_content_item(tbl_name)
+                    contents[label] = self.get_content_node(tbl_name)
                 else:
                     # group contents in modules
-                    self.get_module_item(tbl_name, contents)
+                    self.create_module_node(tbl_name, contents)
 
             elif group_name in table_names.values():
                 table_names = {key:val for key, val in table_names.items() if val != group_name}
@@ -544,9 +498,9 @@ class Database:
 
                 if not self.config or self.config.urd_structure:
                     label = self.get_label(group_name)
-                    contents[label] = self.get_content_item(group_name)
+                    contents[label] = self.get_content_node(group_name)
                 else:
-                    self.get_module_item(group_name, contents)
+                    self.create_module_node(group_name, contents)
 
             else:
                 label = self.get_label(group_name)
@@ -569,42 +523,45 @@ class Database:
                 "contents": contents,
                 "config": self.config
             }
-            result = cursor.execute(sql, json.dumps(cache), self.name).commit()
+            cursor.execute(sql, json.dumps(cache), self.name).commit()
 
         return contents
 
     def get_indexes(self, tbl_name):
+        """Get all indexes for table"""
         if not hasattr(self, 'indexes'):
             self.init_indexes()
 
         return self.indexes[tbl_name]
 
     def get_pkey(self, tbl_name):
+        """Get primary key of table"""
         if not hasattr(self, 'pkeys'):
             self.init_pkeys()
 
         return self.pkeys[tbl_name]
 
     def get_foreign_keys(self, tbl_name):
+        """Get all foreign keys of table"""
         if not hasattr(self, 'fkeys'):
             self.init_foreign_keys()
 
         return self.fkeys[tbl_name]
 
     def get_relations(self, tbl_name):
+        """Get all has-many relations of table"""
         if not hasattr(self, 'relations'):
             self.init_relations()
 
         return self.relations[tbl_name]
 
-    def get_reports(self): #TODO
-        return {}
-
     def query(self, sql, params=[]):
+        """Execute sql query"""
         cursor = self.cnxn.cursor()
         return cursor.execute(sql, params)
 
     def init_indexes(self):
+        """Store all indexes in database object"""
         start = time.time()
         cursor = self.cnxn.cursor()
         indexes = Dict()
@@ -634,6 +591,7 @@ class Database:
         self.indexes = indexes
 
     def init_pkeys(self):
+        """Store all primary keys in database object"""
         start = time.time()
         cursor = self.cnxn.cursor()
         pkeys = Dict()
@@ -656,6 +614,7 @@ class Database:
         self.pkeys = pkeys
 
     def init_foreign_keys(self):
+        """Store all foreign keys in database object"""
         start = time.time()
         cursor = self.cnxn.cursor()
         fkeys = Dict()
@@ -685,6 +644,7 @@ class Database:
         self.fkeys = fkeys
 
     def init_relations(self):
+        """Store all has-many relations in database object"""
         start = time.time()
         if not hasattr(self, 'fkeys'):
             self.init_foreign_keys()

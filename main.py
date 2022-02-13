@@ -36,9 +36,9 @@ mod = os.path.getmtime("static/js/bundle.js")
 @app.middleware("http")
 async def check_login(request: Request, call_next):
     session: str = request.cookies.get("session")
+    now = time.time()
     if session:
         payload = jwt.decode(session, cfg.secret_key)
-        now = time.time()
         if 'uid' in payload and (payload["timestamp"] + cfg.timeout) > now :
             cfg.db_uid = payload["uid"]
             cfg.db_pwd = payload["pwd"]
@@ -64,10 +64,12 @@ def home(request: Request):
     })
 
 @app.post("/login")
-def login(response: Response, brukernavn: str, passord: str):
-    Connection(cfg.db_system, cfg.db_server, brukernavn, passord, cfg.db_name)
+def login(response: Response, username: str, password: str):
+    cfg.db_uid = username
+    cfg.db_pwd = password
+    Connection(cfg, cfg.db_name)
     timestamp = time.time()
-    token = jwt.encode({"uid": brukernavn, "pwd": passord, "timestamp": timestamp}, cfg.secret_key)
+    token = jwt.encode({"uid": username, "pwd": password, "timestamp": timestamp}, cfg.secret_key)
     response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return {"success": True}
 
@@ -78,11 +80,11 @@ def logout(response: Response):
 
 @app.get("/dblist")
 def dblist():
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, cfg.db_name)
+    cnxn = Connection(cfg)
     dbnames = cnxn.get_databases()
     result = []
     for dbname in dbnames:
-        cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, dbname)
+        cnxn = Connection(cfg, dbname)
         dbo = Database(cnxn, dbname)
         base = Dict()
         base.columns.name = dbname
@@ -93,7 +95,7 @@ def dblist():
 
 @app.get("/database")
 def db_info(base: str):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base)
+    cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     info = dbo.get_info()
 
@@ -103,7 +105,7 @@ def db_info(base: str):
 async def get_table(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base)
+    cnxn = Connection(cfg, req.base)
     schema = req.get('schema', None)
     if cnxn.system == 'postgres' and schema:
         base_path = req.base + '.' + req.schema
@@ -127,7 +129,7 @@ async def get_table(request: Request):
 
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str, schema: str = None):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     if cnxn.system == 'postgres' and schema:
         base_path = base + '.' + schema
     else:
@@ -140,7 +142,7 @@ def get_record(base: str, table: str, primary_key: str, schema: str = None):
 
 @app.get("/children")
 def get_children(base: str, table: str, primary_key: str):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     base_path = base or schema
     dbo = Database(cnxn, base_path)
     tbl = Table(dbo, table)
@@ -152,7 +154,7 @@ def get_children(base: str, table: str, primary_key: str):
 
 @app.get("/relations")
 def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None, types: str = None):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)
     pk = json.loads(primary_key)
@@ -169,7 +171,7 @@ def get_relations(base: str, table: str, primary_key: str, count: bool, alias: s
 async def save_table(request: Request):
     req = await request.json()
     base = req['base_name']
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     dbo = Database(cnxn, base)
     tbl = Table(dbo, req['table_name'])
     return {'data': tbl.save(req['records'])}
@@ -179,7 +181,7 @@ async def get_select(request: Request):
     # todo: skal ikke behøve alias
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base) #TODO
+    cnxn = Connection(cfg, req.base) #TODO
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
     if 'key' in req:

@@ -14,6 +14,11 @@ class Table:
         self.label = db.get_label(tbl_name)
         self.cache = Dict()
 
+        cursor = db.cnxn.cursor()
+        tbl = cursor.tables(catalog=db.cat, schema=db.schema, table=tbl_name).fetchone()
+        self.type_ = tbl.table_type
+
+
     def user_privileges(self):
         """Return privileges of database user"""
         privileges = Dict({
@@ -517,6 +522,7 @@ class Grid:
 
         data = Dict({
             'name': self.tbl.name,
+            'type' : self.tbl.type_,
             'records': recs,
             'count_records': self.get_rowcount(),
             'fields': fields,

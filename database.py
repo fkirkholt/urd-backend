@@ -246,6 +246,7 @@ class Database:
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,
+                'type': tbl.table_type,
                 'icon': None,
                 'label': self.get_label(tbl_name),
                 'rowcount': None if not self.config.count_rows else table.rowcount,
@@ -333,8 +334,6 @@ class Database:
             # Find if the table is subordinate to other tables
             # i.e. the primary key also has a foreign key
             subordinate = False
-            if not table.primary_key:
-                subordinate = True
 
             for colname in table.primary_key:
                 if self.get_col_fkey(colname, table.foreign_keys):

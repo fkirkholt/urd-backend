@@ -1116,7 +1116,7 @@ class Grid:
                              .replace('_' + self.tbl.name, ''))
 
                 # Add name of foreign key column if other than name of reference table
-                if rel.foreign[-1] != self.tbl.name:
+                if rel.foreign[-1] not in self.tbl.name:
                     rel.label += " (" + self.db.get_label(rel.foreign[-1]).lower() + ")"
             else:
                 rel.hidden = True

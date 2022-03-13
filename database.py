@@ -222,12 +222,13 @@ class Database:
             if tbl_name not in self.user_tables:
                 continue
 
-            hidden = (
-                tbl_name[0:1] == "_" or
-                tbl_name[0:4] == "ref_" or
-                tbl_name[:-4] == "_ref" or
-                tbl_name[0:5] == "meta_"
-            )
+            hidden = tbl_name[0:1] == "_" or tbl_name[0:5] == "meta_"
+
+            tbl_type = tbl.table_type.lower()
+            if (tbl_name[-5:] == "_list" or tbl_name[-6:] == "_liste"):
+                tbl_type = "list"
+            elif tbl_name[-5:] == "_xref":
+                tbl_type = "xref"
 
             # Hides table if user has marked the table to be hidden
             if 'hidden' in self.config.tables[tbl_name]:
@@ -246,7 +247,7 @@ class Database:
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,
-                'type': tbl.table_type,
+                'type': tbl_type,
                 'icon': None,
                 'label': self.get_label(tbl_name),
                 'rowcount': None if not self.config.count_rows else table.rowcount,
@@ -389,6 +390,9 @@ class Database:
     def get_label(self, term):
         """Get label based on term"""
         terms = self.get_terms()
+        term_parts = term.split('_')
+        if term_parts[-1] in ("list", "liste", "xref"):
+            term = "_".join(term_parts[:-1])
         if term in terms:
             label = terms[term].label
         else:

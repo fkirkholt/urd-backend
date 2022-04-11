@@ -8,6 +8,15 @@ import simplejson as json
 from addict import Dict
 from expression import Expression
 
+def measure_time(func):
+    def wrapper(*arg):
+        t = time.time()
+        res = func(*arg)
+        print("Time in", func.__name__,  str(time.time()-t), "seconds")
+        return res
+
+    return wrapper
+
 class Connection:
     """Connect to database"""
     def __init__(self, cfg, db_name=None):
@@ -79,10 +88,9 @@ class Database:
             self.init_metadata()
         return self.metadata
 
+    @measure_time
     def init_metadata(self):
         """Store metadata in database object"""
-        start = time.time()
-        # from table import Table
         cursor = self.cnxn.cursor()
         metadata = Dict()
         if '_meta_data' in self.user_tables:
@@ -93,8 +101,6 @@ class Database:
 
         if metadata.cache:
             metadata.cache = Dict(json.loads(metadata.cache))
-        end = time.time()
-        print('init_metadata:', end - start)
         self.metadata = metadata
 
     def get_terms(self):
@@ -120,9 +126,9 @@ class Database:
 
         self.terms = terms
 
+    @measure_time
     def get_info(self):
         """Get info about database"""
-        start = time.time()
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
@@ -146,14 +152,12 @@ class Database:
             },
             "config": None if not self.metadata.get('cache', None) else self.metadata.cache.config
         }
-        end = time.time()
-        print('get_info', end - start)
 
         return info
 
+    @measure_time
     def get_privileges(self):
         """Get user privileges"""
-        start = time.time()
         privilege = Dict()
         sql = self.expr.privilege()
         cursor = self.cnxn.cursor()
@@ -164,15 +168,12 @@ class Database:
             priv = cursor.execute(sql, self.schema or self.cat).fetchone()
             privilege.create = int(priv.create)
             privilege.usage = 0
-        end = time.time()
-        print('get_privileges', end - start)
 
         return privilege
 
-
+    @measure_time
     def get_schemata(self):
         """Get all schemata in database"""
-        start = time.time()
         cursor = self.cnxn.cursor()
         schemata = []
 
@@ -181,14 +182,12 @@ class Database:
             rows = cursor.execute(sql).fetchall()
             for row in rows:
                 schemata.append(row.schema_name)
-        end = time.time()
-        print('get_schemata', end - start)
 
         return schemata
 
+    @measure_time
     def get_user_tables(self):
         """Get tables user has access to"""
-        start = time.time()
         sql = self.expr.user_tables()
         cursor = self.cnxn.cursor()
         user_tables = []
@@ -196,14 +195,12 @@ class Database:
         rows = cursor.execute(sql, self.schema or self.cat).fetchall()
         for row in rows:
             user_tables.append(row.table_name)
-        end = time.time()
-        print('get_user_tables', end - start)
 
         return user_tables
 
+    @measure_time
     def get_tables(self):
         """Return metadata for every table"""
-        start_function = time.time()
         from table import Table
         if (self.metadata.get('cache', None) and not self.config):
             self.tables = self.metadata.cache.tables
@@ -263,8 +260,7 @@ class Database:
             })
 
         self.tables = tables
-        end_function = time.time()
-        print('get_tables', end_function - start_function)
+
         return tables
 
     def is_top_level(self, table):
@@ -460,12 +456,13 @@ class Database:
 
         return contents
 
+    @measure_time
     def get_contents(self):
         """Get list of contents"""
         if (self.metadata.get('cache', None) and not self.config):
             self.contents = self.metadata.cache.contents
             return self.contents
-        start = time.time()
+
         contents = Dict()
 
         modules = []
@@ -513,8 +510,6 @@ class Database:
                     'class_content': "ml3",
                     'subitems': table_names
                 }
-        end = time.time()
-        print('get_contents', end - start)
 
         if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()
@@ -563,9 +558,9 @@ class Database:
         cursor = self.cnxn.cursor()
         return cursor.execute(sql, params)
 
+    @measure_time
     def init_indexes(self):
         """Store all indexes in database object"""
-        start = time.time()
         cursor = self.cnxn.cursor()
         indexes = Dict()
         if self.cnxn.system in ["oracle"]:
@@ -588,14 +583,12 @@ class Database:
                     if not 'columns' in indexes[tbl.table_name][name]:
                         indexes[tbl.table_name][name].columns = []
                     indexes[tbl.table_name][name].columns.append(row.column_name)
-        end = time.time()
-        print('init_indexes', end - start)
 
         self.indexes = indexes
 
+    @measure_time
     def init_pkeys(self):
         """Store all primary keys in database object"""
-        start = time.time()
         cursor = self.cnxn.cursor()
         pkeys = Dict()
         if self.cnxn.system in ["oracle"]:
@@ -611,14 +604,12 @@ class Database:
                 rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
                 pkey = [row.column_name for row in rows]
                 pkeys[tbl.table_name] = pkey
-        end = time.time()
-        print('init_pkeys', end - start)
 
         self.pkeys = pkeys
 
+    @measure_time
     def init_foreign_keys(self):
         """Store all foreign keys in database object"""
-        start = time.time()
         cursor = self.cnxn.cursor()
         fkeys = Dict()
         if self.cnxn.system in ["oracle", "postgres"]:
@@ -641,14 +632,12 @@ class Database:
             for row in rows:
                 tbl = Table(self, row.table_name)
                 fkeys[row.table_name] = tbl.get_fkeys()
-        end = time.time()
-        print('init_fkeys', end - start)
 
         self.fkeys = fkeys
 
+    @measure_time
     def init_relations(self):
         """Store all has-many relations in database object"""
-        start = time.time()
         if not hasattr(self, 'fkeys'):
             self.init_foreign_keys()
 
@@ -668,7 +657,5 @@ class Database:
                         "primary": key.primary,
                         "label": self.get_label(key.table) #TODO: Fix
                     })
-        end = time.time()
-        print('init_relations', end - start)
 
         self.relations = relations

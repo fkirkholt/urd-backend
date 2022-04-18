@@ -224,7 +224,7 @@ class Database:
             tbl_type = tbl.table_type.lower()
             if (tbl_name[-5:] == "_list" or tbl_name[-6:] == "_liste"):
                 tbl_type = "list"
-            elif tbl_name[-5:] == "_xref":
+            elif tbl_name[-5:] in ("_xref", "_link"):
                 tbl_type = "xref"
 
             # Hides table if user has marked the table to be hidden
@@ -387,7 +387,7 @@ class Database:
         """Get label based on term"""
         terms = self.get_terms()
         term_parts = term.split('_')
-        if term_parts[-1] in ("list", "liste", "xref"):
+        if term_parts[-1] in ("list", "liste", "xref", "link"):
             term = "_".join(term_parts[:-1])
         if term in terms:
             label = terms[term].label

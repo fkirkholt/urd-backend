@@ -16,28 +16,29 @@ class Table:
 
         cursor = db.cnxn.cursor()
         tbl = cursor.tables(catalog=db.cat, schema=db.schema, table=tbl_name).fetchone()
-        self.type_ = tbl.table_type
+        self.type_ = tbl.table_type.lower()
 
 
     def user_privileges(self):
         """Return privileges of database user"""
         privileges = Dict({
-            'select': 0,
-            'insert': 0,
-            'update': 0,
-            'delete': 0
+            'select': 1,
+            'insert': 1,
+            'update': 1,
+            'delete': 1
         })
         sql = self.db.expr.table_privileges()
-        rows = self.db.query(sql, [self.db.cnxn.user, self.name]).fetchall()
-        for row in rows:
-            if row.privilege_type == 'SELECT':
-                privileges.select = 1
-            elif row.privilege_type == 'INSERT':
-                privileges.insert = 1
-            elif row.privilege_type == 'UPDATE':
-                privileges['update'] = 1
-            elif row.privilege_type == 'DELETE':
-                privileges.delete = 1
+        if sql:
+            rows = self.db.query(sql, [self.db.cnxn.user, self.name]).fetchall()
+            for row in rows:
+                if row.privilege_type == 'SELECT':
+                    privileges.select = 1
+                elif row.privilege_type == 'INSERT':
+                    privileges.insert = 1
+                elif row.privilege_type == 'UPDATE':
+                    privileges['update'] = 1
+                elif row.privilege_type == 'DELETE':
+                    privileges.delete = 1
 
         return privileges
 
@@ -258,6 +259,8 @@ class Table:
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
+            # Strip column size from type_name for sqlite
+            col.type_name = col.type_name.split('(')[0]
             if ('column_size' in col or 'display_size' in col):
                 col.column_size = col.get('column_size', col.display_size)
             cname = col.column_name

@@ -306,13 +306,13 @@ class Expression:
     def user_tables(self):
         if self.platform == 'sqlite':
             return """
-            SELECT name
+            SELECT name as table_name
             FROM   sqlite_master
             WHERE  type IN ('table', 'view');
             """
         elif self.platform == 'oracle':
             return """
-            SELECT object_name
+            SELECT object_name as table_name
             FROM   all_objects
             WHERE  object_type in ('TABLE', 'VIEW')
                    AND owner = ?;

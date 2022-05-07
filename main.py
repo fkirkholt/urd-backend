@@ -80,17 +80,28 @@ def logout(response: Response):
 
 @app.get("/dblist")
 def dblist():
-    cnxn = Connection(cfg)
-    dbnames = cnxn.get_databases()
     result = []
-    for dbname in dbnames:
-        cnxn = Connection(cfg, dbname)
-        dbo = Database(cnxn, dbname)
-        base = Dict()
-        base.columns.name = dbname
-        base.columns.label = dbo.metadata.label or dbname.capitalize()
-        base.columns.description = dbo.metadata.description or None
-        result.append(base)
+    if cfg.db_system == 'sqlite':
+        file_list = os.listdir(cfg.db_server)
+        for filename in file_list:
+            if os.path.splitext(filename)[1] not in ('.db', '.sqlite'):
+                continue
+            base = Dict()
+            base.columns.name = filename
+            base.columns.label = filename.capitalize()
+            base.columns.description = None
+            result.append(base)
+    else:
+        cnxn = Connection(cfg)
+        dbnames = cnxn.get_databases()
+        for dbname in dbnames:
+            cnxn = Connection(cfg, dbname)
+            dbo = Database(cnxn, dbname)
+            base = Dict()
+            base.columns.name = dbname
+            base.columns.label = dbo.metadata.label or dbname.capitalize()
+            base.columns.description = dbo.metadata.description or None
+            result.append(base)
     return {'data': {'records': result}}
 
 @app.get("/database")

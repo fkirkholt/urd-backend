@@ -34,6 +34,8 @@ class Connection:
             if len(srv_parts) == 2:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + cfg.db_uid + ';Pwd=' + cfg.db_pwd + ';'
+        if (cfg.db_system == 'sqlite'):
+            cnxnstr = 'Driver=SQLite3;Database=' + cfg.db_server + '/' + db_name
         pyodbc.lowercase = True
         try:
             cnxn = pyodbc.connect(cnxnstr)
@@ -74,6 +76,9 @@ class Database:
         elif cnxn.system == 'oracle':
             self.cat = None
             self.schema = db_name
+        elif cnxn.system == 'sqlite':
+            self.schema = 'main'
+            self.cat = None
         else:
             self.schema = 'public'
             self.cat = None
@@ -192,7 +197,10 @@ class Database:
         cursor = self.cnxn.cursor()
         user_tables = []
 
-        rows = cursor.execute(sql, self.schema or self.cat).fetchall()
+        if self.cnxn.system == 'sqlite':
+            rows = cursor.execute(sql).fetchall()
+        else:
+            rows = cursor.execute(sql, self.schema or self.cat).fetchall()
         for row in rows:
             user_tables.append(row.table_name)
 

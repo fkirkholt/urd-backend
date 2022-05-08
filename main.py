@@ -17,10 +17,10 @@ import time
 
 class Settings(BaseSettings):
     secret_key: str = "some_secret_key"
-    timeout   : int = 15 * 60 # 15 minutes
-    db_system : str = "postgres"
-    db_server : str = "localhost"
-    db_name   : str = "postgres"
+    timeout   : int = 30 * 60 # 30 minutes
+    db_system : str = None
+    db_server : str = None
+    db_name   : str = None
     db_uid    : str = None
     db_pwd    : str = None
 
@@ -39,9 +39,12 @@ async def check_login(request: Request, call_next):
     now = time.time()
     if session:
         payload = jwt.decode(session, cfg.secret_key)
-        if 'uid' in payload and (payload["timestamp"] + cfg.timeout) > now :
+        if (cfg.timeout is None or ('uid' in payload and (payload["timestamp"] + cfg.timeout) > now)):
+            cfg.db_system = payload["system"]
+            cfg.db_server = payload["server"]
             cfg.db_uid = payload["uid"]
             cfg.db_pwd = payload["pwd"]
+            cfg.db_name = payload["database"]
     else:
         cfg.db_uid = None
         cfg.db_pwd = None
@@ -53,7 +56,14 @@ async def check_login(request: Request, call_next):
 
     response = await call_next(request)
     if cfg.db_uid is not None and request.url.path != "/logout":
-        token = jwt.encode({"uid": cfg.db_uid, "pwd": cfg.db_pwd, "timestamp": now}, cfg.secret_key)
+        token = jwt.encode({
+            "system": cfg.db_system,
+            "server": cfg.db_server,
+            "uid": cfg.db_uid,
+            "pwd": cfg.db_pwd,
+            "database": cfg.db_name,
+            "timestamp": now
+        }, cfg.secret_key)
         response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return response
 
@@ -64,12 +74,23 @@ def home(request: Request):
     })
 
 @app.post("/login")
-def login(response: Response, username: str, password: str):
+def login(response: Response, system: str, server: str, username: str, password: str, database: str):
+    cfg.db_system = system
     cfg.db_uid = username
     cfg.db_pwd = password
-    Connection(cfg, cfg.db_name)
+    cfg.db_name = database
+    cfg.db_server = server
+
     timestamp = time.time()
-    token = jwt.encode({"uid": username, "pwd": password, "timestamp": timestamp}, cfg.secret_key)
+    token = jwt.encode({
+        "system": system,
+        "server": server,
+        "database": database,
+        "uid": username,
+        "pwd": password,
+        "timestamp": timestamp
+    }, cfg.secret_key)
+    cfg.timeout = None if cfg.db_system == 'sqlite' else cfg.timeout
     response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return {"success": True}
 

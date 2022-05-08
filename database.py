@@ -21,6 +21,7 @@ class Connection:
     """Connect to database"""
     def __init__(self, cfg, db_name=None):
         self.system = cfg.db_system
+        self.server = cfg.db_server
         driver = self.get_driver()
         cnxnstr = f'Driver={driver};'
         if (db_name and cfg.db_system != 'oracle'):
@@ -34,15 +35,23 @@ class Connection:
             if len(srv_parts) == 2:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + cfg.db_uid + ';Pwd=' + cfg.db_pwd + ';'
-        if (cfg.db_system == 'sqlite'):
-            cnxnstr = 'Driver=SQLite3;Database=' + cfg.db_server + '/' + db_name
         pyodbc.lowercase = True
-        try:
-            cnxn = pyodbc.connect(cnxnstr)
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication"
-            )
+        if (cfg.db_system == 'sqlite'):
+            path = os.path.join(cfg.db_server, db_name)
+            cnxnstr = 'Driver=SQLite3;Database=' + path
+            if os.path.exists(path):
+                cnxn = pyodbc.connect(cnxnstr)
+            else:
+                raise HTTPException(
+                    status_code=404, detail="Database not found"
+                )
+        else:
+            try:
+                cnxn = pyodbc.connect(cnxnstr)
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication"
+                )
         self.cursor = cnxn.cursor
         self.user = cfg.db_uid
         self.expr = Expression(self.system)
@@ -143,6 +152,7 @@ class Database:
             "base": {
                 "name": self.name,
                 "system": self.cnxn.system,
+                "server": self.cnxn.server,
                 "schema": self.schema,
                 "schemata": self.get_schemata(),
                 "label": self.metadata.get('label', self.name.capitalize()),

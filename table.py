@@ -88,9 +88,14 @@ class Table:
     def get_primary_key(self):
         """Return primary key of table"""
         cursor = self.db.cnxn.cursor()
-        pkeys = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
-                                   schema=self.db.schema)
-        return [row.column_name.lower() for row in pkeys]
+        pkeys_cursor = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
+                                          schema=self.db.schema)
+        pkeys = [row.column_name.lower() for row in pkeys_cursor]
+
+        if (len(pkeys) == 0 and self.db.system == 'sqlite'):
+            return ['rowid']
+
+        return pkeys
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
@@ -716,7 +721,7 @@ class Grid:
         cols = []
         fields = self.tbl.get_fields()
         for key in selects.keys():
-            if key in fields and 'source' not in fields[key]:
+            if (key in fields or key == 'rowid') and 'source' not in fields[key]:
                 cols.append(self.tbl.name + '.' + key)
 
         select = ', '.join(cols)

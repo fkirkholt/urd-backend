@@ -91,6 +91,7 @@ class Database:
         else:
             self.schema = 'public'
             self.cat = None
+        self.system = cnxn.system
         self.expr   = Expression(cnxn.system)
         self.user_tables = self.get_user_tables()
         self.metadata = self.get_metadata()

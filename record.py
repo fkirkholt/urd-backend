@@ -441,7 +441,7 @@ class Record:
                 params.append(values[col])
 
             sql = f"select case when max({inc_col}) is null then 1 "
-            sql+= f"else floor(max({inc_col}) +1) end from {self.tbl.name} "
+            sql+= f"else max({inc_col}) +1 end from {self.tbl.name} "
             sql+= "" if len(cols) == 0 else "where " + " and ".join(conditions)
 
             values[inc_col] = self.db.query(sql, params).fetchval()

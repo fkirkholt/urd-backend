@@ -129,7 +129,7 @@ class Database:
         # from table import Table
         cursor = self.cnxn.cursor()
         terms = Dict()
-        if '_meta_terms' in self.user_tables:
+        if '_meta_term' in self.user_tables:
             sql = f"select * from {self.schema or self.cat}._meta_term"
             try:
                 rows = cursor.execute(sql).fetchall()

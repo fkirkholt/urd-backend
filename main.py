@@ -79,7 +79,7 @@ def login(response: Response, system: str, server: str, username: str, password:
     cfg.db_uid = username
     cfg.db_pwd = password
     cfg.db_name = database
-    cfg.db_server = server
+    cfg.db_server = server or 'localhost'
 
     timestamp = time.time()
     token = jwt.encode({

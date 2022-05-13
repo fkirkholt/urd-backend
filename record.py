@@ -104,7 +104,7 @@ class Record:
             count_null_conds = 0
             show_if = None
             for idx, col in enumerate(rel.foreign):
-                ref_key = rel.primary[idx].lower()
+                ref_key = rel.primary[idx]
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
                 if (tbl_rel.fields[col].nullable and
                     col != rel.foreign[0] and
@@ -192,7 +192,7 @@ class Record:
         conds = Dict()
         pkey = {}
         for idx, col in enumerate(rel.foreign):
-            ref_key = rel.primary[idx].lower()
+            ref_key = rel.primary[idx]
             val = None if len(self.pk) == 0 else rec_values[ref_key]
             if (len(self.pk) and tbl_rel.fields[col].nullable and
                 col != rel.foreign[0] and

@@ -90,7 +90,7 @@ class Table:
         cursor = self.db.cnxn.cursor()
         pkeys_cursor = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
                                           schema=self.db.schema)
-        pkeys = [row.column_name.lower() for row in pkeys_cursor]
+        pkeys = [row.column_name for row in pkeys_cursor]
 
         if (len(pkeys) == 0 and self.db.system == 'sqlite'):
             return ['rowid']
@@ -234,8 +234,8 @@ class Table:
                     'foreign': [],
                     'primary': []
                 })
-            keys[name].foreign.append(row.fkcolumn_name.lower())
-            keys[name].primary.append(row.pkcolumn_name.lower())
+            keys[name].foreign.append(row.fkcolumn_name)
+            keys[name].primary.append(row.pkcolumn_name)
 
         self.cache.foreign_keys = keys
 
@@ -679,7 +679,7 @@ class Grid:
         indexes = self.tbl.get_indexes()
         grid_idx = indexes.get(self.tbl.name.lower() + "_grid_idx", None)
         if grid_idx:
-            columns = [col.lower() for col in grid_idx.columns]
+            columns = grid_idx.columns
         else:
             pkey = self.tbl.get_primary_key()
             fkeys = self.tbl.get_fkeys()

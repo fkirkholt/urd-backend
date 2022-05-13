@@ -37,6 +37,7 @@ class Connection:
         cnxnstr += 'Uid=' + cfg.db_uid + ';Pwd=' + cfg.db_pwd + ';'
         pyodbc.lowercase = True
         if (cfg.db_system == 'sqlite'):
+            pyodbc.lowercase = False
             path = os.path.join(cfg.db_server, db_name)
             cnxnstr = 'Driver=SQLite3;Database=' + path
             if os.path.exists(path):
@@ -643,8 +644,8 @@ class Database:
                 if not 'foreign' in fkeys[row.fktable_name][name]:
                     fkeys[row.fktable_name][name].foreign = []
                     fkeys[row.fktable_name][name].primary = []
-                fkeys[row.fktable_name][name].foreign.append(row.fkcolumn_name.lower())
-                fkeys[row.fktable_name][name].primary.append(row.pkcolumn_name.lower())
+                fkeys[row.fktable_name][name].foreign.append(row.fkcolumn_name)
+                fkeys[row.fktable_name][name].primary.append(row.pkcolumn_name)
         else:
             from table import Table
             rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()

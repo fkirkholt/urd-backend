@@ -17,10 +17,10 @@ import time
 
 class Settings(BaseSettings):
     secret_key: str = "some_secret_key"
-    timeout   : int = 15 * 60 # 15 minutes
-    db_system : str = "postgres"
-    db_server : str = "localhost"
-    db_name   : str = "postgres"
+    timeout   : int = 30 * 60 # 30 minutes
+    db_system : str = None
+    db_server : str = None
+    db_name   : str = None
     db_uid    : str = None
     db_pwd    : str = None
 
@@ -36,12 +36,15 @@ mod = os.path.getmtime("static/js/bundle.js")
 @app.middleware("http")
 async def check_login(request: Request, call_next):
     session: str = request.cookies.get("session")
+    now = time.time()
     if session:
         payload = jwt.decode(session, cfg.secret_key)
-        now = time.time()
-        if 'uid' in payload and (payload["timestamp"] + cfg.timeout) > now :
+        if (cfg.timeout is None or ('uid' in payload and (payload["timestamp"] + cfg.timeout) > now)):
+            cfg.db_system = payload["system"]
+            cfg.db_server = payload["server"]
             cfg.db_uid = payload["uid"]
             cfg.db_pwd = payload["pwd"]
+            cfg.db_name = payload["database"]
     else:
         cfg.db_uid = None
         cfg.db_pwd = None
@@ -53,7 +56,14 @@ async def check_login(request: Request, call_next):
 
     response = await call_next(request)
     if cfg.db_uid is not None and request.url.path != "/logout":
-        token = jwt.encode({"uid": cfg.db_uid, "pwd": cfg.db_pwd, "timestamp": now}, cfg.secret_key)
+        token = jwt.encode({
+            "system": cfg.db_system,
+            "server": cfg.db_server,
+            "uid": cfg.db_uid,
+            "pwd": cfg.db_pwd,
+            "database": cfg.db_name,
+            "timestamp": now
+        }, cfg.secret_key)
         response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return response
 
@@ -64,10 +74,23 @@ def home(request: Request):
     })
 
 @app.post("/login")
-def login(response: Response, brukernavn: str, passord: str):
-    Connection(cfg.db_system, cfg.db_server, brukernavn, passord, cfg.db_name)
+def login(response: Response, system: str, server: str, username: str, password: str, database: str):
+    cfg.db_system = system
+    cfg.db_uid = username
+    cfg.db_pwd = password
+    cfg.db_name = database
+    cfg.db_server = server or 'localhost'
+
     timestamp = time.time()
-    token = jwt.encode({"uid": brukernavn, "pwd": passord, "timestamp": timestamp}, cfg.secret_key)
+    token = jwt.encode({
+        "system": system,
+        "server": server,
+        "database": database,
+        "uid": username,
+        "pwd": password,
+        "timestamp": timestamp
+    }, cfg.secret_key)
+    cfg.timeout = None if cfg.db_system == 'sqlite' else cfg.timeout
     response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return {"success": True}
 
@@ -78,24 +101,33 @@ def logout(response: Response):
 
 @app.get("/dblist")
 def dblist():
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, cfg.db_name)
-    return {'data': {'records': cnxn.get_databases()}}
+    result = []
+    if cfg.db_system == 'sqlite':
+        file_list = os.listdir(cfg.db_server)
+        for filename in file_list:
+            if os.path.splitext(filename)[1] not in ('.db', '.sqlite'):
+                continue
+            base = Dict()
+            base.columns.name = filename
+            base.columns.label = filename.capitalize()
+            base.columns.description = None
+            result.append(base)
+    else:
+        cnxn = Connection(cfg)
+        dbnames = cnxn.get_databases()
+        for dbname in dbnames:
+            cnxn = Connection(cfg, dbname)
+            dbo = Database(cnxn, dbname)
+            base = Dict()
+            base.columns.name = dbname
+            base.columns.label = dbo.metadata.label or dbname.capitalize()
+            base.columns.description = dbo.metadata.description or None
+            result.append(base)
+    return {'data': {'records': result}}
 
 @app.get("/database")
 def db_info(base: str):
-    if base == cfg.db_name:
-        #TODO Fix user
-        return {'data': {
-            'base': {
-                'name': cfg.db_name
-            },
-            'user': {
-                'name': 'Admin',
-                'id': 'admin',
-                "admin": 0
-            }
-        }}
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base)
+    cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     info = dbo.get_info()
 
@@ -105,7 +137,7 @@ def db_info(base: str):
 async def get_table(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base)
+    cnxn = Connection(cfg, req.base)
     schema = req.get('schema', None)
     if cnxn.system == 'postgres' and schema:
         base_path = req.base + '.' + req.schema
@@ -129,7 +161,7 @@ async def get_table(request: Request):
 
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str, schema: str = None):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     if cnxn.system == 'postgres' and schema:
         base_path = base + '.' + schema
     else:
@@ -142,7 +174,7 @@ def get_record(base: str, table: str, primary_key: str, schema: str = None):
 
 @app.get("/children")
 def get_children(base: str, table: str, primary_key: str):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     base_path = base or schema
     dbo = Database(cnxn, base_path)
     tbl = Table(dbo, table)
@@ -154,7 +186,7 @@ def get_children(base: str, table: str, primary_key: str):
 
 @app.get("/relations")
 def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None, types: str = None):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)
     pk = json.loads(primary_key)
@@ -171,7 +203,7 @@ def get_relations(base: str, table: str, primary_key: str, count: bool, alias: s
 async def save_table(request: Request):
     req = await request.json()
     base = req['base_name']
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base) #TODO
     dbo = Database(cnxn, base)
     tbl = Table(dbo, req['table_name'])
     return {'data': tbl.save(req['records'])}
@@ -181,7 +213,7 @@ async def get_select(request: Request):
     # todo: skal ikke behøve alias
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, req.base) #TODO
+    cnxn = Connection(cfg, req.base) #TODO
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
     if 'key' in req:
@@ -210,7 +242,7 @@ async def update_schema(request: Request):
     schema = Schema(schema_name)
     schema.update(dbo, config)
 
-    # return {'sucess': False}
+    return {'sucess': True, 'msg': "Cache oppdatert"}
 
 @app.get('/table_sql')
 def export_sql(base: str, table: str, dialect: str):

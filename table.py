@@ -14,25 +14,31 @@ class Table:
         self.label = db.get_label(tbl_name)
         self.cache = Dict()
 
+        cursor = db.cnxn.cursor()
+        tbl = cursor.tables(catalog=db.cat, schema=db.schema, table=tbl_name).fetchone()
+        self.type_ = tbl.table_type.lower()
+
+
     def user_privileges(self):
         """Return privileges of database user"""
         privileges = Dict({
-            'select': 0,
-            'insert': 0,
-            'update': 0,
-            'delete': 0
+            'select': 1,
+            'insert': 1,
+            'update': 1,
+            'delete': 1
         })
         sql = self.db.expr.table_privileges()
-        rows = self.db.query(sql, [self.db.cnxn.user, self.name]).fetchall()
-        for row in rows:
-            if row.privilege_type == 'SELECT':
-                privileges.select = 1
-            elif row.privilege_type == 'INSERT':
-                privileges.insert = 1
-            elif row.privilege_type == 'UPDATE':
-                privileges['update'] = 1
-            elif row.privilege_type == 'DELETE':
-                privileges.delete = 1
+        if sql:
+            rows = self.db.query(sql, [self.db.cnxn.user, self.name]).fetchall()
+            for row in rows:
+                if row.privilege_type == 'SELECT':
+                    privileges.select = 1
+                elif row.privilege_type == 'INSERT':
+                    privileges.insert = 1
+                elif row.privilege_type == 'UPDATE':
+                    privileges['update'] = 1
+                elif row.privilege_type == 'DELETE':
+                    privileges.delete = 1
 
         return privileges
 
@@ -71,10 +77,10 @@ class Table:
 
         return self.cache.foreign_keys[key]
 
-    def get_fields(self, config=None):
+    def get_fields(self):
         """Return all fields of table"""
         if not self.cache.get('fields', None):
-            self.init_fields(config)
+            self.init_fields()
 
         return self.cache.fields
 
@@ -82,9 +88,14 @@ class Table:
     def get_primary_key(self):
         """Return primary key of table"""
         cursor = self.db.cnxn.cursor()
-        pkeys = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
-                                   schema=self.db.schema)
-        return [row.column_name.lower() for row in pkeys]
+        pkeys_cursor = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
+                                          schema=self.db.schema)
+        pkeys = [row.column_name.lower() for row in pkeys_cursor]
+
+        if (len(pkeys) == 0 and self.db.system == 'sqlite'):
+            return ['rowid']
+
+        return pkeys
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
@@ -241,28 +252,32 @@ class Table:
 
         return cols
 
-    def init_fields(self, config=None):
+    def init_fields(self):
         """Store Dict of fields in table object"""
-        if (self.db.metadata.get("cache", None) and not config):
+        if (self.db.metadata.get("cache", None) and not self.db.config):
             self.cache.fields = self.db.metadata.cache.tables[self.name].fields
             return
         fields = Dict()
         indexes = self.get_indexes()
+        pkey = self.get_primary_key()
         cols = self.get_columns()
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
+            # Strip column size from type_name for sqlite
+            col.type_name = col.type_name.split('(')[0]
             if ('column_size' in col or 'display_size' in col):
                 col.column_size = col.get('column_size', col.display_size)
             cname = col.column_name
 
             column = Column(self, cname)
-            fields[cname] = column.get_field(col)
+            field = column.get_field(col)
+            fields[cname] = field
 
-            if config:
+            if self.db.config and not self.db.config.urd_structure:
                 # Find if column is (largely) empty
 
-                threshold = int(config.threshold)/100
+                threshold = int(self.db.config.threshold)/100
 
                 sql = f"""
                 select count(*) from {self.name}
@@ -273,6 +288,40 @@ class Table:
                 count = cursor.execute(sql).fetchval()
                 if (self.rowcount and count/self.rowcount < threshold):
                     fields[cname].hidden = True
+
+                # Find if a value value is used very frequently, using threshold
+                #
+                if not col.size:
+                    print('col', col)
+                    print('field', field)
+
+                repeat = True
+                while repeat:
+                    if self.rowcount < 2:
+                        break
+                    if field.datatype not in ['integer', 'decimal', 'float', 'boolean', 'string']:
+                        break
+                    if (field.datatype == 'string' and (field.size > 12 and count/self.rowcount < threshold)):
+                        break
+                    if count == 0:
+                        break
+                    if cname in pkey:
+                        break
+
+                    repeat = False
+
+                    sql = f"""
+                    select count(*) as count, {cname} as value
+                    from {self.name}
+                    group by {cname}
+                    """
+
+                    distincts = cursor.execute(sql).fetchall()
+
+                    for distinct in distincts:
+                        if distinct.count/self.rowcount > (1 - threshold):
+                            fields[cname].hidden = True
+
 
         updated_idx = indexes.get(self.name + "_updated_idx", None)
         if updated_idx:
@@ -481,6 +530,7 @@ class Grid:
 
         data = Dict({
             'name': self.tbl.name,
+            'type' : self.tbl.type_,
             'records': recs,
             'count_records': self.get_rowcount(),
             'fields': fields,
@@ -671,7 +721,7 @@ class Grid:
         cols = []
         fields = self.tbl.get_fields()
         for key in selects.keys():
-            if key in fields and 'source' not in fields[key]:
+            if (key in fields or key == 'rowid') and 'source' not in fields[key]:
                 cols.append(self.tbl.name + '.' + key)
 
         select = ', '.join(cols)
@@ -1064,28 +1114,17 @@ class Grid:
 
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_primary_key()
-                rel.label = rel_table.name.replace(self.tbl.name + '_', '')
-                rel_fkeys = rel_table.get_fkeys()
 
                 if set(rel_pkey) > set(rel.foreign):
                     # Set order priority
                     rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])
 
-                    # If foreign key is part of primary key, and the other
-                    # pk field is also a foreign key, we have a xref table
-                    rest = [col for col in rel_pkey if col not in rel.foreign]
-                    pk_field = list(rest)[-1]
-                    if (pk_field in rel_fkeys and rel_fkeys[pk_field].foreign != rel_pkey):
-                        rel.type_ = 'xref'
-                        rel.order = 5 + rel.order
-                        # rel.label = pk_field
-                        # rest = [col for col in rest if col not in rel_fkeys[pk_field].foreign]
-                        # if len(rest):
-                            # rel.label += " (" + self.db.get_label(rest[-1]).lower() + ")"
+                rel.label = self.db.get_label(rel_table.name
+                             .replace(self.tbl.name + '_', '')
+                             .replace('_' + self.tbl.name, ''))
 
-                rel.label = rel.label.replace('_' + self.tbl.name, '')
-                rel.label = self.db.get_label(rel.label).strip()
-                if (rel.get('type_', None) != 'xref' and rel.foreign[-1] != self.tbl.name):
+                # Add name of foreign key column if other than name of reference table
+                if rel.foreign[-1] not in self.tbl.name:
                     rel.label += " (" + self.db.get_label(rel.foreign[-1]).lower() + ")"
             else:
                 rel.hidden = True

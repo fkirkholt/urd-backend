@@ -34,7 +34,8 @@ class Column:
         elif self.name in foreign_keys:
             element = 'select'
             options = []
-        elif type_ == 'binary' or (type_ == 'string' and (col.column_size > 255)):
+        elif type_ == 'binary' or (type_ == 'string' and (
+                col.column_size == 0 or col.column_size > 255)):
             element = "textarea"
         else:
             element = "input[type=text]"
@@ -76,7 +77,7 @@ class Column:
                         # Only last pk column is used in display value,
                         # other pk columns are usually foreign keys
                         cols = [self.name+"."+col for col in index.columns if col not in ref_pk[0:-1]]
-                        field.view = " || ' - ' || ".join(cols)
+                        field.view = " || ', ' || ".join(cols)
                         if index.name.endswith("_sort_idx"):
                             break
 
@@ -86,7 +87,7 @@ class Column:
         if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
             field.extra = "auto_increment"
 
-        if col.column_def and not col.auto_increment:
+        if col.column_def and not col.auto_increment and col.column_def != 'NULL':
             def_vals = col.column_def.split('::')
             default = def_vals[0]
             default = default.replace("'", "")

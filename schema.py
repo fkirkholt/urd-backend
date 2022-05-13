@@ -6,7 +6,7 @@ class Schema:
         self.name = name
 
     def update(self, dbo, config):
-        config = Dict(config)
+        dbo.config = Dict(config)
 
-        self.tables = dbo.get_tables(config)
-        dbo.get_contents(config)
+        self.tables = dbo.get_tables()
+        dbo.get_contents()

@@ -76,7 +76,9 @@ class Expression:
             elif type_ == "binary":
                 return "bytea"
         elif self.platform == 'oracle':
-            if type_ == "string":
+            if (type_ == "string" and size > 4000):
+                return "clob"
+            elif type_ == "string":
                 return "varchar(" + str(size) + ")"
             elif (type_ == "integer" and size > 11):
                 return "number(" + str(size) + ", 0)"

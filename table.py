@@ -528,6 +528,11 @@ class Grid:
             class_ = " ".join(classes)
             recs[idx]['class'] = class_
 
+        actions = self.get_actions()
+
+        if "vis_fil" in actions:
+            grid_columns.append("actions.vis_fil")
+
         data = Dict({
             'name': self.tbl.name,
             'type' : self.tbl.type_,
@@ -545,7 +550,7 @@ class Grid:
             'primary_key': pkey,
             'foreign_keys': self.tbl.get_fkeys(),
             'label': self.db.get_label(self.tbl.name),
-            'actions': getattr(self, 'actions', []),
+            'actions': actions,
             'limit': self.tbl.limit,
             'offset': self.tbl.offset,
             'selection': self.get_selected_idx(pkey_vals, selects),
@@ -647,6 +652,27 @@ class Grid:
 
         return ident_col
 
+    def get_actions(self):
+        # Make action for displaying files
+        filepath_idx = self.tbl.name + '_file_path_idx'
+        indexes = self.tbl.get_indexes()
+        filepath_idx = indexes.get(self.tbl.name.lower() + "_filepath_idx", None)
+        actions = Dict()
+        if filepath_idx:
+            last_col = filepath_idx.columns[-1]
+
+            action = Dict({
+                'label': "Vis fil", # todo: tillat engelsk
+                'url': "/file",
+                'icon': "external-link",
+                'communication': "download",
+                # 'disabled': f"({last_col} is null"
+                'disabled': False
+            })
+
+            actions.vis_fil = action # todo: tillat engelsk
+
+        return actions
 
     def get_grid_columns(self):
         """Return columns belonging to grid"""

@@ -254,3 +254,8 @@ def export_sql(base: str, table: str, dialect: str):
     response.headers["Content-Disposition"] = f"attachment; filename={table.name}.sql"
 
     return response
+
+@app.get('/file')
+def get_file(base: str, table: str, primary_key: str):
+    pkey = json.loads(primary_key)
+    print('pkey', pkey)

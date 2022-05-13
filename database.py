@@ -180,7 +180,7 @@ class Database:
         cursor = self.cnxn.cursor()
 
         if not sql:
-            privilege.create = 0
+            privilege.create = 1
         else:
             priv = cursor.execute(sql, self.schema or self.cat).fetchone()
             privilege.create = int(priv.create)

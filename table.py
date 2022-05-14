@@ -218,11 +218,17 @@ class Table:
             return
         cursor = self.db.cnxn.cursor()
         keys = Dict()
+        fk_nbr = 0
 
         for row in cursor.foreignKeys(foreignTable=self.name,
                                       foreignCatalog=self.db.cat,
                                       foreignSchema=self.db.schema):
-            name = row.fk_name
+            if not row.fk_name:
+                if row.key_seq == 1:
+                    fk_nbr += 1
+                    name = self.name + '_fk' + str(fk_nbr)
+            else:
+                name = row.fk_name
             if name not in keys:
                 keys[name] = Dict({
                     'name': name,

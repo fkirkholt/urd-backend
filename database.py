@@ -62,7 +62,12 @@ class Connection:
         """Get ODBC driver"""
         drivers = [d for d in pyodbc.drivers() if self.system in d.lower()]
 
-        return drivers[0]
+        try:
+            return drivers[0]
+        except IndexError:
+            raise HTTPException(
+                status_code=501, detail=self.system + " ODBC driver missing"
+            )
 
     def get_databases(self):
         """Get all databases in database system"""

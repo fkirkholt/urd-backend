@@ -92,7 +92,7 @@ class Table:
                                           schema=self.db.schema)
         pkeys = [row.column_name for row in pkeys_cursor]
 
-        if (len(pkeys) == 0 and self.db.system == 'sqlite'):
+        if (len(pkeys) == 0 and self.db.system == 'sqlite3'):
             return ['rowid']
 
         return pkeys
@@ -270,7 +270,7 @@ class Table:
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
-            # Strip column size from type_name for sqlite
+            # Strip column size from type_name for sqlite3
             col.type_name = col.type_name.split('(')[0]
             if ('column_size' in col or 'display_size' in col):
                 col.column_size = col.get('column_size', col.display_size)
@@ -735,7 +735,7 @@ class Grid:
                 order_by += f"isnull({sort.field}), {sort.field} {sort.order}, "
             elif self.db.cnxn.system in ['oracle', 'postgres']:
                 order_by += f"{sort.field} {sort.order}, "
-            elif self.db.cnxn.system == 'sqlite':
+            elif self.db.cnxn.system == 'sqlite3':
                 order_by += f"{sort.field} is null, {sort.field} {sort.order}, "
 
         for field in pkey:

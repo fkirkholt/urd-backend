@@ -90,7 +90,7 @@ def login(response: Response, system: str, server: str, username: str, password:
         "pwd": password,
         "timestamp": timestamp
     }, cfg.secret_key)
-    cfg.timeout = None if cfg.db_system == 'sqlite' else cfg.timeout
+    cfg.timeout = None if cfg.db_system == 'sqlite3' else cfg.timeout
     response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return {"success": True}
 
@@ -102,10 +102,10 @@ def logout(response: Response):
 @app.get("/dblist")
 def dblist():
     result = []
-    if cfg.db_system == 'sqlite':
+    if cfg.db_system == 'sqlite3':
         file_list = os.listdir(cfg.db_server)
         for filename in file_list:
-            if os.path.splitext(filename)[1] not in ('.db', '.sqlite'):
+            if os.path.splitext(filename)[1] not in ('.db', '.sqlite3'):
                 continue
             base = Dict()
             base.columns.name = filename

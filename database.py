@@ -241,6 +241,9 @@ class Database:
         for tbl in rows:
             tbl_name = tbl.table_name
 
+            if tbl_name == 'sqlite_sequence':
+                continue
+
             if tbl_name not in self.user_tables:
                 continue
 

@@ -162,7 +162,7 @@ async def get_table(request: Request):
 
 @app.get("/record")
 def get_record(base: str, table: str, primary_key: str, schema: str = None):
-    cnxn = Connection(cfg, base) #TODO
+    cnxn = Connection(cfg, base)
     if cnxn.system == 'postgres' and schema:
         base_path = base + '.' + schema
     else:
@@ -175,7 +175,7 @@ def get_record(base: str, table: str, primary_key: str, schema: str = None):
 
 @app.get("/children")
 def get_children(base: str, table: str, primary_key: str):
-    cnxn = Connection(cfg, base) #TODO
+    cnxn = Connection(cfg, base)
     base_path = base or schema
     dbo = Database(cnxn, base_path)
     tbl = Table(dbo, table)
@@ -187,7 +187,7 @@ def get_children(base: str, table: str, primary_key: str):
 
 @app.get("/relations")
 def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None, types: str = None):
-    cnxn = Connection(cfg, base) #TODO
+    cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)
     pk = json.loads(primary_key)
@@ -204,7 +204,7 @@ def get_relations(base: str, table: str, primary_key: str, count: bool, alias: s
 async def save_table(request: Request):
     req = await request.json()
     base = req['base_name']
-    cnxn = Connection(cfg, base) #TODO
+    cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     tbl = Table(dbo, req['table_name'])
     return {'data': tbl.save(req['records'])}
@@ -214,7 +214,7 @@ async def get_select(request: Request):
     # todo: skal ikke behøve alias
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(cfg, req.base) #TODO
+    cnxn = Connection(cfg, req.base)
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
     if 'key' in req:
@@ -237,7 +237,7 @@ async def update_schema(request: Request):
     req = await request.json()
     base = req['base']
     config = Dict(json.loads(req['config']))
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     schema_name = dbo.schema
     schema = Schema(schema_name)
@@ -247,7 +247,8 @@ async def update_schema(request: Request):
 
 @app.get('/table_sql')
 def export_sql(base: str, table: str, dialect: str):
-    cnxn = Connection(cfg.db_system, cfg.db_server, cfg.db_uid, cfg.db_pwd, base) #TODO
+    # Fiks alle slike connections
+    cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     table = Table(dbo, table)
     ddl = table.export_ddl(dialect)

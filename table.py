@@ -536,9 +536,6 @@ class Grid:
 
         actions = self.get_actions()
 
-        if "vis_fil" in actions:
-            grid_columns.append("actions.vis_fil")
-
         data = Dict({
             'name': self.tbl.name,
             'type' : self.tbl.type_,
@@ -548,7 +545,8 @@ class Grid:
             'grid': {
                 'columns': grid_columns,
                 'sums': self.get_sums(),
-                'sort_columns': self.sort_columns
+                'sort_columns': self.sort_columns,
+                'actions': ["show_file"] if "show_file" in actions else []
             },
             'form': self.get_form(),
             'privilege': self.tbl.user_privileges(),
@@ -660,7 +658,6 @@ class Grid:
 
     def get_actions(self):
         # Make action for displaying files
-        filepath_idx = self.tbl.name + '_file_path_idx'
         indexes = self.tbl.get_indexes()
         filepath_idx = indexes.get(self.tbl.name.lower() + "_filepath_idx", None)
         actions = Dict()
@@ -668,7 +665,7 @@ class Grid:
             last_col = filepath_idx.columns[-1]
 
             action = Dict({
-                'label': "Vis fil", # todo: tillat engelsk
+                'label': self.db.get_label('show_file'),
                 'url': "/file",
                 'icon': "external-link",
                 'communication': "download",
@@ -676,7 +673,7 @@ class Grid:
                 'disabled': False
             })
 
-            actions.vis_fil = action # todo: tillat engelsk
+            actions.show_file = action # todo: tillat engelsk
 
         return actions
 

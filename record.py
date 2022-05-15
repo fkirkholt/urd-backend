@@ -1,3 +1,4 @@
+import os
 from database import Database
 from column import Column
 import re
@@ -414,7 +415,24 @@ class Record:
         relation = grid.get()
 
         return relation['records']
-    
+
+    def get_file_path(self):
+        indexes = self.tbl.get_indexes()
+        filepath_idx = indexes.get(self.tbl.name.lower() + "_filepath_idx", None)
+        select = " || '/' || ".join(filepath_idx.columns)
+        conds = [f"{key} = ?" for key in self.pk]
+        cond = " and ".join(conds)
+
+        sql = f"""
+        select {select} as path from {self.db.schema or self.db.cat}.{self.tbl.name}\n
+        where {cond}
+        """
+        cursor = self.db.cnxn.cursor()
+        row = cursor.execute(sql, list(self.pk.values())).fetchone()
+
+        return os.path.normpath(row.path)
+
+
     def insert(self, values):
         fields = self.tbl.get_fields()
 
@@ -532,7 +550,3 @@ class Record:
         result = self.db.query(sql, list(self.pk.values())).commit()
 
         return result
-
-    # todo: def get_file_path
-
-

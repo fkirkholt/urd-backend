@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Request, Response, Form
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseSettings
 import io
+import urllib.parse
 from schema import Schema
 from database import Database, Connection
 from table import Table, Grid
@@ -257,5 +258,12 @@ def export_sql(base: str, table: str, dialect: str):
 
 @app.get('/file')
 def get_file(base: str, table: str, primary_key: str):
-    pkey = json.loads(primary_key)
-    print('pkey', pkey)
+    pkey = json.loads(urllib.parse.unquote(primary_key))
+    cnxn = Connection(cfg, base)
+    dbo = Database(cnxn, base)
+    tbl = Table(dbo, table)
+    rec = Record(dbo, tbl, pkey)
+    path = rec.get_file_path()
+    os.chdir(cfg.db_server)
+
+    return FileResponse(path)

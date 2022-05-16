@@ -488,6 +488,16 @@ class Grid:
             if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
                 self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
 
+        actions = self.get_actions()
+
+        if actions:
+            for key, action in actions.items():
+                if not action.disabled:
+                    continue
+                if isinstance(action.disabled, bool):
+                    continue
+                selects[key] = action.disabled
+
         values = self.get_values(selects)
 
         if (self.tbl.name + '_grid') in user_tables:
@@ -533,8 +543,6 @@ class Grid:
                     classes.append(row_formats.formats[id_]['class'])
             class_ = " ".join(classes)
             recs[idx]['class'] = class_
-
-        actions = self.get_actions()
 
         data = Dict({
             'name': self.tbl.name,
@@ -669,11 +677,10 @@ class Grid:
                 'url': "/file",
                 'icon': "external-link",
                 'communication': "download",
-                # 'disabled': f"({last_col} is null"
-                'disabled': False
+                'disabled': f"({last_col} is null)",
             })
 
-            actions.show_file = action # todo: tillat engelsk
+            actions.show_file = action
 
         return actions
 

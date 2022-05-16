@@ -40,17 +40,12 @@ async def check_login(request: Request, call_next):
     now = time.time()
     if session:
         payload = jwt.decode(session, cfg.secret_key)
-        if (cfg.timeout is None or ('uid' in payload and (payload["timestamp"] + cfg.timeout) > now)):
-            cfg.db_system = payload["system"]
-            cfg.db_server = payload["server"]
-            cfg.db_uid = payload["uid"]
-            cfg.db_pwd = payload["pwd"]
-            cfg.db_name = payload["database"]
-    else:
-        cfg.db_uid = None
-        cfg.db_pwd = None
-
-    if (cfg.db_uid is None and request.url.path != "/" and request.url.path != "/login" and not request.url.path.startswith('/static')):
+        cfg.db_system = payload["system"]
+        cfg.db_server = payload["server"]
+        cfg.db_uid = payload["uid"]
+        cfg.db_pwd = payload["pwd"]
+        cfg.db_name = payload["database"]
+    elif (request.url.path not in ("/login", "/") and not request.url.path.startswith('/static')):
         return JSONResponse(content={
             "message": "login"
         }, status_code=401)

@@ -134,13 +134,13 @@ class Expression:
                 return "integer"
             elif type_ in ["numeric", "decimal"]:
                 return "decimal"
-            elif type_ in ["float8"]:
+            elif type_ in ["float", "float8"]:
                 return "float"
             elif type_ == "blob":
                 return "binary"
             elif type_ in ["date", "timestamp"]:
                 return "date"
-            elif type_ in ["bool"]:
+            elif type_ in ["bool", "boolean"]:
                 return "boolean"
             elif type_ in ["json", "jsonb"]:
                 return "json"

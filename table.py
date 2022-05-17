@@ -378,12 +378,22 @@ class Table:
             return
         cursor = self.db.cnxn.cursor()
         relations = Dict()
+        fktable_name = None
 
         for row in cursor.foreignKeys(table=self.name, catalog=self.db.cat,
                                       schema=self.db.schema):
             delete_rules = ["cascade", "restrict", "set null", "no action",
                             "set default"]
-            name = row.fk_name
+            if (fktable_name != row.fktable_name):
+                fktable_name = row.fktable_name
+                fk_nbr = 0
+            if not row.fk_name:
+                if row.key_seq == 1:
+                    fk_nbr += 1
+                    name = row.fktable_name + '_fk' + str(fk_nbr)
+            else:
+                name = row.fk_name
+
             if name not in relations:
                 relations[name] = Dict({
                     'name': name,

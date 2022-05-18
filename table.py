@@ -711,6 +711,8 @@ class Grid:
                     continue
                 if field.size and field.size >= 255:
                     continue
+                if field.datatype == 'json':
+                    continue
                 if ([field.name] == pkey and field.datatype == "integer"
                     and field.name not in fkeys
                     and hidden is False):

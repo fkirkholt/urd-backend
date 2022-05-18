@@ -233,6 +233,27 @@ class Database:
         cursor = self.cnxn.cursor()
         tables = Dict()
 
+        if (self.config and not 'cache' in self.metadata):
+            sql = """
+                CREATE TABLE _meta_data (
+                _name varchar(30) NOT NULL,
+                label varchar(30),
+                description text,
+                cache json,
+                PRIMARY KEY (_name)
+            );
+            """
+            cursor.execute(sql)
+            label = self.get_label(self.name)
+
+            sql = f"""
+                insert into _meta_data (_name, label)
+                values('{self.name}', '{label}')
+            """
+            cursor.execute(sql)
+            self.metadata.cache = None
+            self.user_tables.append('_meta_data')
+
         start = time.time()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
         end = time.time()
@@ -283,8 +304,7 @@ class Database:
                 'relations': self.get_relations(tbl_name),
                 'hidden': hidden,
                 # fields are needed only when creating cache
-                'fields': None if ('cache' not in self.metadata and not self.config)
-                           else table.fields,
+                'fields': None if not self.config else table.fields,
             })
 
         self.tables = tables

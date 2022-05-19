@@ -158,7 +158,7 @@ class Table:
         for fkey in self.get_relations().values():
             relations[fkey.name] = Dict({
                 'table': fkey.table,
-                'foreign_key': fkey.foreign[-1]
+                'foreign_key': fkey.name
             })
 
         return relations
@@ -243,6 +243,9 @@ class Table:
             keys[name].foreign.append(row.fkcolumn_name)
             keys[name].primary.append(row.pkcolumn_name)
 
+            if (self.db.system == 'sqlite3'):
+                keys[name].schema = 'main'
+
         self.cache.foreign_keys = keys
 
     def get_columns(self):
@@ -296,11 +299,6 @@ class Table:
                     fields[cname].hidden = True
 
                 # Find if a value value is used very frequently, using threshold
-                #
-                if not col.size:
-                    print('col', col)
-                    print('field', field)
-
                 repeat = True
                 while repeat:
                     if self.rowcount < 2:

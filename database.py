@@ -553,11 +553,11 @@ class Database:
             else:
                 label = self.get_label(group_name)
 
-                contents[label] = {
+                contents[label] = Dict({
                     'class_label': "b",
                     'class_content': "ml3",
                     'subitems': table_names
-                }
+                })
 
         if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()

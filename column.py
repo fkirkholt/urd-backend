@@ -1,5 +1,16 @@
 import json
+import time
 from addict import Dict
+
+def measure_time(func):
+    def wrapper(*arg):
+        t = time.time()
+        res = func(*arg)
+        if (time.time()-t) > 1:
+            print("Time in", func.__name__,  str(time.time()-t), "seconds")
+        return res
+
+    return wrapper
 
 class Column:
     def __init__(self, tbl, name):
@@ -7,6 +18,7 @@ class Column:
         self.tbl = tbl
         self.name = name
 
+    @measure_time
     def get_field(self, col):
         from table import Table
         type_ = self.db.expr.to_urd_type(col.type_name)
@@ -83,7 +95,7 @@ class Column:
 
                 if 'column_view' not in field and 'view' in field:
                     field.column_view = field.view
-                field.options = self.get_options(field)
+
         if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
             field.extra = "auto_increment"
 
@@ -100,6 +112,7 @@ class Column:
 
         return field
 
+    @measure_time
     def get_options(self, field, fields=None):
         from database import Database
         from table import Table, Grid
@@ -156,13 +169,12 @@ class Column:
         condition = "where " + " AND ".join(conditions) if len(conditions) else ''
 
         # Count records
-        cursor = self.db.cnxn.cursor()
 
         sql = "select count(*)\n"
         sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition
 
-        count = cursor.execute(sql, params).fetchval()
+        count = self.db.query(sql, params).fetchval()
 
         if (count > 200):
             return False
@@ -173,7 +185,7 @@ class Column:
         sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
         sql+= condition + "\n" + order
 
-        rows = cursor.execute(sql, params).fetchall()
+        rows = self.db.query(sql, params).fetchall()
 
         result = []
         colnames = [column[0] for column in cursor.description]
@@ -182,6 +194,7 @@ class Column:
 
         return result
 
+    @measure_time
     def get_select(self, req):
         #TODO: Kan jeg ikke hente noe fra backend istenfor å få alt servert fra frontend? Altfor mange parametre!
         search = None if not 'q' in req else req.q.replace("*", "%")
@@ -220,3 +233,48 @@ class Column:
             result.append({'value': row.value, 'label': row.label})
 
         return result
+
+    @measure_time
+    def check_use(self):
+        """Check ratio of columns that's not null"""
+        if not self.tbl.rowcount:
+            return 0
+
+        limit = self.db.config.limit or 1000
+
+        sql = f"""
+        select count(*) from (
+            select * from {self.tbl.name} limit {limit}
+        ) t1
+        where {self.name} is not null
+        """
+
+        count = self.db.query(sql).fetchval()
+
+        rowcount = limit if (self.tbl.rowcount > limit) else self.tbl.rowcount
+        use = count/rowcount
+
+        return use
+
+    @measure_time
+    def check_frequency(self):
+        """Check if one value is used much more than others"""
+        if not self.tbl.rowcount:
+            return 0
+
+        limit = self.db.config.limit or 1000
+
+        sql = f"""
+        select max(count) from (
+            select count(*) as count, {self.name} as value
+            from (select * from {self.tbl.name} limit {limit}) t1
+            group by {self.name}
+        ) t2
+        """
+
+        max_in_group = self.db.query(sql).fetchval()
+
+        rowcount = limit if (self.tbl.rowcount > limit) else self.tbl.rowcount
+        frequency = max_in_group/rowcount
+
+        return frequency

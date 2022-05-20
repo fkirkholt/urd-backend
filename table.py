@@ -1,10 +1,21 @@
 """Module for handling tables"""
 import re
 import math
+import time
 from addict import Dict
 from record import Record
 from column import Column
 from expression import Expression
+
+def measure_time(func):
+    def wrapper(*arg):
+        t = time.time()
+        res = func(*arg)
+        if (time.time()-t) > 1:
+            print("Time in", func.__name__,  str(time.time()-t), "seconds")
+        return res
+
+    return wrapper
 
 class Table:
     """Contains methods for getting metadata for table"""
@@ -41,6 +52,16 @@ class Table:
                     privileges.delete = 1
 
         return privileges
+
+    @measure_time
+    def count_rows(self):
+        if self.db.system == 'sqlite3':
+            # select count(*) is slow in sqlite
+            # rowid should give correct result if rows are not deleted
+            sql = f"select max(rowid) from {self.name}"
+        else:
+            sql = f"select count(*) from {self.name}"
+        return self.db.query(sql).fetchval()
 
     def is_hidden(self):
         """Decide if this is a hidden table"""
@@ -85,6 +106,7 @@ class Table:
         return self.cache.fields
 
 
+    @measure_time
     def get_primary_key(self):
         """Return primary key of table"""
         cursor = self.db.cnxn.cursor()
@@ -211,6 +233,7 @@ class Table:
 
         return result
 
+    @measure_time
     def init_foreign_keys(self):
         """Store foreign keys in table object"""
         if self.db.metadata.get("cache", None):
@@ -223,6 +246,9 @@ class Table:
         for row in cursor.foreignKeys(foreignTable=self.name,
                                       foreignCatalog=self.db.cat,
                                       foreignSchema=self.db.schema):
+            if row.pktable_name not in self.db.user_tables:
+                continue
+
             if not row.fk_name:
                 if row.key_seq == 1:
                     fk_nbr += 1
@@ -248,6 +274,7 @@ class Table:
 
         self.cache.foreign_keys = keys
 
+    @measure_time
     def get_columns(self):
         """ Return all columns in table by reflection """
         cursor = self.db.cnxn.cursor()
@@ -261,6 +288,7 @@ class Table:
 
         return cols
 
+    @measure_time
     def init_fields(self):
         """Store Dict of fields in table object"""
         if (self.db.metadata.get("cache", None) and not self.db.config):
@@ -270,6 +298,8 @@ class Table:
         indexes = self.get_indexes()
         pkey = self.get_primary_key()
         cols = self.get_columns()
+        cursor = self.db.cnxn.cursor()
+
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
@@ -283,48 +313,31 @@ class Table:
             field = column.get_field(col)
             fields[cname] = field
 
-            if self.db.config and not self.db.config.urd_structure:
+            if (self.db.config and not self.db.config.urd_structure):
                 # Find if column is (largely) empty
-
                 threshold = int(self.db.config.threshold)/100
+                use = column.check_use()
 
-                sql = f"""
-                select count(*) from {self.name}
-                where {cname} is not null
-                """
-
-                cursor = self.db.cnxn.cursor()
-                count = cursor.execute(sql).fetchval()
-                if (self.rowcount and count/self.rowcount < threshold):
+                if use < threshold:
                     fields[cname].hidden = True
 
+
                 # Find if a value value is used very frequently, using threshold
-                repeat = True
-                while repeat:
-                    if self.rowcount < 2:
-                        break
-                    if field.datatype not in ['integer', 'decimal', 'float', 'boolean', 'string']:
-                        break
-                    if (field.datatype == 'string' and (field.size > 12 and count/self.rowcount < threshold)):
-                        break
-                    if count == 0:
-                        break
-                    if cname in pkey:
-                        break
+                if not self.rowcount or self.rowcount < 2:
+                    continue
+                if field.datatype not in ['integer', 'decimal', 'float', 'boolean', 'string']:
+                    continue
+                if (field.datatype == 'string' and (field.size > 12 and count/self.rowcount < threshold)):
+                    continue
+                if fields[cname].hidden:
+                    continue
+                if cname in pkey:
+                    continue
 
-                    repeat = False
+                frequency = column.check_frequency()
 
-                    sql = f"""
-                    select count(*) as count, {cname} as value
-                    from {self.name}
-                    group by {cname}
-                    """
-
-                    distincts = cursor.execute(sql).fetchall()
-
-                    for distinct in distincts:
-                        if distinct.count/self.rowcount > (1 - threshold):
-                            fields[cname].hidden = True
+                if frequency > (1 - threshold):
+                    fields[cname].hidden = True
 
 
         updated_idx = indexes.get(self.name + "_updated_idx", None)
@@ -340,6 +353,7 @@ class Table:
 
         self.cache.fields = fields
 
+    @measure_time
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
         if self.db.metadata.get("cache", None):

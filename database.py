@@ -12,7 +12,8 @@ def measure_time(func):
     def wrapper(*arg):
         t = time.time()
         res = func(*arg)
-        print("Time in", func.__name__,  str(time.time()-t), "seconds")
+        if (time.time()-t) > 1:
+            print("Time in", func.__name__,  str(time.time()-t), "seconds")
         return res
 
     return wrapper
@@ -288,7 +289,9 @@ class Database:
 
             if self.config:
                 table = Table(self, tbl_name)
-                table.rowcount = self.query(f"select * from {tbl_name}").rowcount
+                table.rowcount = table.count_rows()
+                space = ' ' * (30 - len(tbl_name))
+                print('gjennomgår tabell: ', tbl_name + space + f"({table.rowcount})")
                 table.fields = table.get_fields()
 
             tables[tbl_name] = Dict({
@@ -604,7 +607,12 @@ class Database:
     def query(self, sql, params=[]):
         """Execute sql query"""
         cursor = self.cnxn.cursor()
-        return cursor.execute(sql, params)
+        t = time.time()
+        cursor.execute(sql, params)
+        if (time.time()-t) > 1:
+            print("Query took " + str(time.time()-t) + " seconds")
+            print('query:', sql)
+        return cursor
 
     @measure_time
     def init_indexes(self):

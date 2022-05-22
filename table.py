@@ -236,7 +236,7 @@ class Table:
     @measure_time
     def init_foreign_keys(self):
         """Store foreign keys in table object"""
-        if self.db.metadata.get("cache", None):
+        if self.db.metadata.get("cache", None) and not self.db.config:
             self.cache.foreign_keys = self.db.metadata.cache.tables[self.name].foreign_keys
             return
         cursor = self.db.cnxn.cursor()
@@ -327,7 +327,7 @@ class Table:
                     continue
                 if field.datatype not in ['integer', 'decimal', 'float', 'boolean', 'string']:
                     continue
-                if (field.datatype == 'string' and (field.size > 12 and count/self.rowcount < threshold)):
+                if (field.datatype == 'string' and (field.size > 12 and use < threshold)):
                     continue
                 if fields[cname].hidden:
                     continue

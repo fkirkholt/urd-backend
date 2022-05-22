@@ -188,8 +188,8 @@ class Column:
         rows = self.db.query(sql, params).fetchall()
 
         result = []
-        colnames = [column[0] for column in cursor.description]
         for row in rows:
+            colnames = [column[0] for column in row.cursor_description]
             result.append(dict(zip(colnames, row)))
 
         return result

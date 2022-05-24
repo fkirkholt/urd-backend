@@ -327,7 +327,7 @@ class Table:
                     continue
                 if field.datatype not in ['integer', 'decimal', 'float', 'boolean', 'string']:
                     continue
-                if (field.datatype == 'string' and (field.size > 12 and count/self.rowcount < threshold)):
+                if (field.datatype == 'string' and (field.size > 12 and use < threshold)):
                     continue
                 if fields[cname].hidden:
                     continue

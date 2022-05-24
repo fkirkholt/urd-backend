@@ -236,7 +236,7 @@ class Table:
     @measure_time
     def init_foreign_keys(self):
         """Store foreign keys in table object"""
-        if self.db.metadata.get("cache", None):
+        if (self.db.metadata.get("cache", None) and not self.db.config):
             self.cache.foreign_keys = self.db.metadata.cache.tables[self.name].foreign_keys
             return
         cursor = self.db.cnxn.cursor()
@@ -259,7 +259,7 @@ class Table:
                 keys[name] = Dict({
                     'name': name,
                     'table': row.pktable_name,
-                    'base': row.pktable_cat,
+                    'base': row.pktable_cat or None,
                     'schema': row.pktable_schem,
                     'delete_rule': row.delete_rule,
                     'update_rule': row.update_rule,
@@ -410,7 +410,7 @@ class Table:
                 relations[name] = Dict({
                     'name': name,
                     'table': row.fktable_name,
-                    'base': row.fktable_cat,
+                    'base': row.fktable_cat or None,
                     'schema': row.fktable_schem,
                     'delete_rule': delete_rules[row.delete_rule],
                     'foreign': [],

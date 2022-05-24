@@ -705,7 +705,7 @@ class Database:
                     relations[key.table][key.name] = Dict({
                         "name": key.name,
                         "table": fktable_name,
-                        "base": key.base,
+                        "base": key.base or None,
                         "schema": key.schema,
                         "foreign_key": alias,
                         "delete_rule": key.delete_rule,

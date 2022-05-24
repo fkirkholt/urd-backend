@@ -81,10 +81,6 @@ class Record:
             if rel.table not in self.db.user_tables:
                 continue
 
-            tbl_rel.fields = tbl_rel.get_fields()
-            grid = Grid(tbl_rel)
-            grid2 = Grid(tbl_rel) # Used to count inherited records
-
             # Find index used
             slice_obj = slice(0, len(rel.foreign))
             rel_indexes = tbl_rel.get_indexes()
@@ -93,6 +89,13 @@ class Record:
                     rel.index = index
                     if index.unique:
                         break
+
+            if not rel.index:
+                continue
+
+            tbl_rel.fields = tbl_rel.get_fields()
+            grid = Grid(tbl_rel)
+            grid2 = Grid(tbl_rel) # Used to count inherited records
 
             # todo: filtrate on highest level
 

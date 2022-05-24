@@ -93,6 +93,11 @@ def login(response: Response, system: str, server: str, username: str, password:
 @app.get("/logout")
 def logout(response: Response):
     response.delete_cookie("session")
+    cfg.db_system = None
+    cfg.db_server = None
+    cfg.db_name = None
+    cfg.db_uid = None
+    cfg.db_pwd = None
     return {"success": True}
 
 @app.get("/dblist")

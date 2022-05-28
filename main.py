@@ -268,3 +268,16 @@ def get_file(base: str, table: str, primary_key: str):
     os.chdir(cfg.db_server)
 
     return FileResponse(path)
+
+@app.post('/convert')
+def convert(base: str, table: str, from_format: str, to_format: str, fields: str):
+    fields = json.loads(fields)
+    cnxn = Connection(cfg, base)
+    dbo = Database(cnxn, base)
+    tbl = Table(dbo, table)
+    tbl.pkey = tbl.get_primary_key()
+    for field_name in fields:
+        col = Column(tbl, field_name)
+        result = col.convert(from_format, to_format)
+
+    return {'result': result}

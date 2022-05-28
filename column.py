@@ -1,6 +1,8 @@
 import json
 import time
+import pypandoc
 from addict import Dict
+
 
 def measure_time(func):
     def wrapper(*arg):
@@ -278,3 +280,41 @@ class Column:
         frequency = max_in_group/rowcount
 
         return frequency
+
+    def convert(self, from_format, to_format):
+
+        select = ', '.join(self.tbl.pkey)
+
+        sql = f"""
+        select {select}, {self.name}
+        from {self.tbl.name}
+        """
+
+        cursor = self.db.query(sql)
+        rows = cursor.fetchall()
+        colnames = [col[0] for col in cursor.description]
+        cursor2 = self.db.cnxn.cursor()
+        for row in rows:
+            row = (dict(zip(colnames, row)))
+            wheres = []
+            params = []
+            for key in self.tbl.pkey:
+                wheres.append(key + '=?')
+                params.append(row[key])
+
+            where = ', '.join(wheres)
+
+            text = pypandoc.convert_text(row[self.name], to_format, format=from_format)
+            params.insert(0, text)
+
+            sql = f"""
+            update {self.tbl.name}
+            set {self.name} = ?
+            where {where}
+            """
+
+            result = cursor2.execute(sql, params)
+
+        cursor2.commit()
+
+        return 'success'

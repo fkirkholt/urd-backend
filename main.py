@@ -265,7 +265,7 @@ def get_file(base: str, table: str, primary_key: str):
     tbl = Table(dbo, table)
     rec = Record(dbo, tbl, pkey)
     path = rec.get_file_path()
-    os.chdir(cfg.db_server)
+    path = os.path.join(cfg.db_server, path)
 
     return FileResponse(path)
 

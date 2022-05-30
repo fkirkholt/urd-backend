@@ -676,13 +676,11 @@ class Grid:
             return None
 
         ident_col = None
-        maxlength = 0
         fields = self.tbl.get_fields()
         for colname in ident_cols:
             col = fields[colname]
             if col.datatype == 'string':
-                if col.size > maxlength:
-                    ident_col = colname
+                ident_col = colname
 
         return ident_col
 
@@ -958,10 +956,11 @@ class Grid:
                 params = []
                 for field in fields.values():
                     if field.foreign_key:
+                        view = field.name if not field.view else field.view
                         if case_sensitive:
-                            conds.append(f"{field.view} LIKE ?")
+                            conds.append(f"{view} LIKE ?")
                         else:
-                            conds.append(f"lower({field.view}) LIKE ?")
+                            conds.append(f"lower({view}) LIKE ?")
                         params.append(value)
                     elif field.datatype == "string":
                         if case_sensitive:

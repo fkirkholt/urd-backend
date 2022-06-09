@@ -185,6 +185,32 @@ class Table:
 
         return relations
 
+    def get_csv(self, columns):
+        selects = {}
+        for colname in columns:
+            selects[colname] = self.name + '.' + colname
+
+        grid = Grid(self)
+        records = grid.get_values(selects)
+
+        content = ';'.join(columns) + '\n'
+
+        for rec in records:
+            values = []
+            for col, val in rec.items():
+                if type(val) == str:
+                    val = val.replace('"', '""')
+                    val = "'" + val + "'"
+                elif val is None:
+                    val = ''
+                else:
+                    val = str(val)
+                values.append(val)
+            content += ';'.join(values) + '\n'
+
+        return content
+
+
     def save(self, records: list):
         """Save new and updated records in table"""
         from database import Database
@@ -804,7 +830,10 @@ class Grid:
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql, self.cond.params)
         cursor.skip(self.tbl.offset)
-        rows = cursor.fetchmany(self.tbl.limit)
+        if self.tbl.limit:
+            rows = cursor.fetchmany(self.tbl.limit)
+        else:
+            rows = cursor.fetchall()
 
         result = []
         colnames = [column[0] for column in cursor.description]

@@ -257,6 +257,20 @@ def export_sql(base: str, table: str, dialect: str):
 
     return response
 
+@app.get('/table_csv')
+def export_csv(base: str, table: str, fields: str):
+    cnxn = Connection(cfg, base)
+    dbo = Database(cnxn, base)
+    table = Table(dbo, table)
+    table.offset = 0
+    table.limit = None
+    columns = json.loads(urllib.parse.unquote(fields))
+    csv = table.get_csv(columns)
+    response = StreamingResponse(io.StringIO(csv), media_type="txt/csv")
+    response.headers['Content-Disposition'] = f'attachment; filename={table.name}.csv'
+
+    return response
+
 @app.get('/file')
 def get_file(base: str, table: str, primary_key: str):
     pkey = json.loads(urllib.parse.unquote(primary_key))

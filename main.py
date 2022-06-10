@@ -32,7 +32,7 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="static/html")
-mod = os.path.getmtime("static/js/bundle.js")
+mod = os.path.getmtime("static/js/dist/bundle.js")
 
 @app.middleware("http")
 async def check_login(request: Request, call_next):

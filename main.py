@@ -233,10 +233,8 @@ def dialog_schema(request: Request):
     })
 
 @app.put('/urd/update_schema')
-async def update_schema(request: Request):
-    req = await request.json()
-    base = req['base']
-    config = Dict(json.loads(req['config']))
+async def update_schema(base: str, config: str):
+    config = Dict(json.loads(config))
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     schema_name = dbo.schema

@@ -338,7 +338,7 @@ class Table:
             column = Column(self, cname)
             field = column.get_field(col)
 
-            if (self.db.config and not self.db.config.urd_structure):
+            if (self.db.config and not self.db.config.urd_structure and col.name not in pkey):
                 # Find if column is (largely) empty
                 threshold = int(self.db.config.threshold)/100
                 field.use = column.check_use()

@@ -337,15 +337,14 @@ class Table:
 
             column = Column(self, cname)
             field = column.get_field(col)
-            fields[cname] = field
 
             if (self.db.config and not self.db.config.urd_structure):
                 # Find if column is (largely) empty
                 threshold = int(self.db.config.threshold)/100
-                use = column.check_use()
+                field.use = column.check_use()
 
-                if use < threshold:
-                    fields[cname].hidden = True
+                if field.use < threshold:
+                    field.hidden = True
 
 
                 # Find if a value value is used very frequently, using threshold
@@ -355,7 +354,7 @@ class Table:
                     continue
                 if (field.datatype == 'string' and (field.size > 12 and use < threshold)):
                     continue
-                if fields[cname].hidden:
+                if field.hidden:
                     continue
                 if cname in pkey:
                     continue
@@ -363,8 +362,9 @@ class Table:
                 frequency = column.check_frequency()
 
                 if frequency > (1 - threshold):
-                    fields[cname].hidden = True
+                    field.hidden = True
 
+            fields[cname] = field
 
         updated_idx = indexes.get(self.name + "_updated_idx", None)
         if updated_idx:

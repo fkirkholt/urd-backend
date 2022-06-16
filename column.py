@@ -242,19 +242,15 @@ class Column:
         if not self.tbl.rowcount:
             return 0
 
-        limit = self.db.config.limit or 1000
-
         sql = f"""
-        select count(*) from (
-            select * from {self.tbl.name} limit {limit}
-        ) t1
-        where {self.name} is not null
+        select count(*) from {self.tbl.name}
+        where {self.name} is null
         """
 
         count = self.db.query(sql).fetchval()
 
-        rowcount = limit if (self.tbl.rowcount > limit) else self.tbl.rowcount
-        use = count/rowcount
+        rowcount = self.tbl.rowcount
+        use = (rowcount - count)/rowcount
 
         return use
 
@@ -264,20 +260,17 @@ class Column:
         if not self.tbl.rowcount:
             return 0
 
-        limit = self.db.config.limit or 1000
-
         sql = f"""
         select max(count) from (
             select count(*) as count, {self.name} as value
-            from (select * from {self.tbl.name} limit {limit}) t1
+            from {self.tbl.name}
             group by {self.name}
         ) t2
         """
 
         max_in_group = self.db.query(sql).fetchval()
 
-        rowcount = limit if (self.tbl.rowcount > limit) else self.tbl.rowcount
-        frequency = max_in_group/rowcount
+        frequency = max_in_group/self.tbl.rowcount
 
         return frequency
 

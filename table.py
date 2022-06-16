@@ -322,6 +322,9 @@ class Table:
             return
         fields = Dict()
         indexes = self.get_indexes()
+        indexed_cols = []
+        for key, index in indexes.items():
+            indexed_cols.append(index.columns[0])
         pkey = self.get_primary_key()
         cols = self.get_columns()
         cursor = self.db.cnxn.cursor()
@@ -338,7 +341,23 @@ class Table:
             column = Column(self, cname)
             field = column.get_field(col)
 
-            if (self.db.config and not self.db.config.urd_structure and col.name not in pkey):
+            if cname not in indexed_cols and col.type_name not in ['blob', 'clob', 'text']:
+                sql = f"""
+                create index {self.name}_{cname}_idx
+                on {self.name}({cname})
+                """
+
+                self.db.query(sql).commit()
+            elif cname not in indexed_cols:
+                sql = f"""
+                create index {self.name}_{cname}_is_null_idx
+                on {self.name}({cname})
+                where {cname} is null
+                """
+
+                self.db.query(sql).commit()
+
+            if (self.db.config and not self.db.config.urd_structure and cname not in pkey):
                 # Find if column is (largely) empty
                 threshold = int(self.db.config.threshold)/100
                 field.use = column.check_use()
@@ -356,13 +375,12 @@ class Table:
                     continue
                 if field.hidden:
                     continue
-                if cname in pkey:
-                    continue
 
-                frequency = column.check_frequency()
+                if col.type_name not in ['blob', 'clob', 'text']:
+                    frequency = column.check_frequency()
 
-                if frequency > (1 - threshold):
-                    field.hidden = True
+                    if frequency > (1 - threshold):
+                        field.hidden = True
 
             fields[cname] = field
 
@@ -382,7 +400,7 @@ class Table:
     @measure_time
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
-        if self.db.metadata.get("cache", None):
+        if self.db.metadata.get("cache", None) and not self.db.config:
             self.cache.indexes= self.db.metadata.cache.tables[self.name].indexes
             return
         cursor = self.db.cnxn.cursor()
@@ -411,7 +429,7 @@ class Table:
         if hasattr(self.db, 'relations'):
             self.cache.relations = self.db.relations[self.name]
             return
-        if self.db.metadata.get("cache", None):
+        if self.db.metadata.get("cache", None) and not self.db.config:
             self.cache.relations = self.db.metadata.cache.tables[self.name].relations
             return
         cursor = self.db.cnxn.cursor()

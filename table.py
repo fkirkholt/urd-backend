@@ -55,12 +55,7 @@ class Table:
 
     @measure_time
     def count_rows(self):
-        if self.db.system == 'sqlite3':
-            # select count(*) is slow in sqlite
-            # rowid should give correct result if rows are not deleted
-            sql = f"select max(rowid) from {self.name}"
-        else:
-            sql = f"select count(*) from {self.name}"
+        sql = f"select count(*) from {self.name}"
         return self.db.query(sql).fetchval()
 
     def is_hidden(self):
@@ -359,28 +354,10 @@ class Table:
                     self.db.query(sql).commit()
 
                 # Find if column is (largely) empty
-                threshold = int(self.db.config.threshold)/100
                 field.use = column.check_use()
 
-                if field.use < threshold:
-                    field.hidden = True
-
-
-                # Find if a value value is used very frequently, using threshold
-                if not self.rowcount or self.rowcount < 2:
-                    continue
-                if field.datatype not in ['integer', 'decimal', 'float', 'boolean', 'string']:
-                    continue
-                if (field.datatype == 'string' and (field.size > 12 and use < threshold)):
-                    continue
-                if field.hidden:
-                    continue
-
                 if col.type_name not in ['blob', 'clob', 'text']:
-                    frequency = column.check_frequency()
-
-                    if frequency > (1 - threshold):
-                        field.hidden = True
+                    field.frequency = column.check_frequency()
 
             fields[cname] = field
 

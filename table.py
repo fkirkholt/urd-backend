@@ -341,23 +341,23 @@ class Table:
             column = Column(self, cname)
             field = column.get_field(col)
 
-            if cname not in indexed_cols and col.type_name not in ['blob', 'clob', 'text']:
-                sql = f"""
-                create index {self.name}_{cname}_idx
-                on {self.name}({cname})
-                """
-
-                self.db.query(sql).commit()
-            elif cname not in indexed_cols:
-                sql = f"""
-                create index {self.name}_{cname}_is_null_idx
-                on {self.name}({cname})
-                where {cname} is null
-                """
-
-                self.db.query(sql).commit()
-
             if (self.db.config and not self.db.config.urd_structure and cname not in pkey):
+                if cname not in indexed_cols and col.type_name not in ['blob', 'clob', 'text']:
+                    sql = f"""
+                    create index {self.name}_{cname}_idx
+                    on {self.name}({cname})
+                    """
+
+                    self.db.query(sql).commit()
+                elif cname not in indexed_cols:
+                    sql = f"""
+                    create index {self.name}_{cname}_is_null_idx
+                    on {self.name}({cname})
+                    where {cname} is null
+                    """
+
+                    self.db.query(sql).commit()
+
                 # Find if column is (largely) empty
                 threshold = int(self.db.config.threshold)/100
                 field.use = column.check_use()

@@ -293,18 +293,19 @@ class Database:
                 space = ' ' * (30 - len(tbl_name))
                 print('gjennomgår tabell: ', tbl_name + space + f"({table.rowcount})")
                 table.fields = table.get_fields()
+                table.relations = table.get_relations()
 
             tables[tbl_name] = Dict({
                 'name': tbl_name,
                 'type': tbl_type,
                 'icon': None,
                 'label': self.get_label(tbl_name),
-                'rowcount': None if not self.config.count_rows else table.rowcount,
+                'rowcount': None if self.config.column_use else table.rowcount,
                 'primary_key': self.get_pkey(tbl_name),
                 'description': tbl.remarks,
                 'indexes': self.get_indexes(tbl_name),
                 'foreign_keys': self.get_foreign_keys(tbl_name),
-                'relations': self.get_relations(tbl_name),
+                'relations': self.get_relations(tbl_name) if not self.config else table.relations,
                 'hidden': hidden,
                 # fields are needed only when creating cache
                 'fields': None if not self.config else table.fields,

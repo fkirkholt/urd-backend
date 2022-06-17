@@ -175,7 +175,8 @@ class Table:
         for fkey in self.get_relations().values():
             relations[fkey.name] = Dict({
                 'table': fkey.table,
-                'foreign_key': fkey.name
+                'foreign_key': fkey.name,
+                'use': fkey.use
             })
 
         return relations
@@ -336,7 +337,7 @@ class Table:
             column = Column(self, cname)
             field = column.get_field(col)
 
-            if (self.db.config and not self.db.config.urd_structure and cname not in pkey):
+            if (self.db.config and self.db.config.column_use and cname not in pkey):
                 if cname not in indexed_cols and col.type_name not in ['blob', 'clob', 'text']:
                     sql = f"""
                     create index {self.name}_{cname}_idx
@@ -440,6 +441,20 @@ class Table:
 
             relations[name].foreign.append(row.fkcolumn_name)
             relations[name].primary.append(row.pkcolumn_name)
+
+        # find how much the relation is used
+        if self.db.config.column_use:
+            for name, relation in relations.items():
+                fkey_col = relation.foreign[-1]
+
+                sql = f"""
+                select count(distinct({fkey_col})) from {relation.table}
+                """
+
+                count = self.db.query(sql).fetchval()
+
+                relations[name].use = count/self.rowcount
+
 
         self.cache.relations = relations
 

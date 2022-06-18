@@ -60,7 +60,7 @@ class Column:
             'element': element,
             'nullable': col.nullable == True,
             'label': self.db.get_label(self.name),
-            'description': self.db.get_description(self.name)
+            'attrs': self.db.get_attributes(self.tbl.name, self.name)
         })
 
         for fkey in foreign_keys.values():

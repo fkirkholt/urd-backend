@@ -7,6 +7,7 @@ from starlette import status
 import simplejson as json
 from addict import Dict
 from expression import Expression
+from ruamel.yaml import YAML
 
 def measure_time(func):
     def wrapper(*arg):
@@ -455,14 +456,18 @@ class Database:
 
         return label
 
-    def get_description(self, term):
+    def get_attributes(self, table_name, term):
         """Get description based on term"""
         terms = self.get_terms()
-        description = None
-        if term in terms:
-            description = terms[term].description
+        column_ref = table_name + '.' + term
+        attributes = None
+        yaml = YAML()
+        if column_ref in terms:
+            attributes = yaml.load(terms[column_ref].attributes)
+        elif term in terms:
+            attributes = yaml.load(terms[term].attributes)
 
-        return description
+        return attributes
 
     def get_content_node(self, tbl_name):
         """Return a node in the content list, based on a table"""

@@ -301,7 +301,7 @@ class Database:
                 'type': tbl_type,
                 'icon': None,
                 'label': self.get_label(tbl_name),
-                'rowcount': None if self.config.column_use else table.rowcount,
+                'rowcount': None if not self.config else table.rowcount,
                 'primary_key': self.get_pkey(tbl_name),
                 'description': tbl.remarks,
                 'indexes': self.get_indexes(tbl_name),

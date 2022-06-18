@@ -578,18 +578,20 @@ class Grid:
 
         recs = []
         for row in display_values:
+            cols = {k: {'text': text} for k, text in row.items()}
             if 'count_children' in row:
                 recs.append({
                     'count_children': row['count_children'],
-                    'columns': row
+                    'columns': cols
                 })
                 del row['count_children']
             else:
-                recs.append({'columns': row})
+                recs.append({'columns': cols})
 
 
         for index, row in enumerate(values):
-            recs[index]['values'] = row
+            for col, val in row.items():
+                recs[index]['columns'][col]['value'] = val
             recs[index]['primary_key'] = {key: row[key] for key in pkey}
 
         row_formats = self.get_format()

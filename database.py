@@ -280,11 +280,19 @@ class Database:
 
             # Hides table if user has marked the table to be hidden
             if 'hidden' in self.config.tables[tbl_name]:
-                print('skjuler ' + tbl_name)
                 if hidden != self.config.tables[tbl_name].hidden:
                     hidden = self.config.tables[tbl_name].hidden
                 else:
                     del self.config.tables[tbl_name].hidden
+                    if not self.config.tables[tbl_name]:
+                        del self.config.tables[tbl_name]
+
+            # Change table type if set in config
+            if 'type' in self.config.tables[tbl_name]:
+                if tbl_type != self.config.tables[tbl_name].type:
+                    tbl_type = self.config.tables[tbl_name].type
+                else:
+                    del self.config.tables[tbl_name].type
                     if not self.config.tables[tbl_name]:
                         del self.config.tables[tbl_name]
 
@@ -318,7 +326,7 @@ class Database:
 
     def is_top_level(self, table):
         """Check if table is top level, i.e. not subordinate to other tables"""
-        if table.hidden is True:
+        if (table.hidden is True or table.type == 'list'):
             return False
 
         for fkey in table.foreign_keys.values():

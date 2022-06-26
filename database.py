@@ -389,10 +389,10 @@ class Database:
                 name = tbl_key
             group = name.split("_")[0]
 
-            # Find if the table is subordinate to other tables
+            # Don't include tables that are subordinate to other tables
             # i.e. the primary key also has a foreign key
+            # These ar handled in get_content_node
             subordinate = False
-
             for colname in table.primary_key:
                 if self.get_col_fkey(colname, table.foreign_keys):
                     subordinate = True
@@ -573,8 +573,11 @@ class Database:
                 contents[label] = Dict({
                     'class_label': "b",
                     'class_content': "ml3",
-                    'subitems': table_names
                 })
+
+
+                for key, tbl_name in table_names.items():
+                    contents[label].subitems[key] = self.get_content_node(tbl_name)
 
         if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()

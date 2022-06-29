@@ -326,7 +326,7 @@ class Database:
 
     def is_top_level(self, table):
         """Check if table is top level, i.e. not subordinate to other tables"""
-        if (table.hidden is True or table.type == 'list'):
+        if (table.type == 'list'):
             return False
 
         for fkey in table.foreign_keys.values():
@@ -379,34 +379,78 @@ class Database:
         return relation_tables
 
     def get_tbl_groups(self):
-        """Group tables by prefix"""
+        """Group tables by prefix or relations"""
         tbl_groups = Dict()
         terms = self.get_terms()
-        for tbl_key, table in self.tables.items():
-            if tbl_key[0:1] == "_":
-                name = tbl_key[1:]
-            else:
-                name = tbl_key
-            group = name.split("_")[0]
 
-            # Don't include tables that are subordinate to other tables
-            # i.e. the primary key also has a foreign key
-            # These ar handled in get_content_node
-            subordinate = False
-            for colname in table.primary_key:
-                if self.get_col_fkey(colname, table.foreign_keys):
-                    subordinate = True
-                    break
-
-            if not subordinate:
-                # Remove group prefix from label
-                rest = tbl_key.replace(group+"_", "")
-                if rest in terms:
-                    label = terms[rest].label
+        if (not self.metadata.get('cache') or self.config.urd_structure):
+            for tbl_name, table in self.tables.items():
+                if tbl_name[0:1] == "_":
+                    name = tbl_name[1:]
                 else:
-                    label = rest.replace("_", " ").capitalize()
+                    name = tbl_name
+                group = name.split("_")[0]
 
-                tbl_groups[group][label] = tbl_key
+                # Don't include tables that are subordinate to other tables
+                # i.e. the primary key also has a foreign key
+                # These ar handled in get_content_node
+                subordinate = False
+                for colname in table.primary_key:
+                    if self.get_col_fkey(colname, table.foreign_keys):
+                        subordinate = True
+                        break
+
+                if not subordinate:
+                    if not tbl_groups[group]:
+                        tbl_groups[group] = []
+
+                    tbl_groups[group].append(tbl_name)
+        else:
+            # Group for tables not belonging to other groups
+            tbl_groups['...'] = []
+
+            for table in self.tables.values():
+                top_level = self.is_top_level(table)
+                if top_level:
+                    self.tables[table.name].top_level = True
+                    # modules = self.attach_to_module(table, modules)
+                    grouptables = self.get_relation_tables(table.name, [])
+
+                    if table.name not in grouptables:
+                        grouptables.append(table.name)
+                    if len(grouptables) > 2:
+                        tbl_groups[table.name] = grouptables
+                    else:
+                        tbl_groups['...'].extend(grouptables)
+                elif table.type == 'list':
+                    tbl_groups['...'].append(table.name)
+
+            # Relocate tables between groups
+            delete_groups = []
+            for group_name, tbl_names in tbl_groups.items():
+                for group_name2, tbl_names2 in tbl_groups.items():
+                    if group_name2 == group_name:
+                        continue
+
+                    diff = set(tbl_names) - set(tbl_names2)
+                    common = [tbl_name for tbl_name in tbl_names if tbl_name in tbl_names2]
+                    len_combined = len(set(tbl_names + tbl_names2))
+
+
+                    if len(common):
+                        if (len(tbl_names) <= len(tbl_names2) and (len(diff) == 1 or len_combined < 15)):
+                            tbl_groups[group_name2].extend(tbl_names)
+                            delete_groups.append(group_name)
+                            break
+                        elif (len(tbl_names) <= len(tbl_names2) and len(common) == 1 and len(diff)) > 1:
+                            # We want the common tables only in the smallest group
+                            tbl_groups[group_name2].remove(common[0])
+                        elif (len(tbl_names) <= len(tbl_names2)):
+                            for tbl_name in common:
+                                tbl_groups[group_name2].remove(tbl_name)
+
+            for group_name in delete_groups:
+                del tbl_groups[group_name]
 
         return tbl_groups
 
@@ -493,34 +537,6 @@ class Database:
 
         return node
 
-    def create_module_node(self, tbl_name, contents):
-        """Create node for module in contents"""
-        label = self.get_label(tbl_name)
-        placed = False
-        for idx, module in enumerate(self.modules):
-            if len(module) > 2 and tbl_name in module:
-                mod = "Modul " + str(idx + 1)
-                contents[mod].class_label = "b"
-                contents[mod].class_content = "ml3"
-                contents[mod].subitems[label] = self.get_content_node(tbl_name)
-                if 'count' not in contents[mod]:
-                    contents[mod].count = 0
-                contents[mod].count += 1
-                placed = True
-
-        if not placed:
-            if 'Andre' not in contents:
-                contents['Andre'] = Dict({
-                    'class_label': "b",
-                    'class_content': "ml3",
-                    'subitems': {},
-                    'count': 0
-                })
-            contents['Andre'].subitems[label] = self.get_content_node(tbl_name)
-            contents['Andre'].count += 1
-
-        return contents
-
     @measure_time
     def get_contents(self):
         """Get list of contents"""
@@ -530,54 +546,33 @@ class Database:
 
         contents = Dict()
 
-        modules = []
-        for table in self.tables.values():
-            top_level = self.is_top_level(table)
-            if top_level:
-                modules = self.attach_to_module(table, modules)
-
-        # Sort modules so that modules with most tables are listed first
-        modules.sort(key=len, reverse=True)
-        self.modules = modules
-
         tbl_groups = self.get_tbl_groups()
         self.sub_tables = self.get_sub_tables()
 
         for group_name, table_names in tbl_groups.items():
-            if len(table_names) == 1 and group_name != "meta":
-                tbl_name = list(table_names.values())[0]
+            if len(table_names) == 1: # and group_name != "meta":
+                tbl_name = table_names[0]
                 label = self.get_label(tbl_name)
 
-                if not self.config or self.config.urd_structure:
-                    contents[label] = self.get_content_node(tbl_name)
-                else:
-                    # group contents in modules
-                    self.create_module_node(tbl_name, contents)
-
-            elif group_name in table_names.values():
-                table_names = {key:val for key, val in table_names.items() if val != group_name}
-                if group_name in self.sub_tables:
-                    self.sub_tables[group_name].extend(table_names.values())
-                else:
-                    self.sub_tables[group_name] = table_names.values()
-
-                if not self.config or self.config.urd_structure:
-                    label = self.get_label(group_name)
-                    contents[label] = self.get_content_node(group_name)
-                else:
-                    self.create_module_node(group_name, contents)
+                contents[label] = self.get_content_node(tbl_name)
 
             else:
                 label = self.get_label(group_name)
+                table_names = list(set(table_names))
 
                 contents[label] = Dict({
                     'class_label': "b",
                     'class_content': "ml3",
+                    'count': len(table_names)
                 })
 
+                table_names.sort()
+                for tbl_name in table_names:
+                    # Remove group prefix from label
+                    rest = tbl_name.replace(group_name+"_", "")
+                    tbl_label = self.get_label(rest)
 
-                for key, tbl_name in table_names.items():
-                    contents[label].subitems[key] = self.get_content_node(tbl_name)
+                    contents[label].subitems[tbl_label] = self.get_content_node(tbl_name)
 
         if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()

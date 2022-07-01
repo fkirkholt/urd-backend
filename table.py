@@ -324,6 +324,7 @@ class Table:
         pkey = self.get_primary_key()
         cols = self.get_columns()
         cursor = self.db.cnxn.cursor()
+        contents = self.db.metadata.cache.contents
 
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]
@@ -337,7 +338,12 @@ class Table:
             column = Column(self, cname)
             field = column.get_field(col)
 
-            if (self.db.config and self.db.config.column_use and cname not in pkey):
+            if (
+                self.db.config and self.db.config.column_use and cname not in pkey and
+                not self.name.startswith('_meta_') and
+                # table not in group named '...'
+                (not contents['...'] or ('tables.' + self.name) not in contents['...'].subitems.values())
+            ):
                 if cname not in indexed_cols and col.type_name not in ['blob', 'clob', 'text']:
                     sql = f"""
                     create index {self.name}_{cname}_idx

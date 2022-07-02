@@ -518,6 +518,7 @@ class Grid:
             'stmnts': []
         })
 
+    @measure_time
     def get(self, pkey_vals = None):
         """Return all metadata and data to display grid"""
         selects = {} # dict of select expressions
@@ -818,6 +819,7 @@ class Grid:
 
         return order_by
 
+    @measure_time
     def get_values(self, selects):
         """Return values for columns in grid"""
         cols = []

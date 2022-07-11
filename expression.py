@@ -130,7 +130,7 @@ class Expression:
         else:
             if type_ in ["varchar", "text", "char", "bpchar", "clob"]:
                 return "string"
-            elif type_ in ["integer", "int4", "int8"]:
+            elif type_ in ["integer", "int", "int4", "int8"]:
                 return "integer"
             elif type_ in ["numeric", "decimal"]:
                 return "decimal"

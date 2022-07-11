@@ -324,7 +324,7 @@ class Table:
         pkey = self.get_primary_key()
         cols = self.get_columns()
         cursor = self.db.cnxn.cursor()
-        contents = self.db.metadata.cache.contents
+        contents = None if not self.db.metadata.cache else self.db.metadata.cache.contents
 
         for col in cols:
             colnames = [column[0] for column in col.cursor_description]

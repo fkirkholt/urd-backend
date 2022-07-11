@@ -616,6 +616,49 @@ class Database:
 
         return self.relations[tbl_name]
 
+    def query_result(self, sql, limit):
+        query = Dict()
+        query.string = sql.strip()
+        if len(query.string) == 0:
+           return None
+        t1 = time.time()
+        try:
+            cursor = self.query(query.string)
+        except pyodbc.Error as ex:
+            sqlstate = ex.args[1]
+            sqlstate = sqlstate.replace('[HY000]', '')
+            sqlstate = sqlstate.replace('[SQLite]', '')
+            sqlstate = sqlstate.replace('(1)', '')
+            sqlstate = sqlstate.replace('(SQLExecDirectW)', '')
+            query.time = round(time.time() - t1, 4)
+            query.success = False
+            query.result = 'ERROR: ' + sqlstate.strip()
+
+            return query
+
+        query.success = True
+        query.time = round(time.time() - t1, 4)
+
+        if cursor.description:
+            if limit:
+                rows = cursor.fetchmany(limit)
+            else:
+                rows = cursor.fetchall()
+            print('rows', rows)
+            query.data = []
+            colnames = [column[0] for column in cursor.description]
+            for row in rows:
+                query.data.append(dict(zip(colnames, row)))
+        else:
+            rowcount = cursor.rowcount
+
+            cursor.commit()
+
+            query.rowcount = rowcount
+            query.result = f"Query OK, {rowcount} rows affected"
+
+        return query
+
     def query(self, sql, params=[]):
         """Execute sql query"""
         cursor = self.cnxn.cursor()

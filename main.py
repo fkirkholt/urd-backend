@@ -293,3 +293,13 @@ def convert(base: str, table: str, from_format: str, to_format: str, fields: str
         result = col.convert(from_format, to_format)
 
     return {'result': result}
+
+@app.get('/query')
+def query(base: str, sql: str, limit: str):
+    print('sql', sql)
+    cnxn = Connection(cfg, base)
+    dbo = Database(cnxn, base)
+    limit = 0 if not limit else int(limit)
+    result = dbo.query_result(sql, limit)
+
+    return {'result': result}

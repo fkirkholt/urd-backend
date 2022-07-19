@@ -63,6 +63,7 @@ class Connection:
     def get_driver(self):
         """Get ODBC driver"""
         drivers = [d for d in pyodbc.drivers() if self.system in d.lower()]
+        drivers.sort(reverse=True, key=lambda x: 'unicode' in x.lower())
 
         try:
             return drivers[0]
@@ -120,7 +121,8 @@ class Database:
             sql = f"select * from {self.schema or self.cat}._meta_data"
             row = cursor.execute(sql).fetchone()
             colnames = [col[0] for col in cursor.description]
-            metadata = Dict(zip(colnames, row))
+            if row:
+                metadata = Dict(zip(colnames, row))
 
         if metadata.cache:
             metadata.cache = Dict(json.loads(metadata.cache))

@@ -59,8 +59,10 @@ class Expression:
             elif type_ == "binary":
                 return "blob"
         elif self.platform == 'postgres':
-            if type_ == "string":
+            if type_ == "string" and size:
                 return "varchar(" + str(size) + ")"
+            elif type_ == "string":
+                return "text"
             elif (type_ == "integer" and size > 11):
                 return "bigint"
             elif type_ == "integer":
@@ -75,6 +77,8 @@ class Expression:
                 return "boolean"
             elif type_ == "binary":
                 return "bytea"
+            elif type_ == "json":
+                return "json"
         elif self.platform == 'oracle':
             if (type_ == "string" and size > 4000):
                 return "clob"

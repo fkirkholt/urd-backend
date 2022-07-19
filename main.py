@@ -37,7 +37,7 @@ mod = os.path.getmtime("static/js/dist/bundle.js")
 @app.middleware("http")
 async def check_login(request: Request, call_next):
     session: str = request.cookies.get("session")
-    now = time.time()
+
     if session:
         payload = jwt.decode(session, cfg.secret_key)
         cfg.db_system = payload["system"]
@@ -58,7 +58,7 @@ async def check_login(request: Request, call_next):
             "uid": cfg.db_uid,
             "pwd": cfg.db_pwd,
             "database": cfg.db_name,
-            "timestamp": now
+            "timestamp": time.time()
         }, cfg.secret_key)
         response.set_cookie(key="session", value=token, expires=cfg.timeout)
     return response
@@ -244,14 +244,21 @@ async def update_schema(base: str, config: str):
     return {'sucess': True, 'msg': "Cache oppdatert"}
 
 @app.get('/table_sql')
-def export_sql(base: str, table: str, dialect: str):
+def export_sql(base: str, dialect: str, include_recs: bool, table: str=None):
     # Fiks alle slike connections
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
-    table = Table(dbo, table)
-    ddl = table.export_ddl(dialect)
+    if table:
+        table = Table(dbo, table)
+        ddl = table.export_ddl(dialect)
+        if include_recs:
+            ddl += table.export_records()
+        filename = table.name
+    else:
+        ddl = dbo.export_as_sql(dialect, include_recs)
+        filename = base
     response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
-    response.headers["Content-Disposition"] = f"attachment; filename={table.name}.sql"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}.sql"
 
     return response
 

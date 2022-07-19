@@ -772,3 +772,19 @@ class Database:
                     })
 
         self.relations = relations
+
+    def export_as_sql(self, dialect, include_recs):
+        from table import Table
+        ddl = ''
+        cursor = self.cnxn.cursor()
+        tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+        for tbl in tbls:
+            print('tbl', tbl)
+            if tbl.table_name == 'sqlite_sequence':
+                continue
+            table = Table(self, tbl.table_name)
+            ddl += table.export_ddl(dialect)
+            if include_recs:
+                ddl += table.export_records()
+
+        return ddl

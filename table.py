@@ -486,7 +486,8 @@ class Table:
                     coldef += " DEFAULT " + default
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
-        ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"
+        if pkey != ['rowid']:
+            ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"
 
         for fkey in self.get_fkeys().values():
             ddl += ",\n    foreign key (" + ", ".join(fkey.foreign) + ") references "
@@ -503,6 +504,24 @@ class Table:
 
         return ddl
 
+    def export_records(self):
+        insert = ''
+        sql = f"select * from {self.name}"
+        cursor = self.db.cnxn.cursor()
+        cursor.execute(sql)
+        colnames = [column[0] for column in cursor.description]
+        for row in cursor:
+            insert += f'insert into {self.name} values ('
+            for val in row:
+                if type(val) is str:
+                    val = "'" + str(val) + "'"
+                elif val is None:
+                    val = 'null'
+                insert += str(val) + ','
+            insert = insert[:-1] + ");\n"
+
+        return insert
+        
 
 class Grid:
     """Contains methods for returning metadata and data for grid"""

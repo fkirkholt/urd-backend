@@ -169,18 +169,6 @@ class Table:
 
         return tbl_names
 
-    def get_ref_relations(self):
-        """ Interim function needed to support old schema """
-        relations = {}
-        for fkey in self.get_relations().values():
-            relations[fkey.name] = Dict({
-                'table': fkey.table,
-                'foreign_key': fkey.name,
-                'use': fkey.use
-            })
-
-        return relations
-
     def get_csv(self, columns):
         selects = {}
         for colname in columns:
@@ -654,7 +642,7 @@ class Grid:
             'selection': self.get_selected_idx(pkey_vals, selects),
             'conditions': self.cond.stmnts,
             'expansion_column': expansion_column,
-            'relations': self.tbl.get_ref_relations(),
+            'relations': self.tbl.get_relations(),
             'saved_filters': [] # Needed in frontend
         })
 

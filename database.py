@@ -756,19 +756,18 @@ class Database:
 
         relations = Dict()
 
-        for fktable_name, keys in self.fkeys.items():
-            for alias, key in keys.items():
-                if key.schema == self.schema:
-                    relations[key.table][key.name] = Dict({
-                        "name": key.name,
+        for fktable_name, fkeys in self.fkeys.items():
+            for fkey in fkeys.values():
+                if fkey.schema == self.schema:
+                    relations[fkey.table][fkey.name] = Dict({
+                        "name": fkey.name,
                         "table": fktable_name,
-                        "base": key.base or None,
-                        "schema": key.schema,
-                        "foreign_key": alias,
-                        "delete_rule": key.delete_rule,
-                        "foreign": key.foreign,
-                        "primary": key.primary,
-                        "label": self.get_label(key.table) #TODO: Fix
+                        "base": fkey.base or None,
+                        "schema": fkey.schema,
+                        "delete_rule": fkey.delete_rule,
+                        "foreign": fkey.foreign,
+                        "primary": fkey.primary,
+                        "label": self.get_label(fkey.table) #TODO: Fix
                     })
 
         self.relations = relations

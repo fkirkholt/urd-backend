@@ -34,6 +34,17 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/dist/bundle.js")
 
+def token():
+    return jwt.encode({
+        "system": cfg.db_system,
+        "server": cfg.db_server,
+        "uid": cfg.db_uid,
+        "pwd": cfg.db_pwd,
+        "database": cfg.db_name,
+        "timestamp": time.time()
+    }, cfg.secret_key)
+
+
 @app.middleware("http")
 async def check_login(request: Request, call_next):
     session: str = request.cookies.get("session")
@@ -52,15 +63,9 @@ async def check_login(request: Request, call_next):
 
     response = await call_next(request)
     if cfg.db_uid is not None and request.url.path != "/logout":
-        token = jwt.encode({
-            "system": cfg.db_system,
-            "server": cfg.db_server,
-            "uid": cfg.db_uid,
-            "pwd": cfg.db_pwd,
-            "database": cfg.db_name,
-            "timestamp": time.time()
-        }, cfg.secret_key)
-        response.set_cookie(key="session", value=token, expires=cfg.timeout)
+        # Update cookie to renew expiration time
+        response.set_cookie(key="session", value=token(), expires=cfg.timeout)
+
     return response
 
 @app.get("/", response_class=HTMLResponse)
@@ -77,17 +82,9 @@ def login(response: Response, system: str, server: str, username: str, password:
     cfg.db_name = database
     cfg.db_server = server or 'localhost'
 
-    timestamp = time.time()
-    token = jwt.encode({
-        "system": system,
-        "server": server,
-        "database": database,
-        "uid": username,
-        "pwd": password,
-        "timestamp": timestamp
-    }, cfg.secret_key)
     cfg.timeout = None if cfg.db_system == 'sqlite3' else cfg.timeout
-    response.set_cookie(key="session", value=token, expires=cfg.timeout)
+    response.set_cookie(key="session", value=token(), expires=cfg.timeout)
+
     return {"success": True}
 
 @app.get("/logout")

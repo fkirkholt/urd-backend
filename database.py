@@ -107,7 +107,7 @@ class Database:
         self.config = Dict()
 
     def get_metadata(self):
-        """Get data from table _meta_data"""
+        """Get data from table meta_data"""
         if not hasattr(self, 'metadata'):
             self.init_metadata()
         return self.metadata
@@ -117,8 +117,8 @@ class Database:
         """Store metadata in database object"""
         cursor = self.cnxn.cursor()
         metadata = Dict()
-        if '_meta_data' in self.user_tables:
-            sql = f"select * from {self.schema or self.cat}._meta_data"
+        if 'meta_data' in self.user_tables:
+            sql = f"select * from {self.schema or self.cat}.meta_data"
             row = cursor.execute(sql).fetchone()
             colnames = [col[0] for col in cursor.description]
             if row:
@@ -129,7 +129,7 @@ class Database:
         self.metadata = metadata
 
     def get_terms(self):
-        """Get terms from table _meta_terms"""
+        """Get terms from table meta_terms"""
         if not hasattr(self, 'terms'):
             self.init_terms()
         return self.terms
@@ -139,8 +139,8 @@ class Database:
         # from table import Table
         cursor = self.cnxn.cursor()
         terms = Dict()
-        if '_meta_term' in self.user_tables:
-            sql = f"select * from {self.schema or self.cat}._meta_term"
+        if 'meta_term' in self.user_tables:
+            sql = f"select * from {self.schema or self.cat}.meta_term"
             try:
                 rows = cursor.execute(sql).fetchall()
                 colnames = [column[0] for column in cursor.description]
@@ -239,7 +239,7 @@ class Database:
 
         if (self.config and not 'cache' in self.metadata):
             sql = """
-                CREATE TABLE _meta_data (
+                CREATE TABLE meta_data (
                 _name varchar(30) NOT NULL,
                 label varchar(30),
                 description text,
@@ -251,12 +251,12 @@ class Database:
             label = self.get_label(self.name)
 
             sql = f"""
-                insert into _meta_data (_name, label)
+                insert into meta_data (_name, label)
                 values('{self.name}', '{label}')
             """
             cursor.execute(sql)
             self.metadata.cache = None
-            self.user_tables.append('_meta_data')
+            self.user_tables.append('meta_data')
 
         start = time.time()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
@@ -579,7 +579,7 @@ class Database:
         if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()
             # self.cache = tables
-            sql = "update _meta_data set cache = ?\n"
+            sql = "update meta_data set cache = ?\n"
             sql+= "where _name = ?"
             cache = {
                 "tables": self.tables,

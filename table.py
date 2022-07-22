@@ -328,7 +328,7 @@ class Table:
 
             if (
                 self.db.config and self.db.config.column_use and cname not in pkey and
-                not self.name.startswith('_meta_') and
+                not self.name.startswith('meta_') and
                 # table not in group named '...'
                 (not contents['...'] or ('tables.' + self.name) not in contents['...'].subitems.values())
             ):
@@ -1149,7 +1149,7 @@ class Grid:
 
     def get_format(self):
 
-        if '_meta_format' not in self.db.user_tables:
+        if 'meta_format' not in self.db.user_tables:
             return Dict({
                 'formats': [],
                 'rows': []
@@ -1157,7 +1157,7 @@ class Grid:
 
         sql = """
         select id, class, filter
-        from   _meta_format
+        from   meta_format
         where  table_ = ?
         """
 

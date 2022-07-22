@@ -62,8 +62,6 @@ class Table:
         """Decide if this is a hidden table"""
         if (
             self.name[0:1] == "_" or
-            self.name[0:4] == "ref_" or
-            self.name[:-4] == "_ref" or
             self.name[0:5] == "meta_"
         ):
             hidden = True

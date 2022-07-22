@@ -769,7 +769,7 @@ class Grid:
             columns = []
             for key, field in self.tbl.get_fields().items():
                 # Don't show hdden columns
-                if field.name[0:1] == '_':
+                if field.name[0:1] == '_' or field.name[0:6].lower() == 'const_':
                     continue
                 if field.size and field.size >= 255:
                     continue

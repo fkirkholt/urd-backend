@@ -124,7 +124,7 @@ class Record:
                 conds[col] = val
 
                 # Check if relation depends on record value
-                if col[0:1] == "_":
+                if col[0:1] == "_" or col[0:6].lower() == "const_":
                     field = tbl_rel.fields[col]
                     if not field.nullable and field.default:
                         show_if = {ref_key: field.default}

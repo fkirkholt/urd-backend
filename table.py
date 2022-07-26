@@ -102,9 +102,13 @@ class Table:
     @measure_time
     def get_primary_key(self):
         """Return primary key of table"""
-        cursor = self.db.cnxn.cursor()
-        pkeys_cursor = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
-                                          schema=self.db.schema)
+        if self.db.cnxn.system == 'sqlite3':
+            sql = self.db.expr.pkey(self.name)
+            pkeys_cursor = self.db.query(sql)
+        else:
+            cursor = self.db.cnxn.cursor()
+            pkeys_cursor = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
+                                            schema=self.db.schema)
         pkeys = [row.column_name for row in pkeys_cursor]
 
         if (len(pkeys) == 0 and self.db.system == 'sqlite3'):

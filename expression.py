@@ -207,6 +207,15 @@ class Expression:
             AND cols.table_name = nvl(?, cols.table_name)
             ORDER BY cols.table_name, cols.position;
             """
+
+    def pkey(self, table_name=None):
+        if self.platform == 'sqlite3':
+            return f"""
+            SELECT name as column_name
+            FROM pragma_table_info('{table_name}')
+            WHERE pk != 0 order by pk
+            """
+
     def fkeys(self):
         if self.platform == 'oracle':
             return """

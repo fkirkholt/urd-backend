@@ -725,7 +725,12 @@ class Database:
         else:
             tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
             for tbl in tbls:
-                rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
+                if self.cnxn.system == 'sqlite3':
+                    # Wrong order for pkeys using cursor.primaryKeys with SQLite
+                    sql = self.expr.pkey(tbl.table_name)
+                    rows = self.query(sql)
+                else:
+                    rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
                 pkey = [row.column_name for row in rows]
                 pkeys[tbl.table_name] = pkey
 

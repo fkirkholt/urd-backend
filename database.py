@@ -277,7 +277,7 @@ class Database:
             pkey = self.get_pkey(tbl_name)
             type_ = None
             if len(pkey):
-                pkey_col_name = pkey[-1]
+                pkey_col_name = pkey[0]
                 pkey_col = cursor.columns(catalog=self.cat, schema=self.schema,
                                         table=tbl_name, column=pkey_col_name).fetchone()
                 pkey_col.type_name = pkey_col.type_name.split('(')[0]

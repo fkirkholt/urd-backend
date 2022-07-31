@@ -504,6 +504,7 @@ class Table:
             insert += f'insert into {self.name} values ('
             for val in row:
                 if type(val) is str:
+                    val = val.replace("'", "''")
                     val = "'" + str(val) + "'"
                 elif val is None:
                     val = 'null'

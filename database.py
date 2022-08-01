@@ -396,7 +396,7 @@ class Database:
         tbl_groups = Dict()
         terms = self.get_terms()
 
-        if (not self.metadata.get('cache') or self.config.urd_structure):
+        if (not self.config.update_cache or self.config.urd_structure):
             for tbl_name, table in self.tables.items():
                 if tbl_name[0:1] == "_":
                     name = tbl_name[1:]

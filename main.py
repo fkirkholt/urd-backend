@@ -5,7 +5,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseSettings
 import io
 import urllib.parse
-from schema import Schema
 from database import Database, Connection
 from table import Table, Grid
 from record import Record
@@ -223,20 +222,20 @@ async def get_select(request: Request):
     data = col.get_select(req)
     return data
 
-@app.get('/urd/dialog_schema', response_class=HTMLResponse)
-def dialog_schema(request: Request):
-    return templates.TemplateResponse("update_schema.htm", {
+@app.get('/urd/dialog_cache', response_class=HTMLResponse)
+def dialog_cache(request: Request):
+    return templates.TemplateResponse("update_cache.htm", {
         "request": request
     })
 
-@app.put('/urd/update_schema')
-async def update_schema(base: str, config: str):
-    config = Dict(json.loads(config))
+@app.put('/urd/update_cache')
+async def update_cache(base: str, config: str):
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
-    schema_name = dbo.schema
-    schema = Schema(schema_name)
-    schema.update(dbo, config)
+    dbo.config = Dict(json.loads(config))
+    dbo.config.update_cache = True
+    dbo.get_tables()
+    dbo.get_contents()
 
     return {'sucess': True, 'msg': "Cache oppdatert"}
 

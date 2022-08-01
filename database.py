@@ -794,7 +794,6 @@ class Database:
         cursor = self.cnxn.cursor()
         tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
         for tbl in tbls:
-            print('tbl', tbl)
             if tbl.table_name == 'sqlite_sequence':
                 continue
             table = Table(self, tbl.table_name)

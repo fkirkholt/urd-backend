@@ -476,7 +476,7 @@ class Table:
                     coldef += " DEFAULT " + default
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
-        if pkey != ['rowid']:
+        if (pkey and pkey != ['rowid']):
             ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"
 
         for fkey in self.get_fkeys().values():
@@ -502,10 +502,12 @@ class Table:
         colnames = [column[0] for column in cursor.description]
         for row in cursor:
             insert += f'insert into {self.name} values ('
-            for val in row:
+            row = Dict(zip(colnames, row))
+            for colname, val in row.items():
+                if (self.name == 'meta_data' and colname == 'cache'):
+                    val = ''
                 if type(val) is str:
-                    val = val.replace("'", "''")
-                    val = "'" + str(val) + "'"
+                    val = "'" + val.replace("'", "''") + "'"
                 elif val is None:
                     val = 'null'
                 insert += str(val) + ','

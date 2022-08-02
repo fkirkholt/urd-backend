@@ -499,7 +499,9 @@ class Database:
         else:
             label = term.replace("_", " ")
 
-        if self.config.norwegian_chars:
+        if self.config.norwegian_chars or (
+                not self.config and self.metadata.cache.config.norwegian_chars
+        ):
             label = label.replace("ae", "æ")
             label = label.replace("oe", "ø")
             label = label.replace("aa", "å")

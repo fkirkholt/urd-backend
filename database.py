@@ -274,22 +274,10 @@ class Database:
 
             hidden = tbl_name[0:1] == "_" or tbl_name[0:5] == "meta_"
 
-            pkey = self.get_pkey(tbl_name)
-            type_ = None
-            if len(pkey):
-                pkey_col_name = pkey[0]
-                pkey_col = cursor.columns(catalog=self.cat, schema=self.schema,
-                                        table=tbl_name, column=pkey_col_name).fetchone()
-                pkey_col.type_name = pkey_col.type_name.split('(')[0]
-                type_ = self.expr.to_urd_type(pkey_col.type_name)
 
-            tbl_type = tbl.table_type.lower()
-            if (tbl_name[-5:] == "_list" or tbl_name[-6:] == "_liste"):
-                tbl_type = "list"
-            elif tbl_name[-5:] in ("_xref", "_link"):
-                tbl_type = "xref"
-            elif type_ == 'string':
-                tbl_type = "list"
+            table = Table(self, tbl_name)
+            main_type = tbl.table_type.lower()
+            tbl_type = table.get_type(main_type)
 
             # Hides table if user has marked the table to be hidden
             if 'hidden' in self.config.tables[tbl_name]:
@@ -310,7 +298,6 @@ class Database:
                         del self.config.tables[tbl_name]
 
             if self.config:
-                table = Table(self, tbl_name)
                 table.rowcount = table.count_rows()
                 space = ' ' * (30 - len(tbl_name))
                 print('gjennomgår tabell: ', tbl_name + space + f"({table.rowcount})")

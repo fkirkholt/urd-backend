@@ -25,9 +25,48 @@ class Table:
         self.label = db.get_label(tbl_name)
         self.cache = Dict()
 
-        cursor = db.cnxn.cursor()
-        tbl = cursor.tables(catalog=db.cat, schema=db.schema, table=tbl_name).fetchone()
-        self.type_ = tbl.table_type.lower()
+
+    def get_type(self):
+        """Return all foreign keys of table"""
+        if not self.cache.get('type', None):
+            self.init_type()
+
+        return self.cache.type
+
+    def init_type(self, main_type=None):
+        """Find type. One of 'table', 'list', 'xref', 'view' """
+        if (self.db.metadata.get("cache", None) and not self.db.config):
+            self.cache.type = self.db.metadata.cache.tables[self.name].type
+            return self.cache.type
+
+        cursor = self.db.cnxn.cursor()
+
+        if not main_type:
+            tbl = cursor.tables(catalog=self.db.cat, schema=self.db.schema, table=self.name).fetchone()
+            self.type_ = tbl.table_type.lower()
+
+        pkey = self.get_pkey()
+        type_ = None
+
+        if len(pkey):
+            pkey_col_name = pkey[0]
+            pkey_col = cursor.columns(catalog=self.db.cat, schema=self.db.schema,
+                                      table=self.name, column=pkey_col_name).fetchone()
+            pkey_col.type_name = pkey_col.type_name.split('(')[0]
+            type_ = self.db.expr.to_urd_type(pkey_col.type_name)
+
+        tbl_type = main_type
+
+        if (self.name[-5:] == "_list" or self.name[-6:] == "_liste"):
+            tbl_type = "list"
+        elif self.name[-5:] in ("_xref", "_link"):
+            tbl_type = "xref"
+        elif type_ == 'string':
+            tbl_type = "list"
+
+        self.cache.type = tbl_type
+
+        return tbl_type
 
 
     def user_privileges(self):
@@ -100,7 +139,7 @@ class Table:
 
 
     @measure_time
-    def get_primary_key(self):
+    def get_pkey(self):
         """Return primary key of table"""
         if self.db.cnxn.system == 'sqlite3':
             sql = self.db.expr.pkey(self.name)
@@ -311,7 +350,7 @@ class Table:
         indexed_cols = []
         for key, index in indexes.items():
             indexed_cols.append(index.columns[0])
-        pkey = self.get_primary_key()
+        pkey = self.get_pkey()
         cols = self.get_columns()
         cursor = self.db.cnxn.cursor()
         contents = None if not self.db.metadata.cache else self.db.metadata.cache.contents
@@ -456,7 +495,7 @@ class Table:
 
     def export_ddl(self, system):
         """Return ddl for table"""
-        pkey = self.get_primary_key()
+        pkey = self.get_pkey()
         ddl = f"create table {self.name} (\n"
         coldefs = []
         for col in self.get_fields().values():
@@ -534,7 +573,7 @@ class Grid:
     def get(self, pkey_vals = None):
         """Return all metadata and data to display grid"""
         selects = {} # dict of select expressions
-        pkey = self.tbl.get_primary_key()
+        pkey = self.tbl.get_pkey()
         user_tables = self.db.get_user_tables()
         fields = self.tbl.get_fields()
 
@@ -625,7 +664,7 @@ class Grid:
 
         data = Dict({
             'name': self.tbl.name,
-            'type' : self.tbl.type_,
+            'type' : self.tbl.get_type(),
             'records': recs,
             'count_records': self.get_rowcount(),
             'fields': fields,
@@ -724,7 +763,7 @@ class Grid:
 
         ident_cols = None
         for idx in self.tbl.get_indexes().values():
-            if idx.columns != self.tbl.get_primary_key() and idx.unique:
+            if idx.columns != self.tbl.get_pkey() and idx.unique:
                 ident_cols = idx.columns
                 if idx.name.endswith("_sort_idx"):
                     break
@@ -765,10 +804,11 @@ class Grid:
         """Return columns belonging to grid"""
         indexes = self.tbl.get_indexes()
         grid_idx = indexes.get(self.tbl.name.lower() + "_grid_idx", None)
+        type_ = self.tbl.get_type()
         if grid_idx:
             columns = grid_idx.columns
         else:
-            pkey = self.tbl.get_primary_key()
+            pkey = self.tbl.get_pkey()
             fkeys = self.tbl.get_fkeys()
             hidden = self.tbl.is_hidden()
             columns = []
@@ -781,6 +821,7 @@ class Grid:
                 if field.datatype == 'json':
                     continue
                 if ([field.name] == pkey and field.datatype == "integer"
+                    and type_ != 'list'
                     and field.name not in fkeys
                     and hidden is False):
                     continue
@@ -792,7 +833,7 @@ class Grid:
 
     def make_order_by(self):
         """Return 'order by'-clause"""
-        pkey = self.tbl.get_primary_key()
+        pkey = self.tbl.get_pkey()
 
         order_by = "order by "
         sort_fields = Dict()
@@ -847,7 +888,7 @@ class Grid:
 
         user_tables = self.db.get_user_tables()
         if (self.tbl.name + '_grid') in user_tables:
-            pkey = self.tbl.get_primary_key()
+            pkey = self.tbl.get_pkey()
             join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
         else:
             join_view = ""
@@ -882,7 +923,7 @@ class Grid:
 
         user_tables = self.db.get_user_tables()
         if (self.tbl.name + '_grid') in user_tables:
-            pkey = self.tbl.get_primary_key()
+            pkey = self.tbl.get_pkey()
             join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
         else:
             join_view = ""
@@ -900,7 +941,7 @@ class Grid:
 
     def get_display_values_from_view(self, selects):
         view_name = self.tbl.name + '_grid'
-        pkeys = self.tbl.get_primary_key()
+        pkeys = self.tbl.get_pkey()
         order = self.make_order_by()
         conds = self.get_cond_expr()
 
@@ -1090,7 +1131,7 @@ class Grid:
         col_groups = Dict()
         for field in fields.values():
             # Don't add column to form if it's part of primary key but not shown in grid
-            if (field.name in self.tbl.get_primary_key() and
+            if (field.name in self.tbl.get_pkey() and
                 field.name not in self.get_grid_columns()
             ): field.hidden = True
 
@@ -1233,7 +1274,7 @@ class Grid:
                     index_exist = True
 
             if index_exist and not rel.get('hidden', False):
-                rel_pkey = rel_table.get_primary_key()
+                rel_pkey = rel_table.get_pkey()
 
                 if set(rel_pkey) > set(rel.foreign):
                     # Set order priority

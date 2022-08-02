@@ -25,7 +25,7 @@ class Column:
         from table import Table
         type_ = self.db.expr.to_urd_type(col.type_name)
         foreign_keys = self.tbl.get_fkeys()
-        pkey = self.tbl.get_primary_key()
+        pkey = self.tbl.get_pkey()
 
         # Decides what sort of input should be used
         if type_ == 'date':
@@ -81,7 +81,7 @@ class Column:
         elif field.foreign_key:
             ref_tbl = Table(self.db, field.foreign_key.table)
             if field.foreign_key.table in self.db.user_tables:
-                ref_pk = ref_tbl.get_primary_key()
+                ref_pk = ref_tbl.get_pkey()
 
                 if ref_tbl.is_hidden() is False:
                     field.expandable = True
@@ -205,7 +205,7 @@ class Column:
             key = json.loads(req.key)
             col = key[-1]
         else:
-            col = self.get_primary_key()[-1]
+            col = self.get_pkey()[-1]
 
         view = req.get('view') or col
         col_view = req.get('column_view') or col

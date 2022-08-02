@@ -138,7 +138,7 @@ class Record:
             if count_null_conds:
                 count_inherited = grid2.get_rowcount()
 
-            tbl_rel.pkey = tbl_rel.get_primary_key()
+            tbl_rel.pkey = tbl_rel.get_pkey()
             if set(tbl_rel.pkey) <= set(rel.foreign):
                 relationship = "1:1"
             else:
@@ -176,7 +176,7 @@ class Record:
         tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
         tbl_rel.offset = 0
         tbl_rel.fields = tbl_rel.get_fields()
-        tbl_rel.pkey = tbl_rel.get_primary_key()
+        tbl_rel.pkey = tbl_rel.get_pkey()
 
         # Find index used
         slice_obj = slice(0, len(rel.foreign))
@@ -224,7 +224,7 @@ class Record:
             relation.fields[col].default = values[idx]
             relation.fields[col].defines_relation = True
 
-        tbl_rel.pkey = tbl_rel.get_primary_key()
+        tbl_rel.pkey = tbl_rel.get_pkey()
 
         # If foreign key columns contains primary key
         if set(tbl_rel.pkey) <= set(rel.foreign):
@@ -265,7 +265,7 @@ class Record:
             # permission = tbl_rel.get_user_permission(tbl_rel.name)
             # if not permission.view: continue
 
-            tbl_rel.pkey = tbl_rel.get_primary_key()
+            tbl_rel.pkey = tbl_rel.get_pkey()
 
             # If foreign key columns contains primary key
             if (set(tbl_rel.pkey) <= set(rel.foreign)):
@@ -443,7 +443,7 @@ class Record:
 
         # Get autoinc values for primary keys
         # Supports simple and compound primary keys
-        pkey = self.tbl.get_primary_key()
+        pkey = self.tbl.get_pkey()
         for colname in pkey:
             if colname in values:
                 self.pk[colname] = values[colname]

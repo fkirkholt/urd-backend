@@ -217,7 +217,7 @@ async def get_select(request: Request):
         key = json.loads(req.key)
         colname = key[-1]
     else:
-        colname = self.get_primary_key()[-1]
+        colname = self.get_pkey()[-1]
     col = Column(tbl, colname)
     data = col.get_select(req)
     return data
@@ -290,7 +290,7 @@ def convert(base: str, table: str, from_format: str, to_format: str, fields: str
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)
-    tbl.pkey = tbl.get_primary_key()
+    tbl.pkey = tbl.get_pkey()
     for field_name in fields:
         col = Column(tbl, field_name)
         result = col.convert(from_format, to_format)

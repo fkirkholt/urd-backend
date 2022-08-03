@@ -26,10 +26,10 @@ class Table:
         self.cache = Dict()
 
 
-    def get_type(self):
+    def get_type(self, main_type=None):
         """Return all foreign keys of table"""
         if not self.cache.get('type', None):
-            self.init_type()
+            self.init_type(main_type)
 
         return self.cache.type
 
@@ -48,7 +48,7 @@ class Table:
         pkey = self.get_pkey()
         type_ = None
 
-        if len(pkey):
+        if len(pkey) and pkey != ['rowid']:
             pkey_col_name = pkey[0]
             pkey_col = cursor.columns(catalog=self.db.cat, schema=self.db.schema,
                                       table=self.name, column=pkey_col_name).fetchone()
@@ -467,7 +467,7 @@ class Table:
                 relations[name] = Dict({
                     'name': name,
                     'table': row.fktable_name,
-                    'base': row.fktable_cat or None,
+                    'base': row.fktable_cat or self.db.name,
                     'schema': row.fktable_schem,
                     'delete_rule': delete_rules[row.delete_rule],
                     'foreign': [],

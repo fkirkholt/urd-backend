@@ -182,16 +182,14 @@ def get_children(base: str, table: str, primary_key: str):
     return {'data': record.get_children()}
 
 @app.get("/relations")
-def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None, types: str = None):
+def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None):
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)
     pk = json.loads(primary_key)
-    if types:
-        types = json.loads(types)
     record = Record(dbo, tbl, pk)
     if count:
-        return {'data': record.get_relation_count(types)}
+        return {'data': record.get_relation_count()}
     else:
         relation = record.get_relation(alias)
         return {'data': {alias: relation}}

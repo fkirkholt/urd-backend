@@ -65,7 +65,7 @@ class Record:
             'loaded': True
         })
 
-    def get_relation_count(self, types: list = None):
+    def get_relation_count(self):
         from table import Table, Grid
         relations = {}
         for key, rel in self.tbl.get_relations().items():
@@ -235,112 +235,6 @@ class Record:
             relation.relationship = "1:M"
 
         return relation
-
-    def get_relations(self, count = False, alias: str = None, types: list = None):
-        """
-        Get all back references to record
-
-        Params:
-        - count: return just number of records
-        - alias: return only relation with this alias
-        - types: set condition for showing relation based on type
-        """
-        # todo: Altfor lang og rotete funksjon
-        from table import Table, Grid
-
-        # Don't get values for new records that's not saved
-        if hasattr(self, 'pk') and len(set(self.pk)):
-            rec_values = self.get_values()      
-
-        relations = {}
-
-        for key, rel in self.tbl.get_relations().items():
-            if alias and alias != key: continue
-
-            db = Database(self.db.cnxn, rel.base)
-            tbl_rel = Table(db, rel.table)
-            grid = Grid(tbl_rel)
-
-            # todo: too slow
-            # permission = tbl_rel.get_user_permission(tbl_rel.name)
-            # if not permission.view: continue
-
-            tbl_rel.pkey = tbl_rel.get_pkey()
-
-            # If foreign key columns contains primary key
-            if (set(tbl_rel.pkey) <= set(rel.foreign)):
-                rel.type_ = '1:1'
-            else:
-                rel.type_ = '1:M'
-
-            parts = tbl_rel.name.split("_")
-            suffix = parts[-1]
-            if types and (len(types) and suffix in types):
-                show_if = {'type_': suffix}
-            else:
-                show_if = None
-
-            pk = {}
-
-            # Add condition to fetch only rows that link to record
-            for idx, col in enumerate(rel.primary):
-                ref_key = rel.foreign[idx]
-
-                val = None if len(self.pk) == 0 else rec_values[ref_key]
-                grid.add_cond(f"{rel.table}.{col}", "=", val)
-
-                pk[col] = val
-
-            if rel.get('filter', None):
-                grid.add_cond(rel.filter)
-
-            if count:
-                #TODO: Burde vel være unødvendig med egen kode for å telle.
-                #Skulle vel kunne kjøre spørringene og kun returnere antallet dersom count == True
-
-                if len(self.pk):
-                    count_records = grid.get_rowcount()
-                else:
-                    count_records = 0
-                relation = Dict({
-                    'count_records': count_records,
-                    'name': rel.table,
-                    'conditions': grid.get_client_conditions(),
-                    'base_name': rel.base,
-                    'relationship': rel.type_
-                })
-                if show_if:
-                    relation.show_if = show_if
-            else:
-                # todo: Are these necessary?
-                tbl_rel.limit = 500
-                tbl_rel.offset = 0
-                tbl_rel.csv = False
-
-                # Filter the list on highest level when necessary
-                if self.tbl.name != tbl_rel.name:
-                    tbl_rel.user_filtered = False
-                
-                relation = tbl_rel.get_grid()
-
-                # Find condition for relation
-                # todo: Har håndtert at pk ikke er satt i php-koden
-                values = [None if len(self.pk) == 0 else  rec_values[key] for key in rel.foreign]
-
-                for idx, col in enumerate(rel.primary):
-                    relation.fields[col].default = values[idx]
-                    relation.fields[col].defines_relation = True
-
-                if rel.type == "1:1":
-                    rec = Record(self.db, tbl_rel, pk)
-                    relation.records = [rec.get()]
-                    relation.relationship == "1:1"
-                else:
-                    relation.relationship == "1:M"
-                
-            relations[key] = relation
-
-        return relations
 
     def get_value(self, colname):
         if self.cache.get('vals', None):

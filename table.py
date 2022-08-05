@@ -170,12 +170,19 @@ class Table:
             return self.cache.join
         joins = []
         foreign_keys = self.get_fkeys()
+        aliases = []
 
         for key, fkey in foreign_keys.items():
             if fkey.table not in self.db.user_tables:
                 continue
 
             alias = fkey.foreign[-1]
+
+            # In seldom cases there might be two foreign keys ending in same column
+            if alias in aliases:
+                alias = alias + '2'
+
+            aliases.append(alias)
 
             # Get the ON statement in the join
             ons = [alias+'.'+fkey.primary[idx] + " = " + self.name + "." + col

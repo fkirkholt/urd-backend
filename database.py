@@ -393,10 +393,10 @@ class Database:
 
                 # Don't include tables that are subordinate to other tables
                 # i.e. the primary key also has a foreign key
-                # These ar handled in get_content_node
+                # These are handled in get_content_node
                 subordinate = False
                 for colname in table.primary_key:
-                    if self.get_col_fkey(colname, table.foreign_keys):
+                    if self.get_primary_fkey(table.primary_key, colname, table.foreign_keys):
                         subordinate = True
                         break
 
@@ -461,7 +461,7 @@ class Database:
             name_parts = tbl_name.split("_")
 
             for colname in table.primary_key:
-                fkey = self.get_col_fkey(colname, table.foreign_keys)
+                fkey = self.get_primary_fkey(table.primary_key, colname, table.foreign_keys)
                 if fkey:
                     if (len(name_parts) > 1 and
                         name_parts[0] in self.tables and
@@ -477,11 +477,12 @@ class Database:
 
         return sub_tables
 
-    def get_col_fkey(self, colname, fkeys):
-        """Get foreign key based on last key column"""
+    def get_primary_fkey(self, pkey, colname, fkeys):
+        """Get foreign key for primary key column"""
         col_fkey = None
         for fkey in fkeys.values():
-            if fkey.foreign[-1] == colname:
+            foreign = [col for col in fkey.foreign if col in pkey]
+            if (foreign and foreign[-1] == colname):
                 col_fkey = fkey
                 break
 

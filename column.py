@@ -98,6 +98,9 @@ class Column:
                 if 'column_view' not in field and 'view' in field:
                     field.column_view = field.view
 
+                field.options = self.get_options(field)
+
+
         if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
             field.extra = "auto_increment"
 
@@ -152,7 +155,7 @@ class Column:
                 fkeys.append(fkey)
 
         params = []
-        # Holder liste over fremmednøkler, for å sjekke hierarki
+        # Holds list over foreign keys, to check hierarchy
         fkeys_list = []
         if 'value' in field:
             for fkey in sorted(fkeys, key=lambda x: x['length']):

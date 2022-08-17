@@ -271,15 +271,15 @@ class Table:
                     rel_db = self.db
                 else:
                     rel_db = Database(self.db.cnxn, rel.base_name)
+
                 rel_table = Table(rel_db, rel.table_name)
 
                 # Set value of fkey columns to matched colums of record
-                fkey = rel_table.get_fkey(key)
                 for rel_rec in rel.records:
                     if 'values' not in rel_rec:
                         continue
-                    for idx, col in enumerate(fkey.foreign):
-                        pkcol = fkey.primary[idx]
+                    for idx, col in enumerate(rel.foreign):
+                        pkcol = rel.primary[idx]
                         rel_rec['values'][col] = record.get_value(pkcol)
 
                         # Primary keys of relation may be updated by

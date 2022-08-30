@@ -399,6 +399,11 @@ class Table:
                 # Find if column is (largely) empty
                 field.use = column.check_use()
 
+                if (field.use and field.datatype == "string"):
+                    field.size = column.get_size()
+                    if field.size < 256:
+                        field.element = "input[type=text]"
+
                 if col.type_name not in ['blob', 'clob', 'text']:
                     field.frequency = column.check_frequency()
 

@@ -239,6 +239,14 @@ class Column:
 
         return result
 
+    def get_size(self):
+        sql = f"""
+        select max(length({self.name}))
+        from {self.tbl.name}
+        """
+
+        return self.db.query(sql).fetchval()
+
     @measure_time
     def check_use(self):
         """Check ratio of columns that's not null"""

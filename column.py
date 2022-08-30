@@ -247,7 +247,7 @@ class Column:
 
         sql = f"""
         select count(*) from {self.tbl.name}
-        where {self.name} is null
+        where {self.name} is null or {self.name} = ''
         """
 
         count = self.db.query(sql).fetchval()

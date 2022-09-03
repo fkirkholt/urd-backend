@@ -308,7 +308,11 @@ class Column:
 
             where = ', '.join(wheres)
 
-            text = pypandoc.convert_text(row[self.name], to_format, format=from_format)
+            try:
+                text = pypandoc.convert_text(row[self.name], to_format, format=from_format)
+            except:
+                print('kunne ikke konvertere ' + params[-1])
+
             params.insert(0, text)
 
             sql = f"""

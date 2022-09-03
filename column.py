@@ -204,14 +204,8 @@ class Column:
         #TODO: Kan jeg ikke hente noe fra backend istenfor å få alt servert fra frontend? Altfor mange parametre!
         search = None if not 'q' in req else req.q.replace("*", "%")
 
-        if 'key' in req:
-            key = json.loads(req.key)
-            col = key[-1]
-        else:
-            col = self.get_pkey()[-1]
-
-        view = req.get('view') or col
-        col_view = req.get('column_view') or col
+        view = req.get('view') or self.name
+        col_view = req.get('column_view') or self.name
 
         conds = req.condition.split(" and ") if req.condition else []
         # ignore case
@@ -219,9 +213,9 @@ class Column:
             search = search.lower()
             conds.append(f"lower(cast({view} as varchar)) like '%{search}%'")
 
-        cond = " and ".join(conds) if len(conds) else col + " IS NOT NULL"
+        cond = " and ".join(conds) if len(conds) else self.name + " IS NOT NULL"
 
-        val_col = req.alias + "." + col
+        val_col = req.alias + "." + self.name
 
         sql = f"""
         select distinct {val_col} as value, {view} as label,

@@ -211,11 +211,8 @@ async def get_select(request: Request):
     cnxn = Connection(cfg, req.base)
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
-    if 'key' in req:
-        key = json.loads(req.key)
-        colname = key[-1]
-    else:
-        colname = self.get_pkey()[-1]
+    key = json.loads(req.key)
+    colname = key[-1]
     col = Column(tbl, colname)
     data = col.get_select(req)
     return data

@@ -1147,6 +1147,10 @@ class Grid:
                 field.name not in self.get_grid_columns()
             ): field.hidden = True
 
+            if (hasattr(field, 'use') and field.use == 0):
+                field.hidden = True
+                continue
+
             # Group by prefix
             parts = field.name.split("_")
             group = parts[0]

@@ -104,7 +104,10 @@ class Database:
         self.expr   = Expression(cnxn.system)
         self.user_tables = self.get_user_tables()
         self.metadata = self.get_metadata()
-        self.config = Dict()
+        if self.metadata.get('cache.config', None):
+            self.config = self.metadata.cache.config
+        else:
+            self.config = Dict()
 
     def get_metadata(self):
         """Get data from table meta_data"""
@@ -500,9 +503,7 @@ class Database:
         else:
             label = term.replace("_", " ")
 
-        if self.config.norwegian_chars or (
-                not self.config and self.metadata.get('cache.config.norwegian_chars', None)
-        ):
+        if self.config.norwegian_chars:
             label = label.replace("ae", "æ")
             label = label.replace("oe", "ø")
             label = label.replace("aa", "å")

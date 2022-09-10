@@ -235,7 +235,7 @@ async def update_cache(base: str, config: str):
     return {'sucess': True, 'msg': "Cache oppdatert"}
 
 @app.get('/table_sql')
-def export_sql(base: str, dialect: str, include_recs: bool, table: str=None):
+def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool, table: str=None):
     # Fiks alle slike connections
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
@@ -243,10 +243,10 @@ def export_sql(base: str, dialect: str, include_recs: bool, table: str=None):
         table = Table(dbo, table)
         ddl = table.export_ddl(dialect)
         if include_recs:
-            ddl += table.export_records()
+            ddl += table.export_records(select_recs)
         filename = table.name
     else:
-        ddl = dbo.export_as_sql(dialect, include_recs)
+        ddl = dbo.export_as_sql(dialect, include_recs, select_recs)
         filename = base
     response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
     response.headers["Content-Disposition"] = f"attachment; filename={filename}.sql"

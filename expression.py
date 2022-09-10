@@ -48,8 +48,10 @@ class Expression:
             else:
                 raise ValueError(f"Type {type_} not supported yet")
         elif self.platform == "sqlite3":
-            if type_ in ["string", "date"]:
-                return "text"
+            if type_ in ["string"]:
+                return "varchar(" + str(size) + ")" if size else "text"
+            elif type_ == "date":
+                return "date"
             elif type_ in ["integer", "boolean"]:
                 return "integer"
             elif type_ == "decimal":
@@ -58,6 +60,10 @@ class Expression:
                 return "real"
             elif type_ == "binary":
                 return "blob"
+            elif type_ == "json":
+                return "json"
+            else:
+                raise ValueError(f"Type {type_} not supported yet")
         elif self.platform == 'postgres':
             if type_ == "string" and size:
                 return "varchar(" + str(size) + ")"

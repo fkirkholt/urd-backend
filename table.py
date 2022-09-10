@@ -545,24 +545,35 @@ class Table:
 
         return ddl
 
-    def export_records(self):
-        insert = ''
+    def export_records(self, select_recs: bool):
+        """Export records as sql
+
+        Parameters:
+        select_recs: If records should be selected from existing database
+        """
+        insert = ';\n'
         sql = f"select * from {self.name}"
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql)
         colnames = [column[0] for column in cursor.description]
-        for row in cursor:
-            insert += f'insert into {self.name} values ('
-            row = Dict(zip(colnames, row))
-            for colname, val in row.items():
-                if (self.name == 'meta_data' and colname == 'cache'):
-                    val = ''
-                if type(val) is str:
-                    val = "'" + val.replace("'", "''") + "'"
-                elif val is None:
-                    val = 'null'
-                insert += str(val) + ','
-            insert = insert[:-1] + ");\n"
+
+        if select_recs:
+            db_name = self.db.name.split('.')[0]
+            insert += f'insert into {self.name}\n'
+            insert += 'select ' + ', '.join(colnames) + f' from {db_name}.{self.name};\n\n'
+        else:
+            for row in cursor:
+                insert += f'insert into {self.name} values ('
+                row = Dict(zip(colnames, row))
+                for colname, val in row.items():
+                    if (self.name == 'meta_data' and colname == 'cache'):
+                        val = ''
+                    if type(val) is str:
+                        val = "'" + val.replace("'", "''") + "'"
+                    elif val is None:
+                        val = 'null'
+                    insert += str(val) + ','
+                insert = insert[:-1] + ");\n"
 
         return insert
         

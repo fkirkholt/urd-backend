@@ -779,7 +779,14 @@ class Database:
 
         self.relations = relations
 
-    def export_as_sql(self, dialect, include_recs):
+    def export_as_sql(self, dialect: str, include_recs: bool, select_recs: bool):
+        """Create sql for exporting a database
+
+        Parameters:
+        dialect: The sql dialect used (mysql, postgres, sqlite)
+        include_recs: If records should be included
+        select_recs: If included records should be selected from existing database
+        """
         from table import Table
         ddl = ''
         cursor = self.cnxn.cursor()
@@ -790,6 +797,6 @@ class Database:
             table = Table(self, tbl.table_name)
             ddl += table.export_ddl(dialect)
             if include_recs:
-                ddl += table.export_records()
+                ddl += table.export_records(select_recs)
 
         return ddl

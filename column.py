@@ -24,7 +24,7 @@ class Column:
     def get_field(self, col):
         from table import Table
         type_ = self.db.expr.to_urd_type(col.type_name)
-        foreign_keys = self.tbl.get_fkeys()
+        fkeys = self.tbl.get_fkeys()
         pkey = self.tbl.get_pkey()
 
         # Decides what sort of input should be used
@@ -45,7 +45,7 @@ class Column:
                 ]
             else:
                 element = 'input[type=checkbox]'
-        elif self.name in foreign_keys:
+        elif self.name in fkeys:
             element = 'select'
             options = []
         elif type_ == 'binary' or (type_ == 'string' and (
@@ -63,10 +63,10 @@ class Column:
             'attrs': self.db.get_attributes(self.tbl.name, self.name)
         })
 
-        for fkey in foreign_keys.values():
+        for fkey in fkeys.values():
             if fkey.foreign[-1] == field.name:
-                if (not field.foreign_key or len(fkey.foreign) < len(field.foreign_key.foreign)):
-                    field.foreign_key = fkey
+                if (not field.fkey or len(fkey.foreign) < len(field.fkey.foreign)):
+                    field.fkey = fkey
                     field.element = 'select'
 
         if 'column_size' in col:
@@ -78,9 +78,9 @@ class Column:
             field.extra = "auto_increment"
         if element == "select" and len(options):
             field.options = options
-        elif field.foreign_key:
-            ref_tbl = Table(self.db, field.foreign_key.table)
-            if field.foreign_key.table in self.db.user_tables:
+        elif field.fkey:
+            ref_tbl = Table(self.db, field.fkey.table)
+            if field.fkey.table in self.db.user_tables:
                 ref_pk = ref_tbl.get_pkey()
 
                 if ref_tbl.is_hidden() is False:
@@ -101,7 +101,7 @@ class Column:
                 field.options = self.get_options(field)
 
 
-        if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in foreign_keys):
+        if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in fkeys):
             field.extra = "auto_increment"
 
         if col.column_def and not col.auto_increment and col.column_def != 'NULL':
@@ -122,7 +122,7 @@ class Column:
         from database import Database
         from table import Table, Grid
 
-        fk = field.foreign_key
+        fk = field.fkey
         pkey_col = fk.primary[-1]
 
         if fk.base == self.db.cat and fk.schema == self.db.schema:
@@ -201,7 +201,7 @@ class Column:
 
     @measure_time
     def get_select(self, req):
-        #TODO: Kan jeg ikke hente noe fra backend istenfor å få alt servert fra frontend? Altfor mange parametre!
+        """Get options for searchable select"""
         search = None if not 'q' in req else req.q.replace("*", "%")
 
         view = req.get('view') or self.name

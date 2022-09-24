@@ -118,17 +118,17 @@ class Table:
 
     def get_fkeys(self):
         """Return all foreign keys of table"""
-        if not self.cache.get('foreign_keys', None):
-            self.init_foreign_keys()
+        if not self.cache.get('fkeys', None):
+            self.init_fkeys()
 
-        return self.cache.foreign_keys
+        return self.cache.fkeys
 
     def get_fkey(self, key):
         """Return single foreign key"""
-        if not self.cache.get('foreign_keys', None):
-            self.init_foreign_keys()
+        if not self.cache.get('fkeys', None):
+            self.init_fkeys()
 
-        return self.cache.foreign_keys[key]
+        return self.cache.fkeys[key]
 
     def get_fields(self):
         """Return all fields of table"""
@@ -169,10 +169,10 @@ class Table:
         if self.cache.get('join', None):
             return self.cache.join
         joins = []
-        foreign_keys = self.get_fkeys()
+        fkeys = self.get_fkeys()
         aliases = []
 
-        for key, fkey in foreign_keys.items():
+        for key, fkey in fkeys.items():
             if fkey.table not in self.db.user_tables:
                 continue
 
@@ -292,10 +292,10 @@ class Table:
         return result
 
     @measure_time
-    def init_foreign_keys(self):
+    def init_fkeys(self):
         """Store foreign keys in table object"""
         if (self.db.metadata.get("cache", None) and not self.db.config):
-            self.cache.foreign_keys = self.db.metadata.cache.tables[self.name].foreign_keys
+            self.cache.fkeys = self.db.metadata.cache.tables[self.name].fkeys
             return
         cursor = self.db.cnxn.cursor()
         keys = Dict()
@@ -330,7 +330,7 @@ class Table:
             if (self.db.system == 'sqlite3'):
                 keys[name].schema = 'main'
 
-        self.cache.foreign_keys = keys
+        self.cache.fkeys = keys
 
     @measure_time
     def get_columns(self):
@@ -673,7 +673,7 @@ class Grid:
         for index, row in enumerate(values):
             for col, val in row.items():
                 recs[index]['columns'][col]['value'] = val
-            recs[index]['primary_key'] = {key: row[key] for key in pkey}
+            recs[index]['pkey'] = {key: row[key] for key in pkey}
 
         row_formats = self.get_format()
         for idx, row in enumerate(row_formats.rows):
@@ -700,8 +700,8 @@ class Grid:
             'form': self.get_form(),
             'privilege': self.tbl.user_privileges(),
             'hidden': self.tbl.is_hidden(),
-            'primary_key': pkey,
-            'foreign_keys': self.tbl.get_fkeys(),
+            'pkey': pkey,
+            'fkeys': self.tbl.get_fkeys(),
             'label': self.db.get_label(self.tbl.name),
             'actions': actions,
             'limit': self.tbl.limit,
@@ -1080,7 +1080,7 @@ class Grid:
                 conds = []
                 params = []
                 for field in fields.values():
-                    if field.foreign_key:
+                    if field.fkey:
                         view = field.name if not field.view else field.view
                         if case_sensitive:
                             conds.append(f"{view} LIKE ?")

@@ -313,10 +313,10 @@ class Database:
                 'icon': None,
                 'label': self.get_label(tbl_name),
                 'rowcount': None if not self.config else table.rowcount,
-                'primary_key': self.get_pkey(tbl_name),
+                'pkey': self.get_pkey(tbl_name),
                 'description': tbl.remarks,
                 'indexes': self.get_indexes(tbl_name),
-                'foreign_keys': self.get_foreign_keys(tbl_name),
+                'fkeys': self.get_fkeys(tbl_name),
                 'relations': self.get_relations(tbl_name) if not self.config else table.relations,
                 'hidden': hidden,
                 # fields are needed only when creating cache
@@ -332,7 +332,7 @@ class Database:
         if (table.type == 'list'):
             return False
 
-        for fkey in table.foreign_keys.values():
+        for fkey in table.fkeys.values():
             if fkey.table not in self.tables:
                 continue
 
@@ -398,8 +398,8 @@ class Database:
                 # i.e. the primary key also has a foreign key
                 # These are handled in get_content_node
                 subordinate = False
-                for colname in table.primary_key:
-                    if self.get_primary_fkey(table.primary_key, colname, table.foreign_keys):
+                for colname in table.pkey:
+                    if self.get_fkey_from_column(table, colname):
                         subordinate = True
                         break
 
@@ -463,8 +463,8 @@ class Database:
         for tbl_name, table in self.tables.items():
             name_parts = tbl_name.split("_")
 
-            for colname in table.primary_key:
-                fkey = self.get_primary_fkey(table.primary_key, colname, table.foreign_keys)
+            for colname in table.pkey:
+                fkey = self.get_fkey_from_column(table, colname)
                 if fkey:
                     if (len(name_parts) > 1 and
                         name_parts[0] in self.tables and
@@ -480,12 +480,11 @@ class Database:
 
         return sub_tables
 
-    def get_primary_fkey(self, pkey, colname, fkeys):
+    def get_fkey_from_column(self, table, colname):
         """Get foreign key for primary key column"""
         col_fkey = None
-        for fkey in fkeys.values():
-            foreign = [col for col in fkey.foreign if col in pkey]
-            if (foreign and foreign[-1] == colname):
+        for fkey in table.fkeys.values():
+            if (fkey.foreign[-1] == colname):
                 col_fkey = fkey
                 break
 
@@ -606,10 +605,10 @@ class Database:
 
         return self.pkeys[tbl_name]
 
-    def get_foreign_keys(self, tbl_name):
+    def get_fkeys(self, tbl_name):
         """Get all foreign keys of table"""
         if not hasattr(self, 'fkeys'):
-            self.init_foreign_keys()
+            self.init_fkeys()
 
         return self.fkeys[tbl_name]
 
@@ -728,7 +727,7 @@ class Database:
         self.pkeys = pkeys
 
     @measure_time
-    def init_foreign_keys(self):
+    def init_fkeys(self):
         """Store all foreign keys in database object"""
         cursor = self.cnxn.cursor()
         fkeys = Dict()
@@ -759,7 +758,7 @@ class Database:
     def init_relations(self):
         """Store all has-many relations in database object"""
         if not hasattr(self, 'fkeys'):
-            self.init_foreign_keys()
+            self.init_fkeys()
 
         relations = Dict()
 

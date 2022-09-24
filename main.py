@@ -158,7 +158,7 @@ async def get_table(request: Request):
     return {'data': grid.get(pkey_vals)}
 
 @app.get("/record")
-def get_record(base: str, table: str, primary_key: str, schema: str = None):
+def get_record(base: str, table: str, pkey: str, schema: str = None):
     cnxn = Connection(cfg, base)
     if cnxn.system == 'postgres' and schema:
         base_path = base + '.' + schema
@@ -166,28 +166,28 @@ def get_record(base: str, table: str, primary_key: str, schema: str = None):
         base_path = base or schema
     dbo = Database(cnxn, base_path)
     tbl = Table(dbo, table)
-    pk = json.loads(primary_key)
+    pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
     return {'data': record.get()}
 
 @app.get("/children")
-def get_children(base: str, table: str, primary_key: str):
+def get_children(base: str, table: str, pkey: str):
     cnxn = Connection(cfg, base)
     base_path = base or schema
     dbo = Database(cnxn, base_path)
     tbl = Table(dbo, table)
     tbl.offset = 0
     tbl.limit = 30
-    pk = json.loads(primary_key)
+    pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
     return {'data': record.get_children()}
 
 @app.get("/relations")
-def get_relations(base: str, table: str, primary_key: str, count: bool, alias: str = None):
+def get_relations(base: str, table: str, pkey: str, count: bool, alias: str = None):
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)
-    pk = json.loads(primary_key)
+    pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
     if count:
         return {'data': record.get_relation_count()}
@@ -269,8 +269,8 @@ def export_csv(base: str, table: str, fields: str):
     return response
 
 @app.get('/file')
-def get_file(base: str, table: str, primary_key: str):
-    pkey = json.loads(urllib.parse.unquote(primary_key))
+def get_file(base: str, table: str, pkey: str):
+    pkey = json.loads(urllib.parse.unquote(pkey))
     cnxn = Connection(cfg, base)
     dbo = Database(cnxn, base)
     tbl = Table(dbo, table)

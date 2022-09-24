@@ -182,6 +182,8 @@ class Expression:
              WHERE OBJECT_TYPE = 'TABLE'
             order by owner;
             """
+        elif self.platform == 'mysql':
+            return "show databases;"
     def schemata(self):
         if self.platform == 'postgres':
             return """

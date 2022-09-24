@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI, Request, Response, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
@@ -301,3 +302,10 @@ def query(base: str, sql: str, limit: str):
     result = dbo.query_result(sql, limit)
 
     return {'result': result}
+
+if __name__ == '__main__':
+    uvicorn.run(
+        app,
+        host='localhost',
+        port=8000,
+    )

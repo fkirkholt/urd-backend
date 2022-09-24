@@ -223,6 +223,8 @@ class Expression:
             FROM pragma_table_info('{table_name}')
             WHERE pk != 0 order by pk
             """
+        elif self.platform == 'mysql':
+            return f"show index from {table_name} where Key_name = 'PRIMARY'"
 
     def fkeys(self):
         if self.platform == 'oracle':

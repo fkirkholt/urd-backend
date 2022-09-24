@@ -36,7 +36,7 @@ class Expression:
             elif type_ == "integer":
                 return "int(" + str(size) + ")"
             elif type_ == "decimal":
-                return "decimal(" + size + ") "
+                return "decimal(" + str(size) + ") "
             elif type_ == "float":
                 return "float(" + str(size) + ")"
             elif type_ == "date":

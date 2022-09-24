@@ -789,6 +789,8 @@ class Database:
         """
         from table import Table
         ddl = ''
+        if dialect == 'mysql':
+            ddl += 'SET foreign_key_checks = 0;'
         cursor = self.cnxn.cursor()
         tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
         for tbl in tbls:
@@ -798,5 +800,8 @@ class Database:
             ddl += table.export_ddl(dialect)
             if include_recs:
                 ddl += table.export_records(select_recs)
+
+        if dialect == 'mysql':
+            ddl += 'SET foreign_key_checks = 1;'
 
         return ddl

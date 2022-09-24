@@ -521,7 +521,7 @@ class Table:
                 coldef += " NOT NULL"
             if col.default:
                 default = col.default if not col.default_expr else col.default_expr
-                if col.datatype in ['string', 'date'] and default != 'CURRENT_DATE':
+                if (col.datatype in ['string', 'date'] and default[0:8] != 'CURRENT_'):
                     coldef += " DEFAULT '" + default + "'"
                 else:
                     coldef += " DEFAULT " + default
@@ -551,7 +551,7 @@ class Table:
         Parameters:
         select_recs: If records should be selected from existing database
         """
-        insert = ';\n'
+        insert = '\n'
         sql = f"select * from {self.name}"
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql)

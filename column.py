@@ -63,12 +63,10 @@ class Column:
             'attrs': self.db.get_attributes(self.tbl.name, self.name)
         })
 
-        for fkey in fkeys.values():
-            if fkey.foreign[-1] == field.name:
-                if (not field.fkey or len(fkey.foreign) < len(field.fkey.foreign)):
-                    field.fkey = fkey
-                    field.element = 'select'
-
+        fkey = self.get_fkey()
+        if fkey:
+            field.fkey = fkey
+            field.element = 'select'
         if 'column_size' in col:
             field.size = int(col.column_size)
         if 'scale' in col and col.scale:
@@ -232,6 +230,17 @@ class Column:
             result.append({'value': row.value, 'label': row.label})
 
         return result
+
+    def get_fkey(self):
+        """Get foreign key for primary key column"""
+        col_fkey = None
+        fkeys = self.tbl.get_fkeys()
+        for fkey in fkeys.values():
+            if (fkey.foreign[-1] == self.name):
+                if (not col_fkey or len(fkey.foreign) < len(col_fkey.foreign)):
+                    col_fkey = fkey
+
+        return col_fkey
 
     def get_size(self):
         sql = f"""

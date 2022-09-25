@@ -8,6 +8,8 @@ import simplejson as json
 from addict import Dict
 from expression import Expression
 from ruamel.yaml import YAML
+from table import Table
+from column import Column
 
 def measure_time(func):
     def wrapper(*arg):
@@ -139,7 +141,6 @@ class Database:
 
     def init_terms(self):
         """Store terms in database object"""
-        # from table import Table
         cursor = self.cnxn.cursor()
         terms = Dict()
         if 'meta_term' in self.user_tables:
@@ -233,7 +234,6 @@ class Database:
     @measure_time
     def get_tables(self):
         """Return metadata for every table"""
-        from table import Table
         if (self.metadata.get('cache', None) and not self.config):
             self.tables = self.metadata.cache.tables
             return self.tables
@@ -398,8 +398,10 @@ class Database:
                 # i.e. the primary key also has a foreign key
                 # These are handled in get_content_node
                 subordinate = False
+                tbl = Table(self, tbl_name)
                 for colname in table.pkey:
-                    if self.get_fkey_from_column(table, colname):
+                    col = Column(tbl, colname)
+                    if col.get_fkey():
                         subordinate = True
                         break
 
@@ -462,9 +464,11 @@ class Database:
         sub_tables = Dict()
         for tbl_name, table in self.tables.items():
             name_parts = tbl_name.split("_")
+            tbl = Table(self, tbl_name)
 
             for colname in table.pkey:
-                fkey = self.get_fkey_from_column(table, colname)
+                col = Column(tbl, colname)
+                fkey = col.get_fkey()
                 if fkey:
                     if (len(name_parts) > 1 and
                         name_parts[0] in self.tables and
@@ -479,17 +483,6 @@ class Database:
                     break
 
         return sub_tables
-
-    def get_fkey_from_column(self, table, colname):
-        """Get foreign key for primary key column"""
-        col_fkey = None
-        for fkey in table.fkeys.values():
-            if (fkey.foreign[-1] == colname):
-                col_fkey = fkey
-                break
-
-        return col_fkey
-
 
     def get_label(self, term):
         """Get label based on term"""
@@ -747,7 +740,6 @@ class Database:
                 fkeys[row.fktable_name][name].foreign.append(row.fkcolumn_name)
                 fkeys[row.fktable_name][name].primary.append(row.pkcolumn_name)
         else:
-            from table import Table
             rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
             for row in rows:
                 tbl = Table(self, row.table_name)
@@ -787,7 +779,6 @@ class Database:
         include_recs: If records should be included
         select_recs: If included records should be selected from existing database
         """
-        from table import Table
         ddl = ''
         if dialect == 'mysql':
             ddl += 'SET foreign_key_checks = 0;'

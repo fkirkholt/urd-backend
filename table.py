@@ -19,12 +19,15 @@ def measure_time(func):
 
 class Table:
     """Contains methods for getting metadata for table"""
+
     def __init__(self, db, tbl_name):
         self.db = db
         self.name = tbl_name
         self.label = db.get_label(tbl_name)
         self.cache = Dict()
-
+        if hasattr(db, 'tables'):
+            for key, val in db.tables[tbl_name].items():
+                self.cache[key] = val
 
     def get_type(self, main_type=None):
         """Return all foreign keys of table"""

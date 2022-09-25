@@ -1,5 +1,4 @@
 import os
-from database import Database
 from column import Column
 import re
 from addict import Dict
@@ -66,6 +65,7 @@ class Record:
         })
 
     def get_relation_count(self):
+        from database import Database
         from table import Table, Grid
         relations = {}
         for key, rel in self.tbl.get_relations().items():
@@ -164,6 +164,7 @@ class Record:
         return relations
 
     def get_relation(self, alias: str):
+        from database import Database
         from table import Table, Grid
         rel = self.tbl.get_relation(alias)
         if self.db.cnxn.system == 'postgres':

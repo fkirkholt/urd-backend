@@ -227,7 +227,20 @@ class Expression:
             return f"show index from {table_name} where Key_name = 'PRIMARY'"
 
     def fkeys(self):
-        if self.platform == 'oracle':
+        if self.platform == 'mysql':
+            return """
+            SELECT kcu.constraint_name as fk_name, kcu.table_name as fktable_name,
+            kcu.column_name as fkcolumn_name,
+            kcu.referenced_table_schema as pktable_schema, kcu.referenced_table_name as pktable_name,
+            kcu.referenced_column_name as pkcolumn_name,
+            rc.update_rule, rc.delete_rule
+            FROM INFORMATION_SCHEMA.key_column_usage kcu
+            JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc on kcu.constraint_name = rc.constraint_name
+            WHERE kcu.referenced_table_schema = ?
+            AND kcu.referenced_table_name IS NOT NULL
+            ORDER BY kcu.table_name, kcu.ordinal_position
+            """
+        elif self.platform == 'oracle':
             return """
             SELECT a.column_name as fkcolumn_name, a.position,
                    a.constraint_name as fk_name, a.table_name as fktable_name,
@@ -303,7 +316,6 @@ class Expression:
                 att2.attrelid = con.conrelid and att2.attnum = con.parent
             join pg_namespace ns on
                 ns.oid=cl.relnamespace
-
             """
 
     def columns(self):

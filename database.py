@@ -366,6 +366,7 @@ class Database:
 
         return modules
 
+    @measure_time
     def get_relation_tables(self, table_name, relation_tables):
         """Get all relation tables in hierarchy recursively"""
         table = self.tables[table_name]
@@ -381,6 +382,7 @@ class Database:
 
         return relation_tables
 
+    @measure_time
     def get_tbl_groups(self):
         """Group tables by prefix or relations"""
         tbl_groups = Dict()
@@ -459,6 +461,7 @@ class Database:
 
         return tbl_groups
 
+    @measure_time
     def get_sub_tables(self):
         """Return Dict of tables with subordinate tables"""
         sub_tables = Dict()
@@ -725,9 +728,9 @@ class Database:
         """Store all foreign keys in database object"""
         cursor = self.cnxn.cursor()
         fkeys = Dict()
-        if self.cnxn.system in ["oracle", "postgres"]:
+        if self.cnxn.system in ["mysql", "oracle", "postgres"]:
             sql = self.expr.fkeys()
-            for row in cursor.execute(sql, self.schema):
+            for row in cursor.execute(sql, self.schema or self.cat):
                 name = row.fk_name
                 fkeys[row.fktable_name][name].name = row.fk_name
                 fkeys[row.fktable_name][name].table = row.pktable_name

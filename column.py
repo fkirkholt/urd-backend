@@ -209,7 +209,7 @@ class Column:
         # ignore case
         if search:
             search = search.lower()
-            conds.append(f"lower(cast({view} as varchar)) like '%{search}%'")
+            conds.append(f"lower(cast({view} as char)) like '%{search}%'")
 
         cond = " and ".join(conds) if len(conds) else self.name + " IS NOT NULL"
 

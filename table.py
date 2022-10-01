@@ -30,7 +30,7 @@ class Table:
                 self.cache[key] = val
 
     def get_type(self, main_type=None):
-        """Return all foreign keys of table"""
+        """Return type of table"""
         if not self.cache.get('type', None):
             self.init_type(main_type)
 
@@ -49,6 +49,7 @@ class Table:
             self.type_ = tbl.table_type.lower()
 
         pkey = self.get_pkey()
+        # Data type of primary key column
         type_ = None
 
         if len(pkey) and pkey != ['rowid']:
@@ -64,6 +65,8 @@ class Table:
             tbl_type = "list"
         elif self.name[-5:] in ("_xref", "_link"):
             tbl_type = "xref"
+        elif self.name[-4:] == "_ext":
+            tbl_type = "ext"
         elif type_ == 'string':
             tbl_type = "list"
 

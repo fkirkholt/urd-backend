@@ -1309,8 +1309,15 @@ class Grid:
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_pkey()
 
+                if set(rel_pkey) <= set(rel.foreign):
+                    # Put 1:1 relations first
+                    rel.order = 1
+                    rel.relationship = '1:1'
+                else:
+                    rel.relationship = '1:M'
                 if set(rel_pkey) > set(rel.foreign):
-                    # Set order priority
+                    # Set order priority so that tables higher up in hierarchy
+                    # comes before tables further down
                     rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])
 
                 rel.label = self.db.get_label(rel_table.name

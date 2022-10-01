@@ -140,6 +140,7 @@ class Record:
 
             tbl_rel.pkey = tbl_rel.get_pkey()
             if set(tbl_rel.pkey) <= set(rel.foreign):
+                # if pkey is same as, or a subset of, fkey
                 relationship = "1:1"
             else:
                 relationship = "1:M"

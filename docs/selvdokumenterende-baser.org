@@ -59,7 +59,9 @@ legges, dersom man har slike data.
 aktuelle felter isteden. Men kan jo kun registrere én post i 1:1-relasjoner.
 
 Utvidelsestabeller vises ikke på øverste nivå i innholdslisten, men under sine
-overordnede tabeller, liksom andre underliggende tabeller.
+overordnede tabeller, liksom andre underliggende tabeller. Hvis man vil at en
+utvidelsestabell ikke skal vises i innholdslisten, kan man gi den postfix
+"_ext".
 ** Underordnede tabeller
 Tabeller hvor hele eller deler av primærnøkkelen også representerer
 fremmednøkkel til andre tabeller, reknes som underordnede tabeller. Disse vises
@@ -281,8 +283,7 @@ disse relasjonene fra øverste nivå (sak), fordi saksnr inngår i primærnøkke
 Man kan unngå å vise relasjoner på øverste nivå ved å legge inn prefix på
 relasjonen tilsvarende tabellen relasjonen hører til (dokument). Hvis man f.eks.
 har =dokument_adressat= som navn på en slik relasjonstabell, vil den kun vises
-under =dokument=. Dette fordi URD sørger for å skjule denne når prefixet er
-identisk med en eksisterende relasjon (dokument).
+under =dokument=.
 
 Hvis man vil vise noen relasjoner kun for visse typer poster, kan man ha en
 kolonne som viser type både i hovedtabellen og i relasjonstabellene. I

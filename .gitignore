@@ -1,4 +1,6 @@
+build/
+dist/
 static/
-schemas/*/
-!schemas/urd/
+venv/
 __pycache__/
+main.spec

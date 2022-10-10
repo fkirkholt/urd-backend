@@ -29,7 +29,7 @@ based on the rules that Urðr uses to present the data.
 > pip install -r requirements.txt
 #+end_src
 
-Also install [[https://github.com/fkirkholt/urd-frontend][urd-frontend] before starting the application.
+Also install the [[https://github.com/fkirkholt/urd-frontend][frontend] before starting the application.
 
 * Starting web server
 

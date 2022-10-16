@@ -203,17 +203,35 @@ class Expression:
             where i.table_owner = ?
             order by column_position
             """
+        elif self.platform == 'mysql':
+            return """
+            select index_name, column_name, non_unique, table_name
+            from information_schema.statistics
+            where table_schema = ?
+            order by index_name, seq_in_index;
+            """
     def pkeys(self):
         if self.platform == 'oracle':
             return """
-            SELECT cols.table_name, cols.column_name, cols.position as key_seq, cons.status, cons.owner
+            SELECT cols.table_name, cols.column_name, cols.position as key_seq,
+                   cons.status, cons.owner
             FROM all_constraints cons, all_cons_columns cols
             WHERE cons.constraint_type = 'P'
             AND cons.constraint_name = cols.constraint_name
             AND cons.owner = cols.owner
             AND cons.owner = ?
-            AND cols.table_name = nvl(?, cols.table_name)
             ORDER BY cols.table_name, cols.position;
+            """
+        elif self.platform == 'mysql':
+            return """
+            select s.index_name, s.table_name, s.column_name, c.data_type
+            from information_schema.statistics s
+            join information_schema.columns c
+              on c.table_schema = s.table_schema and
+                 c.table_name = s.table_name and
+                 c.column_name = s.column_name
+            where s.table_schema = ? and s.index_name = 'primary'
+            order by s.table_name, seq_in_index;
             """
 
     def pkey(self, table_name=None):

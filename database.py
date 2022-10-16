@@ -277,8 +277,8 @@ class Database:
 
             hidden = tbl_name[0:1] == "_" or tbl_name[0:5] == "meta_"
 
-
             table = Table(self, tbl_name)
+            table.cache.pkey = self.get_pkey(tbl_name)
             main_type = tbl.table_type.lower()
             tbl_type = table.get_type(main_type)
 
@@ -313,7 +313,7 @@ class Database:
                 'icon': None,
                 'label': self.get_label(tbl_name),
                 'rowcount': None if not self.config else table.rowcount,
-                'pkey': self.get_pkey(tbl_name),
+                'pkey': table.cache.pkey,
                 'description': tbl.remarks,
                 'indexes': self.get_indexes(tbl_name),
                 'fkeys': self.get_fkeys(tbl_name),
@@ -401,7 +401,7 @@ class Database:
                 # These are handled in get_content_node
                 subordinate = False
                 tbl = Table(self, tbl_name)
-                for colname in table.pkey:
+                for colname in table.pkey.columns:
                     col = Column(tbl, colname)
                     if col.get_fkey():
                         subordinate = True
@@ -469,7 +469,7 @@ class Database:
             name_parts = tbl_name.split("_")
             tbl = Table(self, tbl_name)
 
-            for colname in table.pkey:
+            for colname in table.pkey.columns:
                 col = Column(tbl, colname)
                 fkey = col.get_fkey()
                 if fkey:
@@ -673,9 +673,9 @@ class Database:
         """Store all indexes in database object"""
         cursor = self.cnxn.cursor()
         indexes = Dict()
-        if self.cnxn.system in ["oracle"]:
+        if self.cnxn.system in ['mysql', 'oracle']:
             sql = self.expr.indexes()
-            for row in cursor.execute(sql, self.schema):
+            for row in cursor.execute(sql, self.cat or self.schema):
                 name = row.index_name
 
                 indexes[row.table_name][name].name = name
@@ -701,25 +701,36 @@ class Database:
         """Store all primary keys in database object"""
         cursor = self.cnxn.cursor()
         pkeys = Dict()
-        if self.cnxn.system in ["oracle"]:
+        if self.cnxn.system in ['mysql', 'oracle']:
             sql = self.expr.pkeys()
-            rows = cursor.execute(sql, self.schema, None)
+            rows = cursor.execute(sql, self.schema or self.cat)
+            colnames = [column[0] for column in rows.description]
             for row in rows:
-                if row.table_name not in pkeys:
-                    pkeys[row.table_name] = []
-                pkeys[row.table_name].append(row.column_name)
+                pkeys[row.table_name].table_name = row.table_name
+                pkeys[row.table_name].pkey_name = row.index_name
+                if not 'columns' in pkeys[row.table_name]:
+                    pkeys[row.table_name].columns = []
+                    pkeys[row.table_name].data_types = []
+                pkeys[row.table_name].columns.append(row.column_name)
+                if 'data_type' in colnames:
+                    pkeys[row.table_name].data_types.append(row.data_type)
         else:
             tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
             for tbl in tbls:
-                pkey = []
                 if self.cnxn.system in ['mysql', 'sqlite3']:
                     # Wrong order for pkeys using cursor.primaryKeys
                     sql = self.expr.pkey(tbl.table_name)
                     rows = self.query(sql)
                 else:
                     rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
-                pkey = [row.column_name for row in rows]
-                pkeys[tbl.table_name] = pkey
+                cols = []
+                for row in rows:
+                    pkeys[tbl.table_name].table_name = tbl.table_name
+                    pkeys[tbl.table_name].pkey_name = row.pk_name
+                    if not 'columns' in pkeys[tbl.table_name]:
+                        pkeys[tbl.table_name].columns = []
+                    pkeys[tbl.table_name].columns.append(row.column_name)
+
 
         self.pkeys = pkeys
 

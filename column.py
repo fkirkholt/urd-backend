@@ -99,7 +99,7 @@ class Column:
                 field.options = self.get_options(field)
 
 
-        if (type_ in ['integer', 'decimal'] and len(pkey) and self.name == pkey[-1] and self.name not in fkeys):
+        if (type_ in ['integer', 'decimal'] and len(pkey.columns) and self.name == pkey.columns[-1] and self.name not in fkeys):
             field.extra = "auto_increment"
 
         if col.column_def and not col.auto_increment and col.column_def != 'NULL':
@@ -290,7 +290,7 @@ class Column:
 
     def convert(self, from_format, to_format):
 
-        select = ', '.join(self.tbl.pkey)
+        select = ', '.join(self.tbl.pkey.columns)
 
         sql = f"""
         select {select}, {self.name}
@@ -305,7 +305,7 @@ class Column:
             row = (dict(zip(colnames, row)))
             wheres = []
             params = []
-            for key in self.tbl.pkey:
+            for key in self.tbl.pkey.columns:
                 wheres.append(key + '=?')
                 params.append(row[key])
 

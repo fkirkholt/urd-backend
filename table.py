@@ -52,8 +52,10 @@ class Table:
         # Data type of primary key column
         type_ = None
 
-        if len(pkey) and pkey != ['rowid']:
-            pkey_col_name = pkey[0]
+        if pkey and len(pkey.data_types):
+            type_ = self.db.expr.to_urd_type(pkey.data_types[0])
+        elif pkey and len(pkey.columns) and pkey.columns != ['rowid']:
+            pkey_col_name = pkey.columns[0]
             pkey_col = cursor.columns(catalog=self.db.cat, schema=self.db.schema,
                                       table=self.name, column=pkey_col_name).fetchone()
             pkey_col.type_name = pkey_col.type_name.split('(')[0]
@@ -124,7 +126,7 @@ class Table:
 
     def get_fkeys(self):
         """Return all foreign keys of table"""
-        if not self.cache.get('fkeys', None):
+        if not 'fkeys' in self.cache:
             self.init_fkeys()
 
         return self.cache.fkeys
@@ -147,19 +149,28 @@ class Table:
     @measure_time
     def get_pkey(self):
         """Return primary key of table"""
+        if self.cache.pkey:
+            return self.cache.pkey
         if self.db.cnxn.system == 'sqlite3':
             sql = self.db.expr.pkey(self.name)
-            pkeys_cursor = self.db.query(sql)
+            rows = self.db.query(sql)
         else:
             cursor = self.db.cnxn.cursor()
-            pkeys_cursor = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
-                                            schema=self.db.schema)
-        pkeys = [row.column_name for row in pkeys_cursor]
+            rows = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
+                                      schema=self.db.schema)
+        pkey = Dict()
+        pkey.table_name = self.name
+        cols = []
+        for row in rows:
+            pkey.pkey_name = row.pk_name
+            if not 'columns' in pkey:
+                pkey.columns = []
+            pkey.columns.append(row.column_name)
 
-        if (len(pkeys) == 0 and self.db.system == 'sqlite3'):
-            return ['rowid']
-
-        return pkeys
+        if (not pkey.columns and self.db.system == 'sqlite3'):
+            pkey.columns = ['rowid']
+            pkey.data_type = ['integer']
+        return pkey
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
@@ -381,7 +392,7 @@ class Table:
             field = column.get_field(col)
 
             if (
-                self.db.config and self.db.config.column_use and cname not in pkey and
+                self.db.config and self.db.config.column_use and cname not in pkey.columns and
                 not self.name.startswith('meta_') and
                 # table not in group named '...'
                 (not contents['...'] or ('tables.' + self.name) not in contents['...'].subitems.values())
@@ -533,8 +544,8 @@ class Table:
                     coldef += " DEFAULT " + default
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
-        if (pkey and pkey != ['rowid']):
-            ddl += ",\n" + "    primary key (" + ", ".join(pkey) + ")"
+        if (pkey and pkey.columns != ['rowid']):
+            ddl += ",\n" + "    primary key (" + ", ".join(pkey.columns) + ")"
 
         for fkey in self.get_fkeys().values():
             ddl += ",\n    foreign key (" + ", ".join(fkey.foreign) + ") references "
@@ -542,7 +553,7 @@ class Table:
         ddl += ");\n\n"
 
         for idx in self.get_indexes().values():
-            if idx.columns == pkey:
+            if idx.columns == pkey.columns:
                 continue
             ddl += "create "
             if idx.unique:
@@ -606,7 +617,7 @@ class Grid:
         user_tables = self.db.get_user_tables()
         fields = self.tbl.get_fields()
 
-        for col in pkey:
+        for col in pkey.columns:
             selects[col] = self.tbl.name + '.' + col
 
         grid_columns = self.get_grid_columns()
@@ -679,7 +690,7 @@ class Grid:
         for index, row in enumerate(values):
             for col, val in row.items():
                 recs[index]['columns'][col]['value'] = val
-            recs[index]['pkey'] = {key: row[key] for key in pkey}
+            recs[index]['pkey'] = {key: row[key] for key in pkey.columns}
 
         row_formats = self.get_format()
         for idx, row in enumerate(row_formats.rows):
@@ -706,7 +717,7 @@ class Grid:
             'form': self.get_form(),
             'privilege': self.tbl.user_privileges(),
             'hidden': self.tbl.is_hidden(),
-            'pkey': pkey,
+            'pkey': pkey.columns,
             'fkeys': self.tbl.get_fkeys(),
             'label': self.db.get_label(self.tbl.name),
             'actions': actions,
@@ -849,7 +860,7 @@ class Grid:
                     continue
                 if field.datatype == 'json':
                     continue
-                if ([field.name] == pkey and field.datatype == "integer"
+                if ([field.name] == pkey.columns and field.datatype == "integer"
                     and type_ != 'list'
                     and field.name not in fkeys
                     and hidden is False):
@@ -880,7 +891,7 @@ class Grid:
             sort_fields[key].field = tbl_name + "." + key
             sort_fields[key].order = direction
 
-        if (len(pkey) == 0 and len(sort_fields) == 0):
+        if (len(pkey.columns) == 0 and len(sort_fields) == 0):
             return ""
 
         for sort in sort_fields.values():
@@ -891,7 +902,7 @@ class Grid:
             elif self.db.cnxn.system == 'sqlite3':
                 order_by += f"{sort.field} is null, {sort.field} {sort.order}, "
 
-        for field in pkey:
+        for field in pkey.columns:
             order_by += f"{self.tbl.name}.{field}, "
 
         order_by = order_by[0:-2]
@@ -918,7 +929,7 @@ class Grid:
         user_tables = self.db.get_user_tables()
         if (self.tbl.name + '_grid') in user_tables:
             pkey = self.tbl.get_pkey()
-            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
+            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey.columns) + ")\n"
         else:
             join_view = ""
 
@@ -953,7 +964,7 @@ class Grid:
         user_tables = self.db.get_user_tables()
         if (self.tbl.name + '_grid') in user_tables:
             pkey = self.tbl.get_pkey()
-            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey) + ")\n"
+            join_view = "join " + self.tbl.name + "_grid using (" + ','.join(pkey.columns) + ")\n"
         else:
             join_view = ""
 
@@ -970,13 +981,13 @@ class Grid:
 
     def get_display_values_from_view(self, selects):
         view_name = self.tbl.name + '_grid'
-        pkeys = self.tbl.get_pkey()
+        pkey = self.tbl.get_pkey()
         order = self.make_order_by()
         conds = self.get_cond_expr()
 
         sql  = "select " + ', '.join(selects) + "\n"
         sql += "from " + view_name + "\n"
-        sql += "join " + self.tbl.name + " using (" + ', '.join(pkeys) + ")\n"
+        sql += "join " + self.tbl.name + " using (" + ', '.join(pkey.columns) + ")\n"
         sql+= "" if not conds else "where " + conds + "\n"
         sql += order
 
@@ -1160,7 +1171,7 @@ class Grid:
         col_groups = Dict()
         for field in fields.values():
             # Don't add column to form if it's part of primary key but not shown in grid
-            if (field.name in self.tbl.get_pkey() and
+            if (field.name in self.tbl.get_pkey().columns and
                 field.name not in self.get_grid_columns()
             ): field.hidden = True
 
@@ -1309,16 +1320,16 @@ class Grid:
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_pkey()
 
-                if set(rel_pkey) <= set(rel.foreign):
+                if set(rel_pkey.columns) <= set(rel.foreign):
                     # Put 1:1 relations first
                     rel.order = 1
                     rel.relationship = '1:1'
                 else:
                     rel.relationship = '1:M'
-                if set(rel_pkey) > set(rel.foreign):
+                if set(rel_pkey.columns) > set(rel.foreign):
                     # Set order priority so that tables higher up in hierarchy
                     # comes before tables further down
-                    rel.order = len(rel_pkey) - rel_pkey.index(rel.foreign[-1])
+                    rel.order = len(rel_pkey.columns) - rel_pkey.columns.index(rel.foreign[-1])
 
                 rel.label = self.db.get_label(rel_table.name
                              .replace(self.tbl.name + '_', '')

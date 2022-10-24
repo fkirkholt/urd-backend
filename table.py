@@ -593,7 +593,7 @@ class Table:
                 insert = insert[:-1] + ");\n"
 
         return insert
-        
+
 
 class Grid:
     """Contains methods for returning metadata and data for grid"""

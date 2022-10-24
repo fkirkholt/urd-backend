@@ -138,9 +138,9 @@ class Expression:
             else:
                 raise ValueError(f"Type {type_} not supported yet")
         else:
-            if type_ in ["varchar", "text", "char", "bpchar", "clob"]:
+            if type_ in ["varchar", "text", "char", "bpchar", "clob", "nvarchar"]:
                 return "string"
-            elif type_ in ["integer", "int", "int4", "int8"]:
+            elif type_ in ["integer", "int", "int4", "int8", "int identity", "bigint"]:
                 return "integer"
             elif type_ in ["numeric", "decimal"]:
                 return "decimal"
@@ -148,15 +148,15 @@ class Expression:
                 return "float"
             elif type_ == "blob":
                 return "binary"
-            elif type_ in ["date", "timestamp"]:
+            elif type_ in ["date", "datetime", "timestamp"]:
                 return "date"
-            elif type_ in ["bool", "boolean"]:
+            elif type_ in ["bool", "boolean", "bit"]:
                 return "boolean"
             elif type_ in ["json", "jsonb"]:
                 return "json"
             else:
                 raise ValueError(f"Type {type_} not supported yet")
-    
+
     def replace_vars(self, sql):
         # todo: Get user from logged in user
         sql = sql.replace("$user_name", "Admin")
@@ -184,6 +184,13 @@ class Expression:
             """
         elif self.platform == 'mysql':
             return "show databases;"
+        elif self.platform == 'sql server':
+            return """
+            select name
+            from sys.Databases
+            WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')
+                  and HAS_DBACCESS(name) = 1;
+            """
     def schemata(self):
         if self.platform == 'postgres':
             return """

@@ -27,7 +27,7 @@ class Connection:
         self.system = cfg.db_system
         self.server = cfg.db_server
         driver = self.get_driver()
-        cnxnstr = f'Driver={driver};'
+        cnxnstr = 'Driver={' + driver + '};'
         if (db_name and cfg.db_system != 'oracle'):
             path = db_name.split('.')
             cnxnstr += 'Database=' + path[0] + ';'
@@ -40,7 +40,10 @@ class Connection:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + cfg.db_uid + ';Pwd=' + cfg.db_pwd + ';'
         pyodbc.lowercase = True
-        if (cfg.db_system == 'sqlite3'):
+        if cfg.db_system == 'sql server':
+            cnxnstr += 'ENCRYPT=no;MARS_Connection=yes;'
+            pyodbc.lowercase = False
+        if cfg.db_system == 'sqlite3':
             pyodbc.lowercase = False
             path = os.path.join(cfg.db_server, db_name)
             cnxnstr = 'Driver=SQLite3;Database=' + path
@@ -53,7 +56,8 @@ class Connection:
         else:
             try:
                 cnxn = pyodbc.connect(cnxnstr)
-            except Exception:
+            except Exception as e:
+                print(e)
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication"
                 )
@@ -99,6 +103,10 @@ class Database:
         elif cnxn.system == 'sqlite3':
             self.schema = 'main'
             self.cat = None
+        elif cnxn.system == 'sql server':
+            path = db_name.split('.')
+            self.cat = path[0]
+            self.schema = 'dbo' if len(path) == 1 else path[1]
         else:
             self.schema = 'public'
             self.cat = None

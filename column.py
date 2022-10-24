@@ -88,7 +88,7 @@ class Column:
                     if index.columns != ref_pk and index.unique:
                         # Only last pk column is used in display value,
                         # other pk columns are usually foreign keys
-                        cols = [self.name+"."+col for col in index.columns if col not in ref_pk[0:-1]]
+                        cols = [self.name+"."+col for col in index.columns if col not in ref_pk.columns[0:-1]]
                         field.view = " || ', ' || ".join(cols)
                         if index.name.endswith("_sort_idx"):
                             break

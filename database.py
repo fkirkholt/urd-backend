@@ -779,7 +779,8 @@ class Database:
 
         for fktable_name, fkeys in self.fkeys.items():
             for fkey in fkeys.values():
-                if fkey.schema == self.schema:
+                # For mysql fkey.schema refers to catalog/database
+                if fkey.schema == self.schema or self.cat:
                     relations[fkey.table][fkey.name] = Dict({
                         "name": fkey.name,
                         "table": fktable_name,

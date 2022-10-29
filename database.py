@@ -725,7 +725,7 @@ class Database:
         else:
             tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
             for tbl in tbls:
-                if self.cnxn.system in ['mysql', 'sqlite3']:
+                if self.cnxn.system in ['sqlite3']:
                     # Wrong order for pkeys using cursor.primaryKeys
                     sql = self.expr.pkey(tbl.table_name)
                     rows = self.query(sql)

@@ -244,7 +244,7 @@ class Expression:
     def pkey(self, table_name=None):
         if self.platform == 'sqlite3':
             return f"""
-            SELECT name as column_name
+            SELECT name as column_name, NULL as pk_name
             FROM pragma_table_info('{table_name}')
             WHERE pk != 0 order by pk
             """

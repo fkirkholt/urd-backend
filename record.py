@@ -343,7 +343,7 @@ class Record:
         for colname in pkey:
             if colname in values:
                 self.pk[colname] = values[colname]
-        inc_col = pkey[-1]
+        inc_col = pkey.columns[-1]
         if (
             inc_col not in values and
             fields[inc_col].extra == "auto_increment"

@@ -102,7 +102,7 @@ class Table:
 
     @measure_time
     def count_rows(self):
-        sql = f"select count(*) from {self.name}"
+        sql = f'select count(*) from "{self.name}"'
         return self.db.query(sql).fetchval()
 
     def is_hidden(self):
@@ -202,12 +202,12 @@ class Table:
             aliases.append(alias)
 
             # Get the ON statement in the join
-            ons = [alias+'.'+fkey.primary[idx] + " = " + self.name + "." + col
+            ons = [f'"{alias}"."{fkey.primary[idx]}" = "{self.name}"."{col}"'
                    for idx, col in enumerate(fkey.foreign)]
             on_list = ' AND '.join(ons)
 
             namespace = self.db.schema or self.db.cat
-            joins.append(f"left join {namespace}.{fkey.table} {alias} on {on_list}")
+            joins.append(f'left join {namespace}."{fkey.table}" "{alias}" on {on_list}')
 
         self.cache.join = "\n".join(joins)
 
@@ -618,14 +618,14 @@ class Grid:
         fields = self.tbl.get_fields()
 
         for col in pkey.columns:
-            selects[col] = self.tbl.name + '.' + col
+            selects[col] = f'"{self.tbl.name}"."{col}"'
 
         grid_columns = self.get_grid_columns()
         for colname in grid_columns:
 
             col = fields[colname]
 
-            col.ref = self.tbl.name + '.' + colname
+            col.ref = f'"{self.tbl.name}"."{colname}"'
 
             if 'column_view' in col:
                 selects[colname] = col.column_view
@@ -903,7 +903,7 @@ class Grid:
                 order_by += f"{sort.field} is null, {sort.field} {sort.order}, "
 
         for field in pkey.columns:
-            order_by += f"{self.tbl.name}.{field}, "
+            order_by += f'"{self.tbl.name}"."{field}", '
 
         order_by = order_by[0:-2]
 
@@ -919,7 +919,7 @@ class Grid:
         fields = self.tbl.get_fields()
         for key in selects.keys():
             if (key in fields or key == 'rowid') and 'source' not in fields[key]:
-                cols.append(self.tbl.name + '.' + key)
+                cols.append(f'"{self.tbl.name}"."{key}"')
 
         select = ', '.join(cols)
         join = self.tbl.get_join()
@@ -934,7 +934,7 @@ class Grid:
             join_view = ""
 
         sql = "select " + select + "\n"
-        sql+= "from " + (self.db.schema or self.db.cat) + "." + self.tbl.name + "\n"
+        sql+= "from " + (self.db.schema or self.db.cat) + '."' + self.tbl.name + '"\n'
         sql+= join + "\n"
         sql+= join_view
         sql+= "" if not cond else "where " + cond +"\n"
@@ -969,7 +969,7 @@ class Grid:
             join_view = ""
 
         sql  = "select count(*)\n"
-        sql += f"from {namespace}.{self.tbl.name}\n"
+        sql += f'from {namespace}."{self.tbl.name}"\n'
         sql += join + "\n"
         sql += join_view
         sql += "" if not conds else f"where {conds}\n"
@@ -1012,11 +1012,11 @@ class Grid:
 
         alias_selects = {}
         for key, value in selects.items():
-            alias_selects[key] = value + ' as ' + key
+            alias_selects[key] = f'{value} as "{key}"'
         select = ', '.join(alias_selects.values())
 
         sql = "select " + select + "\n"
-        sql+= "from " + (self.db.schema or self.db.cat) + "." + self.tbl.name + "\n"
+        sql+= "from " + (self.db.schema or self.db.cat) + f'."{self.tbl.name}"' + "\n"
         sql+= join + "\n"
         sql+= "" if not conds else "where " + conds + "\n"
         sql+= order

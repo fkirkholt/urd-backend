@@ -88,7 +88,7 @@ class Column:
                     if index.columns != ref_pk and index.unique:
                         # Only last pk column is used in display value,
                         # other pk columns are usually foreign keys
-                        cols = [self.name+"."+col for col in index.columns if col not in ref_pk.columns[0:-1]]
+                        cols = [f'"{self.name}".{col}' for col in index.columns if col not in ref_pk.columns[0:-1]]
                         field.view = " || ', ' || ".join(cols)
                         if index.name.endswith("_sort_idx"):
                             break
@@ -132,7 +132,7 @@ class Column:
         grid = Grid(cand_tbl)
 
         # Field that holds the value of the options
-        value_field = field.name + '.' + pkey_col
+        value_field = f'"{field.name}".' + pkey_col
 
         # Sorting
         cand_sort_columns = grid.get_sort_columns()
@@ -174,7 +174,7 @@ class Column:
         # Count records
 
         sql = "select count(*)\n"
-        sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
+        sql+= f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" "{field.name}"\n'
         sql+= condition
 
         count = self.db.query(sql, params).fetchval()
@@ -185,7 +185,7 @@ class Column:
         sql = "select " + value_field + " as value, "
         sql+= "(" + (field.view or value_field) + ") as label, "
         sql+= "(" + (field.column_view or value_field) + ") as coltext "
-        sql+= f"from {self.db.schema or self.db.cat}.{cand_tbl.name} {field.name}\n"
+        sql+= f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" "{field.name}"\n'
         sql+= condition + "\n" + order
 
         rows = self.db.query(sql, params).fetchall()

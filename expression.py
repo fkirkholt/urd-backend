@@ -138,7 +138,7 @@ class Expression:
             else:
                 raise ValueError(f"Type {type_} not supported yet")
         else:
-            if type_ in ["varchar", "text", "char", "bpchar", "clob", "nvarchar"]:
+            if type_ in ["varchar", "text", "char", "bpchar", "clob", "nvarchar", "ntext"]:
                 return "string"
             elif type_ in ["integer", "int", "int4", "int8", "int identity", "bigint"]:
                 return "integer"

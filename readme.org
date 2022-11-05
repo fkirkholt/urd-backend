@@ -21,6 +21,9 @@ relations.
 After a original database has been analyzed, an access database can be made
 based on the rules that Urðr uses to present the data.
 
+* Requirements
+Linux or macOS
+
 * Installation
 
 #+begin_src bash

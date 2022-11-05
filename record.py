@@ -115,12 +115,12 @@ class Record:
                     rel.primary == list(self.pk.keys()) and
                     rel.index.unique is True
                 ):
-                    grid2.add_cond(expr = f"{rel.table}.{col}", operator = "IS NULL")
+                    grid2.add_cond(expr = f'"{rel.table}"."{col}"', operator = "IS NULL")
                     count_null_conds += 1
                 else:
-                    grid2.add_cond(f"{rel.table}.{col}", "=", val)
+                    grid2.add_cond(f'"{rel.table}"."{col}"', "=", val)
 
-                grid.add_cond(f"{rel.table}.{col}", "=", val)
+                grid.add_cond(f'"{rel.table}"."{col}"', "=", val)
                 conds[col] = val
 
                 # Check if relation depends on record value
@@ -205,9 +205,9 @@ class Record:
                 rel.primary == list(self.pk.keys()) and
                 rel.index.unique is True
             ):
-                grid.add_cond(expr = f"({rel.table}.{col} = ? or {rel.table}.{col} is null)", value = val)
+                grid.add_cond(expr = f'("{rel.table}"."{col}" = ? or "{rel.table}"."{col}" is null)', value = val)
             else:
-                grid.add_cond(f"{rel.table}.{col}", "=", val)
+                grid.add_cond(f'"{rel.table}"."{col}"', "=", val)
             conds[col] = val
             pkey[col] = val
             # grid.add_cond(f"coalesce({rel.table}.{col}, '-')", "IN", [val, '-'])
@@ -252,7 +252,7 @@ class Record:
         params = [val for val in self.pk.values()]
 
         sql = f"""
-        select * from {self.db.schema or self.db.cat}.{self.tbl.name}\n
+        select * from {self.db.schema or self.db.cat}."{self.tbl.name}"\n
         where {cond}
         """
         cursor = self.db.cnxn.cursor()
@@ -309,7 +309,7 @@ class Record:
         for idx, colname in enumerate(rel.primary):
             foreign = rel.foreign[idx]
             value = rec.fields[colname].value
-            grid.add_cond(f"{rel.table}.{foreign}", "=", value)
+            grid.add_cond(f'"{rel.table}"."{foreign}"', "=", value)
 
         relation = grid.get()
 

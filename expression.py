@@ -158,16 +158,12 @@ class Expression:
                 raise ValueError(f"Type {type_} not supported yet")
 
     def replace_vars(self, sql):
-        # todo: Get user from logged in user
-        sql = sql.replace("$user_name", "Admin")
-
         if "current_date" in sql.lower():
             sql = date.today().strftime("%Y-%m-%d")
         elif "current_timestamp" in sql.lower():
             sql = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         return sql
-        # todo:t Må ha autentisering på plass før denne kan lages
 
     def databases(self):
         if self.platform == 'postgres':

@@ -431,11 +431,17 @@ class Table:
             for col in updated_idx.columns:
                 fields[col].extra = "auto_update"
                 fields[col].editable = False
+            if len(updated_idx.columns) == 2:
+                col = updated_idx.columns[1]
+                fields[col].default = self.db.cnxn.user
         created_idx = indexes.get(self.name + "_created_idx", None)
         if created_idx:
             for col in created_idx.columns:
                 fields[col].extra = "auto"
                 fields[col].editable = False
+            if len(created_idx.columns) == 2:
+                col = created_idx.columns[1]
+                fields[col].default = self.db.cnxn.user
 
         self.cache.fields = fields
 

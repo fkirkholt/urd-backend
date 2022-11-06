@@ -7,16 +7,16 @@ from datetime import datetime
 import time
 
 class Record:
-    def __init__(self, db, tbl, pk):
+    def __init__(self, db, tbl, pkey_vals):
         self.db = db
         self.tbl = tbl
-        self.pk = self.format_pkey(pk)
+        self.pk = self.format_pkey(pkey_vals)
         self.cache = Dict()
 
-    def format_pkey(self, pkey):
+    def format_pkey(self, pkey_vals):
         """Return pkey values where floats are strings. Needed by pyodbc"""
         formatted_pkey = {}
-        for key, value in pkey.items():
+        for key, value in pkey_vals.items():
             if type(value) == float:
                 value = str(value)
             formatted_pkey[key] = value
@@ -139,7 +139,7 @@ class Record:
                 count_inherited = grid2.get_rowcount()
 
             tbl_rel.pkey = tbl_rel.get_pkey()
-            if set(tbl_rel.pkey) <= set(rel.foreign):
+            if set(tbl_rel.pkey.columns) <= set(rel.foreign):
                 # if pkey is same as, or a subset of, fkey
                 relationship = "1:1"
             else:
@@ -196,7 +196,7 @@ class Record:
 
         # Add condition to fetch only rows that link to record
         conds = Dict()
-        pkey = {}
+        pkey_vals = {}
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx]
             val = None if len(self.pk) == 0 else rec_values[ref_key]
@@ -209,7 +209,7 @@ class Record:
             else:
                 grid.add_cond(f'"{rel.table}"."{col}"', "=", val)
             conds[col] = val
-            pkey[col] = val
+            pkey_vals[col] = val
             # grid.add_cond(f"coalesce({rel.table}.{col}, '-')", "IN", [val, '-'])
 
         relation = grid.get()
@@ -229,8 +229,8 @@ class Record:
         tbl_rel.pkey = tbl_rel.get_pkey()
 
         # If foreign key columns contains primary key
-        if set(tbl_rel.pkey) <= set(rel.foreign):
-            rec = Record(self.db, tbl_rel, pkey)
+        if set(tbl_rel.pkey.columns) <= set(rel.foreign):
+            rec = Record(self.db, tbl_rel, pkey_vals)
             relation.records = [rec.get()]
             relation.relationship = "1:1"
         else:
@@ -340,7 +340,7 @@ class Record:
         # Get autoinc values for primary keys
         # Supports simple and compound primary keys
         pkey = self.tbl.get_pkey()
-        for colname in pkey:
+        for colname in pkey.colnames:
             if colname in values:
                 self.pk[colname] = values[colname]
         inc_col = pkey.columns[-1]
@@ -348,8 +348,8 @@ class Record:
             inc_col not in values and
             fields[inc_col].extra == "auto_increment"
         ):
-            s = slice(0, len(pkey) - 1)
-            cols = pkey[s]
+            s = slice(0, len(pkey.columns) - 1)
+            cols = pkey.columns[s]
 
             conditions = []
             params = []

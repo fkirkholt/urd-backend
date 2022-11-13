@@ -85,7 +85,7 @@ class Column:
                     field.expandable = True
 
                 for index in ref_tbl.get_indexes().values():
-                    if index.columns != ref_pk and index.unique:
+                    if index.columns != ref_pk.columns and index.unique:
                         # Only last pk column is used in display value,
                         # other pk columns are usually foreign keys
                         cols = [f'"{self.name}".{col}' for col in index.columns if col not in ref_pk.columns[0:-1]]

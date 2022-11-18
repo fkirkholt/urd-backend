@@ -7,7 +7,7 @@ display data and relations between them. This requires some rules to be followed
 when designing the database. The rules are often based on common principles for
 designing databases.
 
-The rules are laid out here: [[./docs/selvdokumenterende-baser.org][selvdokumenterende-baser](currently only in
+The rules are laid out here: [[./docs/selvdokumenterende-baser.org][selvdokumenterende-baser]] (currently only in
 norwegian).
 
 The application is designed for archivists, who need to map databases, find how

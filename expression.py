@@ -47,6 +47,23 @@ class Expression:
                 return "blob"
             else:
                 raise ValueError(f"Type {type_} not supported yet")
+        elif self.platform == 'sql server':
+            if type_ == 'string':
+                return 'varchar(' + str(size) + ')' if (size and size > 0) else 'varchar(max)'
+            elif type_ == 'integer':
+                return 'int'
+            elif type_ == 'decimal':
+                return 'decimal(' + str(size) + ')'
+            elif type_ == 'float':
+                return 'float(' + str(size) + ')'
+            elif type_ == 'date':
+                return 'date'
+            elif type_ == 'boolean':
+                return 'bit'
+            elif type_ == 'binary':
+                return 'varbinary(max)'
+            else:
+                raise ValueError(f"Type {type_} not supported yet")
         elif self.platform == "sqlite3":
             if type_ in ["string"]:
                 return "varchar(" + str(size) + ")" if size else "text"
@@ -74,7 +91,7 @@ class Expression:
             elif type_ == "integer":
                 return "integer"
             elif type_ == "decimal":
-                return "decimal(" + size + ")"
+                return "decimal(" + str(size) + ")"
             elif type_ == "float":
                 return "float(" + str(size) + ")"
             elif type_ == "date":

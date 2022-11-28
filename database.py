@@ -249,25 +249,50 @@ class Database:
         tables = Dict()
 
         if (self.config and not 'cache' in self.metadata):
-            sql = """
+            sql = f"""
                 CREATE TABLE meta_data (
-                _name varchar(30) NOT NULL,
+                const_name varchar(30) NOT NULL default '{self.name}',
                 label varchar(30),
                 description text,
                 cache json,
-                PRIMARY KEY (_name)
+                PRIMARY KEY (const_name)
             );
             """
             cursor.execute(sql)
             label = self.get_label(self.name)
 
             sql = f"""
-                insert into meta_data (_name, label)
-                values('{self.name}', '{label}')
+                insert into meta_data (label)
+                values('{label}')
             """
             cursor.execute(sql)
             self.metadata.cache = None
             self.user_tables.append('meta_data')
+
+            if 'meta_term' not in self.user_tables:
+                sql = """
+                    create table meta_term (
+                    term varchar(30) not null,
+                    label varchar(50),
+                    attributes varchar(255),
+                    primary key (term)
+                )
+                """
+
+                cursor.execute(sql)
+                self.user_tables.append('meta_term')
+
+            terms = self.get_terms()
+            if 'meta_data.cache' not in terms:
+                sql = """
+                    insert into meta_term (term, attributes)
+                    values ('meta_data.cache', 'data-format: json')
+                """
+                cursor.execute(sql)
+                # Refresh terms to include cache column
+                self.init_terms()
+
+            cursor.commit()
 
         start = time.time()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
@@ -585,13 +610,13 @@ class Database:
             cursor = self.cnxn.cursor()
             # self.cache = tables
             sql = "update meta_data set cache = ?\n"
-            sql+= "where _name = ?"
+            sql+= "where const_name = ?"
             cache = {
                 "tables": self.tables,
                 "contents": contents,
                 "config": self.config
             }
-            cursor.execute(sql, json.dumps(cache), self.name).commit()
+            cursor.execute(sql, json.dumps(cache, ensure_ascii=False).encode('utf8'), self.name).commit()
 
         return contents
 

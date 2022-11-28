@@ -29,7 +29,7 @@ class Expression:
         elif (self.platform == 'sqlite3'):
             return "AUTOINCREMENT"
 
-    def to_native_type(self, type_, size):
+    def to_native_type(self, type_, size=None):
         if self.platform == "mysql":
             if type_ == "string":
                 return "varchar(" + str(size) + ")" if size else "longtext"
@@ -103,7 +103,7 @@ class Expression:
             elif type_ == "json":
                 return "json"
         elif self.platform == 'oracle':
-            if (type_ == "string" and size > 4000):
+            if (type_ == "string" and (not size or size > 4000)):
                 return "clob"
             elif type_ == "string":
                 return "varchar(" + str(size) + ")"

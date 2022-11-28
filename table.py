@@ -862,7 +862,7 @@ class Grid:
                 # Don't show hdden columns
                 if field.name[0:1] == '_' or field.name[0:6].lower() == 'const_':
                     continue
-                if field.size and field.size >= 255:
+                if field.size and (field.size < 1 or field.size >= 255):
                     continue
                 if field.datatype == 'json':
                     continue

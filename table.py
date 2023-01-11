@@ -725,6 +725,7 @@ class Grid:
             'hidden': self.tbl.is_hidden(),
             'pkey': pkey.columns,
             'fkeys': self.tbl.get_fkeys(),
+            'indexes': self.tbl.get_indexes(),
             'label': self.db.get_label(self.tbl.name),
             'actions': actions,
             'limit': self.tbl.limit,

@@ -636,7 +636,7 @@ class Grid:
             if 'column_view' in col:
                 selects[colname] = col.column_view
             elif col.element == 'textarea':
-                selects[colname] = "substring(" + col.ref + ', 1, 255)'
+                selects[colname] = "substr(" + col.ref + ', 1, 255)'
             else:
                 selects[colname] = col.ref
 

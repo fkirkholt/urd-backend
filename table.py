@@ -383,7 +383,7 @@ class Table:
             colnames = [column[0] for column in col.cursor_description]
             col = Dict(zip(colnames, col))
             # Strip column size from type_name for sqlite3
-            col.type_name = col.type_name.split('(')[0]
+            col.type_name = col.type_name.split('(')[0].strip()
             if ('column_size' in col or 'display_size' in col):
                 col.column_size = col.get('column_size', col.display_size)
             cname = col.column_name

@@ -247,17 +247,14 @@ class Database:
             return self.tables
         cursor = self.cnxn.cursor()
         tables = Dict()
-        if (self.cnxn.system in ['oracle', 'sql server']):
-            datatype = self.expr.to_native_type('string')
-        else:
-            datatype = 'json'
+        datatype = self.expr.to_native_type('string')
 
         if (self.config and not 'cache' in self.metadata):
             sql = f"""
                 CREATE TABLE meta_data (
                 const_name varchar(30) NOT NULL default '{self.name}',
                 label varchar(30),
-                description text,
+                description {datatype},
                 cache {datatype},
                 PRIMARY KEY (const_name)
             );

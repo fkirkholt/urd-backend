@@ -617,7 +617,8 @@ class Database:
                 "contents": contents,
                 "config": self.config
             }
-            cursor.execute(sql, json.dumps(cache, ensure_ascii=False).encode('utf8'), self.name).commit()
+            cache_txt = json.dumps(cache, ensure_ascii=False).encode('utf8')
+            cursor.execute(sql, cache_txt, self.name).commit()
 
         return contents
 

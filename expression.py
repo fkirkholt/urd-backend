@@ -1,6 +1,7 @@
 import re
 from datetime import date, datetime
 
+
 class Expression:
     def __init__(self, platform):
         self.platform = platform
@@ -29,150 +30,136 @@ class Expression:
         elif (self.platform == 'sqlite3'):
             return "AUTOINCREMENT"
 
+    def get_mysql_type(self, type_, size):
+        if type_ == "string":
+            return "varchar(" + str(size) + ")" if size else "longtext"
+        elif type_ == "integer":
+            return "int(" + str(size) + ")"
+        elif type_ == "decimal":
+            return "decimal(" + str(size) + ") "
+        elif type_ == "float":
+            return "float(" + str(size) + ")"
+        elif type_ == "date":
+            return "date"
+        elif type_ == "boolean":
+            return "tinyint(1)"
+        elif type_ == "binary":
+            return "blob"
+        else:
+            raise ValueError(f"Type {type_} not supported yet")
+
+    def get_sqlserver_type(self, type_, size):
+        if type_ == 'string':
+            return ('varchar(' + str(size) + ')'
+                    if (size and size > 0) else 'varchar(max)')
+        elif type_ == 'integer':
+            return 'int'
+        elif type_ == 'decimal':
+            return 'decimal(' + str(size) + ')'
+        elif type_ == 'float':
+            return 'float(' + str(size) + ')'
+        elif type_ == 'date':
+            return 'date'
+        elif type_ == 'boolean':
+            return 'bit'
+        elif type_ == 'binary':
+            return 'varbinary(max)'
+        else:
+            raise ValueError(f"Type {type_} not supported yet")
+
+    def get_sqlite_type(self, type_, size):
+        if type_ in ["string"]:
+            return "varchar(" + str(size) + ")" if size else "text"
+        elif type_ == "date":
+            return "date"
+        elif type_ in ["integer", "boolean"]:
+            return "integer"
+        elif type_ == "decimal":
+            return "decimal"
+        elif type_ == "float":
+            return "real"
+        elif type_ == "binary":
+            return "blob"
+        elif type_ == "json":
+            return "json"
+        else:
+            raise ValueError(f"Type {type_} not supported yet")
+
+    def get_postgres_type(self, type_, size):
+        if type_ == "string" and size:
+            return "varchar(" + str(size) + ")"
+        elif type_ == "string":
+            return "text"
+        elif (type_ == "integer" and size > 11):
+            return "bigint"
+        elif type_ == "integer":
+            return "integer"
+        elif type_ == "decimal":
+            return "decimal(" + str(size) + ")"
+        elif type_ == "float":
+            return "float(" + str(size) + ")"
+        elif type_ == "date":
+            return "date"
+        elif type_ == "boolean":
+            return "boolean"
+        elif type_ == "binary":
+            return "bytea"
+        elif type_ == "json":
+            return "json"
+
+    def get_oracle_type(self, type_, size):
+        if (type_ == "string" and (not size or size > 4000)):
+            return "clob"
+        elif type_ == "string":
+            return "varchar(" + str(size) + ")"
+        elif (type_ == "integer" and size > 11):
+            return "number(" + str(size) + ", 0)"
+        elif type_ == "integer":
+            return "integer"
+        elif type_ == "float":
+            return "float(" + str(size) + ")"
+        elif type_ == "date":
+            return "date"
+        elif type_ == "boolean":
+            return "number(1)"
+        elif type_ == "binary":
+            return "blob"
+
     def to_native_type(self, type_, size=None):
         if self.platform == "mysql":
-            if type_ == "string":
-                return "varchar(" + str(size) + ")" if size else "longtext"
-            elif type_ == "integer":
-                return "int(" + str(size) + ")"
-            elif type_ == "decimal":
-                return "decimal(" + str(size) + ") "
-            elif type_ == "float":
-                return "float(" + str(size) + ")"
-            elif type_ == "date":
-                return "date"
-            elif type_ == "boolean":
-                return "tinyint(1)"
-            elif type_ == "binary":
-                return "blob"
-            else:
-                raise ValueError(f"Type {type_} not supported yet")
+            return self.get_mysql_type(type_, size)
         elif self.platform == 'sql server':
-            if type_ == 'string':
-                return 'varchar(' + str(size) + ')' if (size and size > 0) else 'varchar(max)'
-            elif type_ == 'integer':
-                return 'int'
-            elif type_ == 'decimal':
-                return 'decimal(' + str(size) + ')'
-            elif type_ == 'float':
-                return 'float(' + str(size) + ')'
-            elif type_ == 'date':
-                return 'date'
-            elif type_ == 'boolean':
-                return 'bit'
-            elif type_ == 'binary':
-                return 'varbinary(max)'
-            else:
-                raise ValueError(f"Type {type_} not supported yet")
+            return self.get_sqlserver_type(type_, size)
         elif self.platform == "sqlite3":
-            if type_ in ["string"]:
-                return "varchar(" + str(size) + ")" if size else "text"
-            elif type_ == "date":
-                return "date"
-            elif type_ in ["integer", "boolean"]:
-                return "integer"
-            elif type_ == "decimal":
-                return "decimal"
-            elif type_ == "float":
-                return "real"
-            elif type_ == "binary":
-                return "blob"
-            elif type_ == "json":
-                return "json"
-            else:
-                raise ValueError(f"Type {type_} not supported yet")
+            return self.get_sqlite_type(type_, size)
         elif self.platform == 'postgres':
-            if type_ == "string" and size:
-                return "varchar(" + str(size) + ")"
-            elif type_ == "string":
-                return "text"
-            elif (type_ == "integer" and size > 11):
-                return "bigint"
-            elif type_ == "integer":
-                return "integer"
-            elif type_ == "decimal":
-                return "decimal(" + str(size) + ")"
-            elif type_ == "float":
-                return "float(" + str(size) + ")"
-            elif type_ == "date":
-                return "date"
-            elif type_ == "boolean":
-                return "boolean"
-            elif type_ == "binary":
-                return "bytea"
-            elif type_ == "json":
-                return "json"
+            return self.get_postgres_type(type_, size)
         elif self.platform == 'oracle':
-            if (type_ == "string" and (not size or size > 4000)):
-                return "clob"
-            elif type_ == "string":
-                return "varchar(" + str(size) + ")"
-            elif (type_ == "integer" and size > 11):
-                return "number(" + str(size) + ", 0)"
-            elif type_ == "integer":
-                return "integer"
-            elif type_ == "float":
-                return "float(" + str(size) + ")"
-            elif type_ == "date":
-                return "date"
-            elif type_ == "boolean":
-                return "number(1)"
-            elif type_ == "binary":
-                return "blob"
+            return self.get_oracle_type(type_, size)
         else:
-            raise ValueError(f"Type conversion for {self.platform} not implemented")
+            raise ValueError(f"Type conversion for {self.platform} not "
+                             "implemented")
 
     def to_urd_type(self, type_):
         type_ = type_.lower()
-        if self.platform == 'mysql':
-            if re.search("char|text", type_):
-                return "string"
-            elif re.search("int", type_):
-                return "integer"
-            elif re.search("double|decimal", type_):
-                return "decimal"
-            elif re.search("float", type_):
-                return "float"
-            elif re.search("date|time", type_):
-                return "date"
-            elif type_ == "blob":
-                return "binary"
-            else:
-                raise ValueError(f"Type {type_} not supported yet")
-        elif self.platform == "oracle":
-            if type_ in ["char", "varchar2", "nvarchar2", "clob", "nclob"]:
-                return "string"
-            elif type_ == "number":
-                return "integer"
-            elif type_ in ["decimal"]:
-                return "decimal"
-            elif type_ in ["date", "timestamp", "timestamp(6)"]:
-                return "date"
-            elif type_ in ["float"]:
-                return "float"
-            elif type_ in ["blob"]:
-                return "binary"
-            else:
-                raise ValueError(f"Type {type_} not supported yet")
+        if re.search("char|text|clob", type_):
+            return "string"
+        elif re.search("int|number", type_):
+            return "integer"
+        elif re.search("double|decimal|numeric", type_):
+            return "decimal"
+        elif re.search("float", type_):
+            return "float"
+        elif re.search("date|time", type_):
+            return "date"
+        elif re.search("bool|bit", type_):
+            return "boolean"
+        elif re.search("json", type_):
+            return "json"
+        elif type_ == "blob":
+            return "binary"
         else:
-            if type_ in ["varchar", "text", "char", "bpchar", "clob", "nvarchar", "ntext"]:
-                return "string"
-            elif type_ in ["integer", "int", "int4", "int8", "int identity", "bigint"]:
-                return "integer"
-            elif type_ in ["numeric", "decimal"]:
-                return "decimal"
-            elif type_ in ["float", "float8"]:
-                return "float"
-            elif type_ == "blob":
-                return "binary"
-            elif type_ in ["date", "datetime", "timestamp"]:
-                return "date"
-            elif type_ in ["bool", "boolean", "bit"]:
-                return "boolean"
-            elif type_ in ["json", "jsonb"]:
-                return "json"
-            else:
-                raise ValueError(f"Type {type_} not supported yet")
+            raise ValueError(f"Type {type_} not supported yet")
 
     def replace_vars(self, sql):
         if "current_date" in sql.lower():
@@ -204,6 +191,7 @@ class Expression:
             WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')
                   and HAS_DBACCESS(name) = 1;
             """
+
     def schemata(self):
         if self.platform == 'postgres':
             return """
@@ -216,8 +204,9 @@ class Expression:
     def indexes(self):
         if self.platform == 'oracle':
             return """
-            select i.index_name, case uniqueness when 'NONUNIQUE' then 1 else 0 end as non_unique,
-                   lower(column_name) as column_name, column_position, i.table_name
+            select i.index_name,
+            case uniqueness when 'NONUNIQUE' then 1 else 0 end as non_unique,
+            lower(column_name) as column_name, column_position, i.table_name
             from all_indexes i
             join all_ind_columns col on col.index_name = i.index_name
             where i.table_owner = ?
@@ -230,6 +219,7 @@ class Expression:
             where table_schema = ?
             order by index_name, seq_in_index;
             """
+
     def pkeys(self):
         if self.platform == 'oracle':
             return """
@@ -267,24 +257,28 @@ class Expression:
     def fkeys(self):
         if self.platform == 'mysql':
             return """
-            SELECT kcu.constraint_name as fk_name, kcu.table_name as fktable_name,
-            kcu.column_name as fkcolumn_name,
-            kcu.referenced_table_schema as pktable_schema, kcu.referenced_table_name as pktable_name,
-            kcu.referenced_column_name as pkcolumn_name,
-            rc.update_rule, rc.delete_rule
+            SELECT kcu.constraint_name as fk_name,
+                   kcu.table_name as fktable_name,
+                   kcu.column_name as fkcolumn_name,
+                   kcu.referenced_table_schema as pktable_schema,
+                   kcu.referenced_table_name as pktable_name,
+                   kcu.referenced_column_name as pkcolumn_name,
+                   rc.update_rule, rc.delete_rule
             FROM INFORMATION_SCHEMA.key_column_usage kcu
-            JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc on kcu.constraint_name = rc.constraint_name
+            JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                 on kcu.constraint_name = rc.constraint_name
             WHERE kcu.referenced_table_schema = ?
             AND kcu.referenced_table_name IS NOT NULL
             ORDER BY kcu.table_name, kcu.ordinal_position
             """
         elif self.platform == 'oracle':
             return """
-            SELECT a.column_name as fkcolumn_name, a.position,
-                   a.constraint_name as fk_name, a.table_name as fktable_name,
+            SELECT  a.column_name as fkcolumn_name, a.position,
+                    a.constraint_name as fk_name, a.table_name as fktable_name,
                     c.owner, c.delete_rule,
                     -- referenced pk
-                    c.r_owner as pktable_schema, c_pk.table_name as pktable_name,
+                    c.r_owner as pktable_schema,
+                    c_pk.table_name as pktable_name,
                     c_pk.constraint_name r_pk,
                     ra.column_name pkcolumn_name
             FROM all_cons_columns a
@@ -359,9 +353,10 @@ class Expression:
     def columns(self):
         if self.platform == 'oracle':
             return """
-            select lower(table_name) as table_name, lower(column_name) as column_name,
-                   data_type as type_name, data_length as column_size,
-                   case nullable when 'Y' then 1 else 0 end as nullable
+            select  lower(table_name) as table_name,
+                    lower(column_name) as column_name,
+                    data_type as type_name, data_length as column_size,
+                    case nullable when 'Y' then 1 else 0 end as nullable
             from all_tab_columns
             where owner = ? and table_name = nvl(?, table_name)
             """
@@ -370,11 +365,12 @@ class Expression:
 
     def privilege(self):
         if self.platform == 'postgres':
-            return """
-            select pg_catalog.has_schema_privilege(current_user, nspname, 'CREATE') "create"
+            sql = "select pg_catalog.has_schema_privilege"
+            sql += """(current_user, nspname, 'CREATE') "create"
             from pg_catalog.pg_namespace
             where nspname = ?
             """
+            return sql
         else:
             return None
 
@@ -398,7 +394,6 @@ class Expression:
             FROM   information_schema.tables
             WHERE  table_schema = ?;
             """
-
 
     def table_privileges(self):
         if self.platform == 'postgres':

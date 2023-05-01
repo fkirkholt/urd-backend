@@ -1,4 +1,3 @@
-import json
 import time
 import pypandoc
 from addict import Dict
@@ -14,19 +13,18 @@ def measure_time(func):
 
     return wrapper
 
+
 class Column:
     def __init__(self, tbl, name):
         self.db = tbl.db
         self.tbl = tbl
         self.name = name
 
-    @measure_time
-    def get_field(self, col):
-        from table import Table
-        type_ = self.db.expr.to_urd_type(col.type_name)
-        fkeys = self.tbl.get_fkeys()
-        pkey = self.tbl.get_pkey()
+    def get_element(self, col, type_):
+        """ Get html element for input field """
 
+        options = []
+        fkeys = self.tbl.get_fkeys()
         # Decides what sort of input should be used
         if type_ == 'date':
             element = 'input[type=date]'
@@ -34,14 +32,14 @@ class Column:
             if col.nullable:
                 element = 'select'
                 options = [
-                {
+                    {
                         'value': 0,
                         'label': 'Nei'
-                },
-                {
+                    },
+                    {
                         'value': 1,
                         'label': 'Ja'
-                }
+                    }
                 ]
             else:
                 element = 'input[type=checkbox]'
@@ -54,30 +52,40 @@ class Column:
         else:
             element = "input[type=text]"
 
+        return element, options
+
+    @measure_time
+    def get_field(self, col):
+        from table import Table
+        type_ = self.db.expr.to_urd_type(col.type_name)
+        fkeys = self.tbl.get_fkeys()
+        pkey = self.tbl.get_pkey()
+
+        element, options = self.get_element(col, type_)
+
         field = Dict({
             'name': self.name,
             'datatype': type_,
             'element': element,
-            'nullable': col.nullable == True,
+            'nullable': col.nullable is True,
             'label': self.db.get_label(self.name),
             'attrs': self.db.get_attributes(self.tbl.name, self.name)
         })
 
         fkey = self.get_fkey()
-        if fkey:
-            field.fkey = fkey
-            field.element = 'select'
         if 'column_size' in col:
             field.size = int(col.column_size)
         if 'scale' in col and col.scale:
             field.scale = int(col.scale)
             field.precision = int(col.precision)
-        if col.get('auto_increment', None):
-            field.extra = "auto_increment"
         if element == "select" and len(options):
             field.options = options
-        elif field.fkey:
+        elif fkey:
+            field.fkey = fkey
+            field.element = 'select'
             ref_tbl = Table(self.db, field.fkey.table)
+
+            # Decide what should be shown in options
             if field.fkey.table in self.db.user_tables:
                 ref_pk = ref_tbl.get_pkey()
 
@@ -88,7 +96,8 @@ class Column:
                     if index.columns != ref_pk.columns and index.unique:
                         # Only last pk column is used in display value,
                         # other pk columns are usually foreign keys
-                        cols = [f'"{self.name}".{col}' for col in index.columns if col not in ref_pk.columns[0:-1]]
+                        cols = [f'"{self.name}".{col}' for col in index.columns
+                                if col not in ref_pk.columns[0:-1]]
                         field.view = " || ', ' || ".join(cols)
                         if index.name.endswith("_sort_idx"):
                             break
@@ -98,16 +107,23 @@ class Column:
 
                 field.options = self.get_options(field)
 
-
-        if (type_ in ['integer', 'decimal'] and len(pkey.columns) and self.name == pkey.columns[-1] and self.name not in fkeys):
+        if (
+            col.get('auto_increment', None) or (
+                type_ in ['integer', 'decimal'] and len(pkey.columns) and
+                self.name == pkey.columns[-1] and self.name not in fkeys
+            )
+        ):
             field.extra = "auto_increment"
 
-        if col.column_def and not col.auto_increment and col.column_def != 'NULL':
+        if (
+            col.column_def and not col.auto_increment and
+            col.column_def != 'NULL'
+        ):
             def_vals = col.column_def.split('::')
             default = def_vals[0]
             default = default.replace("'", "")
 
-            #TODO: Sjekk om jeg trenger å endre current_timestamp()
+            # TODO: Sjekk om jeg trenger å endre current_timestamp()
 
             field.default = self.db.expr.replace_vars(default)
             if (field.default != default):
@@ -136,9 +152,9 @@ class Column:
 
         # Sorting
         cand_sort_columns = grid.get_sort_columns()
-        sort_fields = [field.name + '.' + col for col in cand_sort_columns]
+        sort_cols = [field.name + '.' + col for col in cand_sort_columns]
 
-        order = "order by " + ', '.join(sort_fields) if len(sort_fields) else ''
+        order = "order by " + ', '.join(sort_cols) if len(sort_cols) else ''
 
         # Conditions
         conditions = []
@@ -147,7 +163,7 @@ class Column:
 
         fkeys = []
         for fkey in self.tbl.get_fkeys().values():
-            if (field.name in fkey.foreign and fkey.foreign.index(field.name) > 0):
+            if (field.name in fkey.foreign and fkey.foreign.index(field.name)):
                 fkey.foreign_idx = fkey.foreign.index(field.name)
                 fkey.length = len(fkey.foreign)
                 fkeys.append(fkey)
@@ -164,18 +180,21 @@ class Column:
 
                 for idx, col in enumerate(fkey.foreign):
                     if col != field.name and fields[col].value:
-                        cond = pkey_col + ' in (select ' + fkey.primary[fkey.foreign_idx]
-                        cond += ' from ' + fkey.table + ' where ' + fkey.primary[idx] + " = ?)"
+                        cond = pkey_col + ' in '
+                        cond += '(select ' + fkey.primary[fkey.foreign_idx]
+                        cond += ' from ' + fkey.table
+                        cond += ' where ' + fkey.primary[idx] + " = ?)"
                         conditions.append(cond)
                         params.append(fields[col].value)
 
-        condition = "where " + " AND ".join(conditions) if len(conditions) else ''
+        condition = " AND ".join(conditions) if len(conditions) else ''
 
         # Count records
 
         sql = "select count(*)\n"
-        sql+= f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" "{field.name}"\n'
-        sql+= condition
+        sql += f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" '
+        sql += f'"{field.name}"\n'
+        sql += f'where {condition}' if condition else ''
 
         count = self.db.query(sql, params).fetchval()
 
@@ -183,10 +202,12 @@ class Column:
             return False
 
         sql = "select " + value_field + " as value, "
-        sql+= "(" + (field.view or value_field) + ") as label, "
-        sql+= "(" + (field.column_view or value_field) + ") as coltext "
-        sql+= f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" "{field.name}"\n'
-        sql+= condition + "\n" + order
+        sql += "(" + (field.view or value_field) + ") as label, "
+        sql += "(" + (field.column_view or value_field) + ") as coltext "
+        sql += f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" '
+        sql += f'"{field.name}"\n'
+        sql += f'where {condition}\n' if condition else ''
+        sql += order
 
         rows = self.db.query(sql, params).fetchall()
 
@@ -200,7 +221,7 @@ class Column:
     @measure_time
     def get_select(self, req):
         """Get options for searchable select"""
-        search = None if not 'q' in req else req.q.replace("*", "%")
+        search = None if 'q' not in req else req.q.replace("*", "%")
 
         view = req.get('view') or self.name
         col_view = req.get('column_view') or self.name
@@ -211,7 +232,10 @@ class Column:
             search = search.lower()
             conds.append(f"lower(cast({view} as char)) like '%{search}%'")
 
-        cond = " and ".join(conds) if len(conds) else self.name + " IS NOT NULL"
+        if len(conds):
+            cond = " and ".join(conds)
+        else:
+            cond = self.name + " IS NOT NULL"
 
         val_col = req.alias + "." + self.name
 
@@ -249,6 +273,23 @@ class Column:
         """
 
         return self.db.query(sql).fetchval()
+
+    def create_index(self, col_type):
+        if col_type not in ['blob', 'clob', 'text']:
+            sql = f"""
+            create index {self.tbl.name}_{self.name}_idx
+            on {self.tbl.name}({self.name})
+            """
+
+            self.db.query(sql).commit()
+        else:
+            sql = f"""
+            create index {self.tbl.name}_{self.name}_is_null_idx
+            on {self.tbl.name}({self.name})
+            where {self.name} is null
+            """
+
+            self.db.query(sql).commit()
 
     @measure_time
     def check_use(self):
@@ -312,9 +353,11 @@ class Column:
             where = ', '.join(wheres)
 
             try:
-                text = pypandoc.convert_text(row[self.name], to_format, format=from_format)
-            except:
+                text = pypandoc.convert_text(row[self.name], to_format,
+                                             format=from_format)
+            except Exception as e:
                 print('kunne ikke konvertere ' + params[-1])
+                print(e.message)
 
             params.insert(0, text)
 
@@ -324,7 +367,7 @@ class Column:
             where {where}
             """
 
-            result = cursor2.execute(sql, params)
+            cursor2.execute(sql, params)
 
         cursor2.commit()
 

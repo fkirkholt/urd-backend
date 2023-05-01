@@ -1,10 +1,8 @@
 import os
 from column import Column
-import re
 from addict import Dict
-import json
 from datetime import datetime
-import time
+
 
 class Record:
     def __init__(self, db, tbl, pkey_vals):
@@ -38,7 +36,7 @@ class Record:
             field.value = values.get(key, None)
             field.text = displays.get(key, None)
             # todo: editable
-            if not 'editable' in field:
+            if 'editable' not in field:
                 field.editable = True
             field.alias = field.name
 
@@ -53,7 +51,6 @@ class Record:
                 field.options = column.get_options(field, fields)
 
                 fields[key] = field
-
 
         return Dict({
             'base_name': self.db.name,
@@ -82,20 +79,13 @@ class Record:
                 continue
 
             # Find index used
-            slice_obj = slice(0, len(rel.foreign))
-            rel_indexes = tbl_rel.get_indexes()
-            for index in rel_indexes.values():
-                if index.columns[slice_obj] == rel.foreign:
-                    rel.index = index
-                    if index.unique:
-                        break
-
+            rel.index = self.get_relation_idx(tbl_rel, rel)
             if not rel.index:
                 continue
 
             tbl_rel.fields = tbl_rel.get_fields()
             grid = Grid(tbl_rel)
-            grid2 = Grid(tbl_rel) # Used to count inherited records
+            grid2 = Grid(tbl_rel)  # Used to count inherited records
 
             # todo: filtrate on highest level
 
@@ -110,12 +100,14 @@ class Record:
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx]
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
-                if (tbl_rel.fields[col].nullable and
+                if (
+                    tbl_rel.fields[col].nullable and
                     col != rel.foreign[0] and
                     rel.primary == list(self.pk.keys()) and
                     rel.index.unique is True
                 ):
-                    grid2.add_cond(expr = f'"{rel.table}"."{col}"', operator = "IS NULL")
+                    grid2.add_cond(expr=f'"{rel.table}"."{col}"',
+                                   operator="IS NULL")
                     count_null_conds += 1
                 else:
                     grid2.add_cond(f'"{rel.table}"."{col}"', "=", val)
@@ -129,10 +121,7 @@ class Record:
                     if not field.nullable and field.default:
                         show_if = {ref_key: field.default}
 
-            if len(self.pk):
-                count_records = grid.get_rowcount()
-            else:
-                count_records = 0
+            count_records = grid.get_rowcount() if len(self.pk) else 0
 
             count_inherited = 0
             if count_null_conds:
@@ -164,6 +153,18 @@ class Record:
 
         return relations
 
+    def get_relation_idx(self, tbl_rel, rel):
+        rel_idx = None
+        slice_obj = slice(0, len(rel.foreign))
+        rel_indexes = tbl_rel.get_indexes()
+        for index in rel_indexes.values():
+            if index.columns[slice_obj] == rel.foreign:
+                rel_idx = index
+                if index.unique:
+                    break
+
+        return rel_idx
+
     def get_relation(self, alias: str):
         from database import Database
         from table import Table, Grid
@@ -175,18 +176,13 @@ class Record:
         db = Database(self.db.cnxn, base_name)
         tbl_rel = Table(db, rel.table)
         grid = Grid(tbl_rel)
-        tbl_rel.limit = 500 # todo: burde ha paginering istedenfor
+        tbl_rel.limit = 500  # TODO: should have pagination in stead
         tbl_rel.offset = 0
         tbl_rel.fields = tbl_rel.get_fields()
         tbl_rel.pkey = tbl_rel.get_pkey()
 
         # Find index used
-        slice_obj = slice(0, len(rel.foreign))
-        rel_indexes = tbl_rel.get_indexes()
-        for index in rel_indexes.values():
-            if index.columns[slice_obj] == rel.foreign:
-                rel.index = index
-                break
+        rel.index = self.get_relation_idx(tbl_rel, rel)
 
         # todo: filter
 
@@ -200,17 +196,20 @@ class Record:
         for idx, col in enumerate(rel.foreign):
             ref_key = rel.primary[idx]
             val = None if len(self.pk) == 0 else rec_values[ref_key]
-            if (len(self.pk) and tbl_rel.fields[col].nullable and
+            if (
+                len(self.pk) and tbl_rel.fields[col].nullable and
                 col != rel.foreign[0] and
                 rel.primary == list(self.pk.keys()) and
                 rel.index.unique is True
             ):
-                grid.add_cond(expr = f'("{rel.table}"."{col}" = ? or "{rel.table}"."{col}" is null)', value = val)
+                grid.add_cond(expr=f'("{rel.table}"."{col}" = ? or "'
+                              f'{rel.table}"."{col}" is null)', value=val)
             else:
                 grid.add_cond(f'"{rel.table}"."{col}"', "=", val)
             conds[col] = val
             pkey_vals[col] = val
-            # grid.add_cond(f"coalesce({rel.table}.{col}, '-')", "IN", [val, '-'])
+            # grid.add_cond(f"coalesce({rel.table}.{col}, '-')",
+            #               "IN", [val, '-'])
 
         relation = grid.get()
         relation.conds = conds
@@ -276,7 +275,7 @@ class Record:
 
         if len(displays) == 0:
             return Dict()
-        
+
         select = ', '.join(displays.values())
 
         conds = [f"{self.tbl.name}.{key} = ?" for key in self.pk]
@@ -294,7 +293,7 @@ class Record:
 
         if not row:
             return Dict()
-    
+
         return Dict(zip(colnames, row))
 
     def get_children(self):
@@ -317,20 +316,21 @@ class Record:
 
     def get_file_path(self):
         indexes = self.tbl.get_indexes()
-        filepath_idx = indexes.get(self.tbl.name.lower() + "_filepath_idx", None)
+        filepath_idx = indexes.get(self.tbl.name.lower() + "_filepath_idx",
+                                   None)
         select = " || '/' || ".join(filepath_idx.columns)
         conds = [f"{key} = ?" for key in self.pk]
         cond = " and ".join(conds)
+        schema = self.db.schema or self.db.cat
 
         sql = f"""
-        select {select} as path from {self.db.schema or self.db.cat}.{self.tbl.name}\n
+        select {select} as path from {schema}.{self.tbl.name}\n
         where {cond}
         """
         cursor = self.db.cnxn.cursor()
         row = cursor.execute(sql, list(self.pk.values())).fetchone()
 
         return os.path.normpath(row.path)
-
 
     def insert(self, values):
         fields = self.tbl.get_fields()
@@ -358,8 +358,8 @@ class Record:
                 params.append(values[col])
 
             sql = f"select case when max({inc_col}) is null then 1 "
-            sql+= f"else max({inc_col}) +1 end from {self.tbl.name} "
-            sql+= "" if len(cols) == 0 else "where " + " and ".join(conditions)
+            sql += f"else max({inc_col}) +1 end from {self.tbl.name} "
+            sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
             values[inc_col] = self.db.query(sql, params).fetchval()
             self.pk[inc_col] = values[inc_col]
@@ -382,7 +382,7 @@ class Record:
         values ({', '.join(["?" for key in inserts])})
         """
 
-        result = self.db.query(sql, list(inserts.values())).commit()
+        self.db.query(sql, list(inserts.values())).commit()
 
         return self.pk
 
@@ -400,14 +400,15 @@ class Record:
         # todo: get values for auto update fields
         for field in self.tbl.get_fields().values():
             if field.get('extra', None) == "auto_update":
-                 set_values[field.name] = self.db.expr.replace_vars(field.default)
+                set_values[field.name] = \
+                    self.db.expr.replace_vars(field.default)
 
         for key, value in values.items():
             if value == "":
                 value = None
-            
+
             set_values[key] = value
-        
+
         sets = [f"{key} = ?" for key, val in set_values.items()]
         set_str = ",\n".join(sets)
         params = set_values.values()

@@ -11,6 +11,7 @@ from ruamel.yaml import YAML
 from table import Table
 from column import Column
 
+
 def measure_time(func):
     def wrapper(*arg):
         t = time.time()
@@ -21,8 +22,10 @@ def measure_time(func):
 
     return wrapper
 
+
 class Connection:
     """Connect to database"""
+
     def __init__(self, cfg, db_name=None):
         self.system = cfg.db_system
         self.server = cfg.db_server
@@ -59,7 +62,8 @@ class Connection:
             except Exception as e:
                 print(e)
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication"
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication"
                 )
         self.cursor = cnxn.cursor
         self.user = cfg.db_uid
@@ -85,11 +89,13 @@ class Connection:
 
         return [row[0] for row in rows]
 
+
 class Database:
     """Contains methods for getting data and metadata from database"""
+
     def __init__(self, cnxn, db_name):
-        self.cnxn   = cnxn
-        self.name   = db_name
+        self.cnxn = cnxn
+        self.name = db_name
         if cnxn.system == 'mysql':
             self.cat = db_name
             self.schema = None
@@ -111,7 +117,7 @@ class Database:
             self.schema = 'public'
             self.cat = None
         self.system = cnxn.system
-        self.expr   = Expression(cnxn.system)
+        self.expr = Expression(cnxn.system)
         self.user_tables = self.get_user_tables()
         self.metadata = self.get_metadata()
         if self.metadata.get('cache.config', None):
@@ -158,8 +164,8 @@ class Database:
                 colnames = [column[0] for column in cursor.description]
                 for row in rows:
                     terms[row.term] = Dict(zip(colnames, row))
-            except:
-                pass
+            except Exception as e:
+                print(e.message)
 
         self.terms = terms
 
@@ -184,11 +190,12 @@ class Database:
                 "description": self.metadata.get('description', None),
             },
             "user": {
-                "name": 'Admin', #TODO: Autentisering
-                "id": 'admin', #TODO: Autentisering
+                "name": 'Admin',  # TODO: Autentisering
+                "id": 'admin',  # TODO: Autentisering
                 "admin": self.get_privileges().create
             },
-            "config": None if not self.metadata.get('cache', None) else self.metadata.cache.config
+            "config": (None if not self.metadata.get('cache', None)
+                       else self.metadata.cache.config)
         }
 
         return info
@@ -239,61 +246,70 @@ class Database:
 
         return user_tables
 
+    def create_meta_tables(self):
+        """Create tables holding meta data"""
+        cursor = self.cnxn.cursor()
+        string_datatype = self.expr.to_native_type('string')
+
+        sql = f"""
+            CREATE TABLE meta_data (
+            const_name varchar(30) NOT NULL default '{self.name}',
+            label varchar(30),
+            description {string_datatype},
+            cache {string_datatype},
+            PRIMARY KEY (const_name)
+        );
+        """
+        cursor.execute(sql)
+        label = self.get_label(self.name)
+
+        sql = f"""
+            insert into meta_data (label)
+            values('{label}')
+        """
+        cursor.execute(sql)
+        self.metadata.cache = None
+        self.user_tables.append('meta_data')
+
+        if 'meta_term' not in self.user_tables:
+            sql = """
+                create table meta_term (
+                term varchar(30) not null,
+                label varchar(50),
+                attributes varchar(255),
+                primary key (term)
+            )
+            """
+
+            cursor.execute(sql)
+            self.user_tables.append('meta_term')
+
+        terms = self.get_terms()
+        if 'meta_data.cache' not in terms:
+            sql = """
+                insert into meta_term (term, label, attributes)
+                values ('meta_data.cache', 'Cache', 'data-format: json')
+            """
+            cursor.execute(sql)
+            # Refresh terms to include cache column
+            self.init_terms()
+
+        cursor.commit()
+
     @measure_time
     def get_tables(self):
         """Return metadata for every table"""
+        # Return metadata from cache if set
         if (self.metadata.get('cache', None) and not self.config):
             self.tables = self.metadata.cache.tables
             return self.tables
+
         cursor = self.cnxn.cursor()
         tables = Dict()
-        datatype = self.expr.to_native_type('string')
 
-        if (self.config and not 'cache' in self.metadata):
-            sql = f"""
-                CREATE TABLE meta_data (
-                const_name varchar(30) NOT NULL default '{self.name}',
-                label varchar(30),
-                description {datatype},
-                cache {datatype},
-                PRIMARY KEY (const_name)
-            );
-            """
-            cursor.execute(sql)
-            label = self.get_label(self.name)
-
-            sql = f"""
-                insert into meta_data (label)
-                values('{label}')
-            """
-            cursor.execute(sql)
-            self.metadata.cache = None
-            self.user_tables.append('meta_data')
-
-            if 'meta_term' not in self.user_tables:
-                sql = """
-                    create table meta_term (
-                    term varchar(30) not null,
-                    label varchar(50),
-                    attributes varchar(255),
-                    primary key (term)
-                )
-                """
-
-                cursor.execute(sql)
-                self.user_tables.append('meta_term')
-
-            terms = self.get_terms()
-            if 'meta_data.cache' not in terms:
-                sql = """
-                    insert into meta_term (term, attributes)
-                    values ('meta_data.cache', 'data-format: json')
-                """
-                cursor.execute(sql)
-                # Refresh terms to include cache column
-                self.init_terms()
-
-            cursor.commit()
+        # Create cache
+        if (self.config and 'cache' not in self.metadata):
+            self.create_meta_tables()
 
         start = time.time()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
@@ -337,7 +353,8 @@ class Database:
             if self.config:
                 table.rowcount = table.count_rows()
                 space = ' ' * (30 - len(tbl_name))
-                print('gjennomgår tabell: ', tbl_name + space + f"({table.rowcount})")
+                print('gjennomgår tabell: ',
+                      tbl_name + space + f"({table.rowcount})")
                 table.fields = table.get_fields()
                 table.relations = table.get_relations()
 
@@ -351,7 +368,8 @@ class Database:
                 'description': tbl.remarks,
                 'indexes': self.get_indexes(tbl_name),
                 'fkeys': self.get_fkeys(tbl_name),
-                'relations': self.get_relations(tbl_name) if not self.config else table.relations,
+                'relations': (self.get_relations(tbl_name) if not self.config
+                              else table.relations),
                 'hidden': hidden,
                 # fields are needed only when creating cache
                 'fields': None if not self.config else table.fields,
@@ -420,8 +438,11 @@ class Database:
     def get_tbl_groups(self):
         """Group tables by prefix or relations"""
         tbl_groups = Dict()
-        terms = self.get_terms()
 
+        # If not generating cache or generating cache for databases
+        # with Urdr structure. This is the default behaviour, which
+        # treats databases as following the Urdr rules for self
+        # documenting databases
         if (not self.config.update_cache or self.config.urd_structure):
             for tbl_name, table in self.tables.items():
                 if tbl_name[0:1] == "_":
@@ -455,6 +476,8 @@ class Database:
                 if top_level:
                     self.tables[table.name].top_level = True
                     # modules = self.attach_to_module(table, modules)
+
+                    # Recursively get all tables under this top level table
                     grouptables = self.get_relation_tables(table.name, [])
 
                     if table.name not in grouptables:
@@ -466,34 +489,44 @@ class Database:
                 elif table.type == 'list':
                     tbl_groups['...'].append(table.name)
 
-            # Relocate tables between groups
-            delete_groups = []
-            for group_name, tbl_names in tbl_groups.items():
-                for group_name2, tbl_names2 in tbl_groups.items():
-                    if group_name2 == group_name:
-                        continue
-
-                    diff = set(tbl_names) - set(tbl_names2)
-                    common = [tbl_name for tbl_name in tbl_names if tbl_name in tbl_names2]
-                    len_combined = len(set(tbl_names + tbl_names2))
-
-
-                    if len(common):
-                        if (len(tbl_names) <= len(tbl_names2) and (len(diff) == 1 or len_combined < 15)):
-                            tbl_groups[group_name2].extend(tbl_names)
-                            delete_groups.append(group_name)
-                            break
-                        elif (len(tbl_names) <= len(tbl_names2) and len(common) == 1 and len(diff)) > 1:
-                            # We want the common tables only in the smallest group
-                            tbl_groups[group_name2].remove(common[0])
-                        elif (len(tbl_names) <= len(tbl_names2)):
-                            for tbl_name in common:
-                                tbl_groups[group_name2].remove(tbl_name)
-
-            for group_name in delete_groups:
-                del tbl_groups[group_name]
+            self.relocate_tables(tbl_groups)
 
         return tbl_groups
+
+    def relocate_tables(self, tbl_groups):
+        """Relocate tables between groups"""
+        delete_groups = []
+        for group_name, tbl_names in tbl_groups.items():
+            for group_name2, tbl_names2 in tbl_groups.items():
+                if group_name2 == group_name:
+                    continue
+
+                diff = set(tbl_names) - set(tbl_names2)
+                common = [tbl_name for tbl_name in tbl_names
+                          if tbl_name in tbl_names2]
+                len_combined = len(set(tbl_names + tbl_names2))
+
+                if len(common):
+                    if (
+                        len(tbl_names) <= len(tbl_names2) and
+                        (len(diff) == 1 or len_combined < 15)
+                    ):
+                        tbl_groups[group_name2].extend(tbl_names)
+                        delete_groups.append(group_name)
+                        break
+                    elif (
+                        len(tbl_names) <= len(tbl_names2) and
+                        len(common) == 1 and len(diff) > 1
+                    ):
+                        # We want the common tables only in the smallest
+                        # group
+                        tbl_groups[group_name2].remove(common[0])
+                    elif (len(tbl_names) <= len(tbl_names2)):
+                        for tbl_name in common:
+                            tbl_groups[group_name2].remove(tbl_name)
+
+        for group_name in delete_groups:
+            del tbl_groups[group_name]
 
     @measure_time
     def get_sub_tables(self):
@@ -507,7 +540,8 @@ class Database:
                 col = Column(tbl, colname)
                 fkey = col.get_fkey()
                 if fkey:
-                    if (len(name_parts) > 1 and
+                    if (
+                        len(name_parts) > 1 and
                         name_parts[0] in self.tables and
                         name_parts[0] != fkey.table
                     ):
@@ -583,7 +617,7 @@ class Database:
         self.sub_tables = self.get_sub_tables()
 
         for group_name, table_names in tbl_groups.items():
-            if len(table_names) == 1: # and group_name != "meta":
+            if len(table_names) == 1:  # and group_name != "meta":
                 tbl_name = table_names[0]
                 label = self.get_label(tbl_name)
 
@@ -605,19 +639,20 @@ class Database:
                     rest = tbl_name.replace(group_name+"_", "")
                     tbl_label = self.get_label(rest)
 
-                    contents[label].subitems[tbl_label] = self.get_content_node(tbl_name)
+                    contents[label].subitems[tbl_label] = \
+                        self.get_content_node(tbl_name)
 
         if ('cache' in self.metadata and self.config):
             cursor = self.cnxn.cursor()
             # self.cache = tables
             sql = "update meta_data set cache = ?\n"
-            sql+= "where const_name = ?"
+            sql += "where const_name = ?"
             cache = {
                 "tables": self.tables,
                 "contents": contents,
                 "config": self.config
             }
-            cache_txt = json.dumps(cache, ensure_ascii=False).encode('utf8')
+            cache_txt = json.dumps(cache, ensure_ascii=False)
             cursor.execute(sql, cache_txt, self.name).commit()
 
         return contents
@@ -654,7 +689,7 @@ class Database:
         query = Dict()
         query.string = sql.strip()
         if len(query.string) == 0:
-           return None
+            return None
         t1 = time.time()
         try:
             cursor = self.query(query.string)
@@ -706,90 +741,91 @@ class Database:
     @measure_time
     def init_indexes(self):
         """Store all indexes in database object"""
-        cursor = self.cnxn.cursor()
+        crsr = self.cnxn.cursor()
         indexes = Dict()
         if self.cnxn.system in ['mysql', 'oracle']:
             sql = self.expr.indexes()
-            for row in cursor.execute(sql, self.cat or self.schema):
+            for row in crsr.execute(sql, self.cat or self.schema):
                 name = row.index_name
 
                 indexes[row.table_name][name].name = name
                 indexes[row.table_name][name].unique = not row.non_unique
-                if not 'columns' in indexes[row.table_name][name]:
+                if 'columns' not in indexes[row.table_name][name]:
                     indexes[row.table_name][name].columns = []
                 indexes[row.table_name][name].columns.append(row.column_name)
         else:
-            tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+            tbls = crsr.tables(catalog=self.cat, schema=self.schema).fetchall()
             for tbl in tbls:
-                for row in cursor.statistics(tbl.table_name):
+                tbl_name = tbl.table_name
+                for row in crsr.statistics(tbl_name):
                     name = row.index_name
-                    indexes[tbl.table_name][name].name = name
-                    indexes[tbl.table_name][name].unique = not row.non_unique
-                    if not 'columns' in indexes[tbl.table_name][name]:
-                        indexes[tbl.table_name][name].columns = []
-                    indexes[tbl.table_name][name].columns.append(row.column_name)
+                    indexes[tbl_name][name].name = name
+                    indexes[tbl_name][name].unique = not row.non_unique
+                    if 'columns' not in indexes[tbl_name][name]:
+                        indexes[tbl_name][name].columns = []
+                    indexes[tbl_name][name].columns.append(row.column_name)
 
         self.indexes = indexes
 
     @measure_time
     def init_pkeys(self):
         """Store all primary keys in database object"""
-        cursor = self.cnxn.cursor()
+        crsr = self.cnxn.cursor()
         pkeys = Dict()
         if self.cnxn.system in ['mysql', 'oracle']:
             sql = self.expr.pkeys()
-            rows = cursor.execute(sql, self.schema or self.cat)
+            rows = crsr.execute(sql, self.schema or self.cat)
             colnames = [column[0] for column in rows.description]
             for row in rows:
                 pkeys[row.table_name].table_name = row.table_name
                 pkeys[row.table_name].pkey_name = row.index_name
-                if not 'columns' in pkeys[row.table_name]:
+                if 'columns' not in pkeys[row.table_name]:
                     pkeys[row.table_name].columns = []
                     pkeys[row.table_name].data_types = []
                 pkeys[row.table_name].columns.append(row.column_name)
                 if 'data_type' in colnames:
                     pkeys[row.table_name].data_types.append(row.data_type)
         else:
-            tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+            tbls = crsr.tables(catalog=self.cat, schema=self.schema).fetchall()
             for tbl in tbls:
                 if self.cnxn.system in ['sqlite3']:
                     # Wrong order for pkeys using cursor.primaryKeys
                     sql = self.expr.pkey(tbl.table_name)
                     rows = self.query(sql)
                 else:
-                    rows = cursor.primaryKeys(table=tbl.table_name, catalog=self.cat, schema=self.schema)
-                cols = []
+                    rows = crsr.primaryKeys(table=tbl.table_name,
+                                            catalog=self.cat,
+                                            schema=self.schema)
                 for row in rows:
                     pkeys[tbl.table_name].table_name = tbl.table_name
                     pkeys[tbl.table_name].pkey_name = row.pk_name
-                    if not 'columns' in pkeys[tbl.table_name]:
+                    if 'columns' not in pkeys[tbl.table_name]:
                         pkeys[tbl.table_name].columns = []
                     pkeys[tbl.table_name].columns.append(row.column_name)
-
 
         self.pkeys = pkeys
 
     @measure_time
     def init_fkeys(self):
         """Store all foreign keys in database object"""
-        cursor = self.cnxn.cursor()
+        crsr = self.cnxn.cursor()
         fkeys = Dict()
         if self.cnxn.system in ["mysql", "oracle", "postgres"]:
             sql = self.expr.fkeys()
-            for row in cursor.execute(sql, self.schema or self.cat):
+            for row in crsr.execute(sql, self.schema or self.cat):
                 name = row.fk_name
                 fkeys[row.fktable_name][name].name = row.fk_name
                 fkeys[row.fktable_name][name].table = row.pktable_name
                 fkeys[row.fktable_name][name].base = self.cat
                 fkeys[row.fktable_name][name].schema = row.pktable_schema
                 fkeys[row.fktable_name][name].delete_rule = row.delete_rule
-                if not 'foreign' in fkeys[row.fktable_name][name]:
+                if 'foreign' not in fkeys[row.fktable_name][name]:
                     fkeys[row.fktable_name][name].foreign = []
                     fkeys[row.fktable_name][name].primary = []
                 fkeys[row.fktable_name][name].foreign.append(row.fkcolumn_name)
                 fkeys[row.fktable_name][name].primary.append(row.pkcolumn_name)
         else:
-            rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
+            rows = crsr.tables(catalog=self.cat, schema=self.schema).fetchall()
             for row in rows:
                 tbl = Table(self, row.table_name)
                 fkeys[row.table_name] = tbl.get_fkeys()
@@ -816,18 +852,20 @@ class Database:
                         "delete_rule": fkey.delete_rule,
                         "foreign": fkey.foreign,
                         "primary": fkey.primary,
-                        "label": self.get_label(fkey.table) #TODO: Fix
+                        "label": self.get_label(fkey.table)  # TODO: Fix
                     })
 
         self.relations = relations
 
-    def export_as_sql(self, dialect: str, include_recs: bool, select_recs: bool):
+    def export_as_sql(self, dialect: str, include_recs: bool,
+                      select_recs: bool):
         """Create sql for exporting a database
 
         Parameters:
         dialect: The sql dialect used (mysql, postgres, sqlite)
         include_recs: If records should be included
-        select_recs: If included records should be selected from existing database
+        select_recs: If included records should be selected from
+                     existing database
         """
         ddl = ''
         if dialect == 'mysql':

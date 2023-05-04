@@ -67,7 +67,7 @@ class Column:
             'name': self.name,
             'datatype': type_,
             'element': element,
-            'nullable': col.nullable is True,
+            'nullable': col.nullable == 1,
             'label': self.db.get_label(self.name),
             'attrs': self.db.get_attributes(self.tbl.name, self.name)
         })

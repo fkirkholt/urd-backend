@@ -65,6 +65,7 @@ class Connection:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid authentication"
                 )
+        cnxn.setencoding(encoding='utf8')
         self.cursor = cnxn.cursor
         self.user = cfg.db_uid
         self.expr = Expression(self.system)

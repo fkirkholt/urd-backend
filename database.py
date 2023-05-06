@@ -2,6 +2,7 @@
 import os
 import time
 import pyodbc
+from sqlglot import parse_one, exp
 from fastapi import HTTPException
 from starlette import status
 import simplejson as json
@@ -716,6 +717,9 @@ class Database:
                 rows = cursor.fetchall()
             print('rows', rows)
             query.data = []
+
+            # Find the table selected from
+            query.table = str(parse_one(query.string).find(exp.Table))
             colnames = [column[0] for column in cursor.description]
             for row in rows:
                 query.data.append(dict(zip(colnames, row)))

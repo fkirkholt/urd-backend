@@ -160,8 +160,15 @@ async def get_table(request: Request):
     grid = Grid(table)
     table.limit = int(req.get('limit', 30))
     table.offset = int(req.get('offset', 0))
+
     if req.get('filter', None):
-        grid.set_search_cond(req['filter'])
+        req['filter'] = urllib.parse.unquote(req['filter'])
+        if req['filter'].startswith('where '):
+            where = req['filter'][6:].split(';')[0]
+            grid.add_cond(where)
+        else:
+            grid.set_search_cond(req['filter'])
+
     if req.get('sort', None):
         grid.sort_columns = json.loads(req.sort)
 

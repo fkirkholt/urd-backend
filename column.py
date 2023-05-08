@@ -89,8 +89,8 @@ class Column:
             if field.fkey.table in self.db.user_tables:
                 ref_pk = ref_tbl.get_pkey()
 
-                if ref_tbl.is_hidden() is False:
-                    field.expandable = True
+                if ref_tbl.is_hidden() is True:
+                    field.noexpand = True
 
                 for index in ref_tbl.get_indexes().values():
                     if index.columns != ref_pk.columns and index.unique:

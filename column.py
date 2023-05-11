@@ -47,7 +47,7 @@ class Column:
             element = 'select'
             options = []
         elif type_ == 'binary' or (type_ == 'string' and (
-                col.column_size == 0 or col.column_size > 255)):
+                col.column_size == 0 or col.column_size >= 255)):
             element = "textarea"
         else:
             element = "input[type=text]"

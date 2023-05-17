@@ -156,11 +156,6 @@ class Column:
 
         order = "order by " + ', '.join(sort_cols) if len(sort_cols) else ''
 
-        # Conditions
-        conditions = []
-        if 'filter' in fk:
-            conditions.append("("+self.db.expr.replace_vars(fk.filter)+")")
-
         fkeys = []
         for fkey in self.tbl.get_fkeys().values():
             if (field.name in fkey.foreign and fkey.foreign.index(field.name)):
@@ -168,6 +163,7 @@ class Column:
                 fkey.length = len(fkey.foreign)
                 fkeys.append(fkey)
 
+        conditions = []
         params = []
         # Holds list over foreign keys, to check hierarchy
         fkeys_list = []

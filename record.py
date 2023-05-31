@@ -401,7 +401,7 @@ class Record:
         for field in self.tbl.get_fields().values():
             if field.get('extra', None) == "auto_update":
                 set_values[field.name] = \
-                    self.db.expr.replace_vars(field.default)
+                    self.db.expr.replace_vars(field.default, self.db)
 
         for key, value in values.items():
             if value == "":

@@ -125,7 +125,7 @@ class Column:
 
             # TODO: Sjekk om jeg trenger å endre current_timestamp()
 
-            field.default = self.db.expr.replace_vars(default)
+            field.default = self.db.expr.replace_vars(default, self.db)
             if (field.default != default):
                 field.default_expr = default
 

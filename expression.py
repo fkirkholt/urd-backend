@@ -161,11 +161,15 @@ class Expression:
         else:
             raise ValueError(f"Type {type_} not supported yet")
 
-    def replace_vars(self, sql):
-        if "current_date" in sql.lower():
+    def replace_vars(self, sql, db):
+        if "curdate" in sql.lower():
+            sql = date.today().strftime("%Y-%m-%d")
+        elif "current_date" in sql.lower():
             sql = date.today().strftime("%Y-%m-%d")
         elif "current_timestamp" in sql.lower():
             sql = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        elif "current_user" in sql.lower():
+            sql = db.cnxn.user
 
         return sql
 

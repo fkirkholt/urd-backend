@@ -1273,6 +1273,7 @@ class Grid:
 
                 form['items'][group_label] = Dict({
                     'inline': inline,
+                    'expandable': True,
                     'items': subitems
                 })
 

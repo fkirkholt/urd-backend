@@ -397,7 +397,7 @@ class Database:
             # that is not a hidden table
             if fkey.table != table.name:
                 fk_table = self.tables[fkey.table]
-                if fk_table.hidden is False:
+                if fk_table.hidden is False and fk_table.type != 'list':
                     return False
 
         return True

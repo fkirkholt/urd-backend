@@ -640,16 +640,11 @@ class Grid:
         selects = {}  # dict of select expressions
         pkey = self.tbl.get_pkey()
         user_tables = self.db.get_user_tables()
+        has_view = self.tbl.name + '_grid' in user_tables
         fields = self.tbl.get_fields()
 
         for col in pkey.columns:
             selects[col] = f'"{self.tbl.name}"."{col}"'
-
-        grid_columns = self.get_grid_columns()
-        for colname in grid_columns:
-
-            col = fields[colname]
-            selects[colname] = self.get_select_expression(col)
 
         expansion_column = self.get_expansion_column()
         if expansion_column:
@@ -669,26 +664,33 @@ class Grid:
                     continue
                 selects[key] = action.disabled
 
-        values = self.get_values(selects)
+        grid_columns = self.get_grid_columns()
 
-        if (self.tbl.name + '_grid') in user_tables:
+        if has_view:
             view_name = self.tbl.name + '_grid'
             view = Table(self.db, view_name)
             cols = view.get_columns()
             display_cols = [f'{view_name}.{col.column_name}' for col in cols]
             grid_columns = [col.column_name for col in cols]
-            display_values = self.get_display_values_from_view(display_cols)
+            display_values = self.get_values_from_view(view, display_cols)
             view_fields = view.get_fields()
-            print('view_fields: ', view_fields)
             for field_name, field in view_fields.items():
                 if field_name not in fields:
                     field.virtual = True
                     field.table_name = view_name
                     fields[field_name] = field
 
-        else:
+        # Uses grid_columns from view if exists
+        for colname in grid_columns:
+            col = fields[colname]
+            if col.virtual:
+                continue
+            selects[colname] = self.get_select_expression(col)
+
+        if not has_view:
             display_values = self.get_display_values(selects)
 
+        values = self.get_values(selects)
         recs = self.get_records(display_values, values)
 
         data = Dict({
@@ -1015,14 +1017,13 @@ class Grid:
 
         return count
 
-    def get_display_values_from_view(self, selects):
-        view_name = self.tbl.name + '_grid'
+    def get_values_from_view(self, view, selects):
         pkey = self.tbl.get_pkey()
         order = self.make_order_by()
         conds = self.get_cond_expr()
 
         sql = "select " + ', '.join(selects) + "\n"
-        sql += "from " + view_name + "\n"
+        sql += "from " + view.name + "\n"
         sql += f"join {self.tbl.name} using ({', '.join(pkey.columns)})\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order

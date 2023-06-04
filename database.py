@@ -327,6 +327,9 @@ class Database:
             if tbl_name not in self.user_tables:
                 continue
 
+            if (tbl_name[-5:] == '_grid' and tbl.table_type == 'VIEW'):
+                continue
+
             hidden = tbl_name[0:1] == "_" or tbl_name[0:5] == "meta_"
 
             table = Table(self, tbl_name)

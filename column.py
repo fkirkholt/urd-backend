@@ -24,7 +24,6 @@ class Column:
         """ Get html element for input field """
 
         options = []
-        fkeys = self.tbl.get_fkeys()
         # Decides what sort of input should be used
         if type_ == 'date':
             element = 'input[type=date]'
@@ -43,9 +42,6 @@ class Column:
                 ]
             else:
                 element = 'input[type=checkbox]'
-        elif self.name in fkeys:
-            element = 'select'
-            options = []
         elif type_ == 'binary' or (type_ == 'string' and (
                 col.column_size == 0 or col.column_size >= 255)):
             element = "textarea"

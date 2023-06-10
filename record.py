@@ -64,6 +64,15 @@ class Record:
     def get_relation_count(self):
         from database import Database
         from table import Table, Grid
+
+        indexes = self.tbl.get_indexes()
+        class_idx = indexes.get(self.tbl.name + "_classification_idx", None)
+        class_field = None
+        if class_idx:
+            class_field_name = class_idx.columns[0]
+            fields = self.tbl.get_fields()
+            class_field = fields[class_field_name]
+
         relations = {}
         for key, rel in self.tbl.get_relations().items():
             if self.db.cnxn.system == 'postgres':
@@ -96,7 +105,7 @@ class Record:
             # Add condition to fetch only rows that link to record
             conds = Dict()
             count_null_conds = 0
-            show_if = None
+
             for idx, col in enumerate(rel.foreign):
                 ref_key = rel.primary[idx]
                 val = None if len(self.pk) == 0 else rec_values[ref_key]
@@ -114,12 +123,6 @@ class Record:
 
                 grid.add_cond(f'"{rel.table}"."{col}"', "=", val)
                 conds[col] = val
-
-                # Check if relation depends on record value
-                if col[0:1] == "_" or col[0:6].lower() == "const_":
-                    field = tbl_rel.fields[col]
-                    if not field.nullable and field.default:
-                        show_if = {ref_key: field.default}
 
             count_records = grid.get_rowcount() if len(self.pk) else 0
 
@@ -146,8 +149,17 @@ class Record:
                 'delete_rule': rel.delete_rule
             })
 
-            if show_if:
-                relation.show_if = show_if
+            # Tables with suffixes that's part of types
+            # should just be shown when the specific type is chosen
+            parts = tbl_rel.name.split("_")
+            suff_1 = parts[-1]
+            suff_2 = '' if len(parts) == 1 else parts[-2]
+            show_if = None
+            for class_ in [opt['value'] for opt in class_field.options]:
+                if (suff_1.startswith(class_) or suff_2.startswith(class_)):
+                    show_if = {class_field_name: class_}
+
+            relation.show_if = show_if
 
             relations[key] = relation
 
@@ -316,8 +328,7 @@ class Record:
 
     def get_file_path(self):
         indexes = self.tbl.get_indexes()
-        filepath_idx = indexes.get(self.tbl.name.lower() + "_filepath_idx",
-                                   None)
+        filepath_idx = indexes.get(self.tbl.name + "_filepath_idx", None)
         select = " || '/' || ".join(filepath_idx.columns)
         conds = [f"{key} = ?" for key in self.pk]
         cond = " and ".join(conds)

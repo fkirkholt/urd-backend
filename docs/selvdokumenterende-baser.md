@@ -199,12 +199,6 @@ for index-kolonner.
 Felter som inngår i indeksen `<tabellnavn>_summation_idx` vil bli
 summert i footer til grid-en.
 
-@note Ikke veldig nødvendig å ha en indeks på disse for hastighetens
-skyld. Summering kan gå litt raskere når man har index, slik at alle
-radene i indeksen kan gjennomgås istedenfor alle radene i tabellen. Men
-vi har som regel indeks som angir hvilke kolonner vi vil se i tabellen
-uansett.
-
 ## Identifikasjon
 
 Man bruker en unik index forskjellig fra primærnøkkel til å bestemme hva
@@ -247,6 +241,11 @@ automatisk. Så når URD krever at indeks må være på plass for å vise
 relasjonen, sikres også at disse indeksene opprettes. Dette er altså
 helt i tråd med URD sin filosofi - å effektivisere spørringer samtidig
 som de definerer hvordan basen vises fram.
+
+Man kan også definere opp en indeks `<tabellnavn>_classification_idx` som gjør
+det mulig å ha en kolonne som definerer hvilken type eller klasse en post har,
+og så ha en utvidelsestabell som definerer spesifikk metadata for denne typen.
+Jf. [Relasjoner](#Relasjoner).
 
 ## Registrere opprettet og oppdatert
 
@@ -394,19 +393,15 @@ tilsvarende tabellen relasjonen hører til (dokument). Hvis man f.eks.
 har `dokument_adressat` som navn på en slik relasjonstabell, vil den kun
 vises under `dokument`.
 
-Hvis man vil vise noen relasjoner kun for visse typer poster, kan man ha
-en kolonne som viser type både i hovedtabellen og i relasjonstabellene.
-I sistnevnte opprettes en kolonne med konstant verdi lik typen man vil
-vise relasjon for. Dette gjøres ved å sette default verdi på kolonnen
-til typen, og så angi kolonnenavnet med prefix "const\_" eller "\_".
-(Sistnevnte angir usynlig kolonne, og kan brukes for de databasene som
-støtter det. Kolonner med navn som starter på "const\_" vil heller ikke
-vises i brukergrensesnittet.) Så lar man type-feltet være en del av
-fremmednøkkelen til hovedtabellen.
+Hvis man vil vise noen relasjoner kun for visse typer poster, må man ha en
+klassifisering av posten. Dette gjøres ved å ha en kolonne som brukes til
+klassifisering, og sette en index `<tabellnavn>_classification_idx` på denne
+kolonnen. Når man da har en 1:1-relasjon med navn som er lik tabellnavnet pluss
+suffix som samsvarer med en klassifikasjonsverdi, vises denne relasjonen kun
+når denne klassifikasjonen er satt. 
 
 Hvis man f.eks. har en tabell `dokument` og vil angi egne metadata av
-dokumenter av typen "bilde", kan man ha kolonne `type` i
-dokumenttabellen. Så lager man en tabell `dokument_bilde` med kolonne
-`id` som refererer til `dokument.id`, samt en kolonne `_type` eller
-`const_type` med standardverdi "bilde" som refererer til
-`dokument.type`.
+dokumenter av typen "bilde", kan man ha kolonne `type` i dokumenttabellen, med
+index `dokument_classification_idx`. Så lager man en tabell `dokument_bilde` med
+primærnøkkel `id` som refererer til `dokument.id`. Når man legger inn "bilde" som
+type, vises relasjonen `dokument_bilde`.

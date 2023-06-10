@@ -848,8 +848,7 @@ class Grid:
     def get_actions(self):
         # Make action for displaying files
         indexes = self.tbl.get_indexes()
-        filepath_idx = indexes.get(self.tbl.name.lower() + "_filepath_idx",
-                                   None)
+        filepath_idx = indexes.get(self.tbl.name + "_filepath_idx", None)
         actions = Dict()
         if filepath_idx:
             last_col = filepath_idx.columns[-1]
@@ -869,7 +868,7 @@ class Grid:
     def get_grid_columns(self):
         """Return columns belonging to grid"""
         indexes = self.tbl.get_indexes()
-        grid_idx = indexes.get(self.tbl.name.lower() + "_grid_idx", None)
+        grid_idx = indexes.get(self.tbl.name + "_grid_idx", None)
         type_ = self.tbl.get_type()
         if grid_idx:
             columns = grid_idx.columns
@@ -1100,7 +1099,7 @@ class Grid:
     def get_sort_columns(self):
         """Return columns for default sorting of grid"""
         indexes = self.tbl.get_indexes()
-        sort_idx = indexes.get(self.tbl.name.lower() + "_sort_idx", None)
+        sort_idx = indexes.get(self.tbl.name + "_sort_idx", None)
         grid_idx = indexes.get(self.tbl.name + "_grid_idx", None)
         if sort_idx:
             columns = sort_idx.columns

@@ -49,7 +49,7 @@ tabellnavnet, fjernes dette (samt evt. postfix), og så utledes ledetekst
 fra det man står igjen med.
 
 Hvis man f.eks. har tabeller `gruppe`, `bruker` og kryssreferansetabell
-`bruker_gruppe_xref`, og står på en bruker, vil postfix "_(xref)" og
+`bruker_gruppe_xref`, og står på en bruker, vil postfix `_xref` og
 "bruker" fjernes, og vi står igjen med `gruppe`. Hvis man vil vise
 "brukergruppe" isteden, kaller man tabellen det.
 
@@ -86,7 +86,7 @@ vises aktuelle felter isteden. Men kan jo kun registrere én post i
 Utvidelsestabeller vises ikke på øverste nivå i innholdslisten, men
 under sine overordnede tabeller, liksom andre underliggende tabeller.
 Hvis man vil at en utvidelsestabell ikke skal vises i innholdslisten,
-kan man gi den postfix "_(ext)".
+kan man gi den postfix `_ext`.
 
 ## Underordnede tabeller
 
@@ -110,7 +110,7 @@ når man ser på tabellen, og så kunne ekspandere hvert nivå.
 ## Skjulte tabeller
 
 Man angir at en tabell skal være skjult (og kun vises i admin-modus) ved
-å la tabellnavnet starte på understrek (\_). Dette er det samme som
+å la tabellnavnet starte på understrek (_). Dette er det samme som
 brukes f.eks. i Python for å angi at en variabel eller funksjon er
 privat.
 
@@ -133,15 +133,15 @@ man ikke er i admin-modus.
   istedenfor `bruker`, hvis det refereres til en `bruker`-tabell.
 - M:M-relasjoner får tabellnavnet, minus evt. prefix/postfix for aktiv
   tabell F.eks. får `aktoer_naeringskategori` ledetekst
-  `næringskategori` Da fjernes også postfix som "_(xref)", "_(list)",
-  "_(liste)" eller "_(link)"
+  `næringskategori` Da fjernes også postfix som `_xref`, `_list`,
+  `_liste` eller `_link`
 
 # Kolonner
 
 ## Usynlige
 
 Man markerer at en kolonne ikke skal vises ved å sette en underscore
-foran, eks. _(connectionstring). Dette harmonerer godt med hvordan man
+foran, eks. `_connection_string`. Dette harmonerer godt med hvordan man
 markerer private variabler i en Python-klasse.
 
 Men merk at dette ikke fungerer i Oracle, da identifikatorer her må
@@ -156,10 +156,6 @@ har definert lengde til `size: 255`. F.eks. gjelder det `varchar` uten
 definert lengde, og `jsonb` i Postgres. Derfor vises ikke felter med
 lengde 255 eller over som standard i grid.
 
-## Automatisk verdi
-
-
-
 # Fremmednøkler
 
 Fremmednøkler brukes av URD for å vise fram relasjoner. Ingen regler for
@@ -168,9 +164,9 @@ navngivning av relasjoner.
 For å vise har-mange-relasjoner, må man ha en index for å finne
 relasjonene.
 
-# Indekser:
+# Indekser
 
-## Grid:
+## Grid
 
 For å bestemme hvilke kolonner som skal vises i grid-en, brukes indexen
 `<tabellnavn>_grid_idx` dersom den finnes.
@@ -187,7 +183,7 @@ Postgres og `json`).
 
 For referansetabeller vises uansett autoinc-kolonnen også.
 
-## Sortering:
+## Sortering
 
 Sortering av en tabell bestemmes av index `<tabellnavn>_sort_idx` dersom
 den finnes. Hvis den ikke finnes, og hvis `<tabellnavn>_grid_idx`
@@ -198,7 +194,7 @@ Det støttes ikke descending sortering ennå, men det er planer om å få
 det til å virke også. Noen databasemotorer støtter jo å angi asc og desc
 for index-kolonner.
 
-## Summering:
+## Summering
 
 Felter som inngår i indeksen `<tabellnavn>_summation_idx` vil bli
 summert i footer til grid-en.
@@ -222,7 +218,7 @@ Hvis man har flere unike indekser, så brukes den med navn `...sort_idx`
 til identifikasjon. Den andre kan da være en alternativ index for
 fremmednøkler.
 
-## Lenke til fil:
+## Lenke til fil
 
 For å identifisere et felt som en filbane, kan man legge inn index
 `<tabellnavn>_filepath_idx`.
@@ -299,17 +295,21 @@ utseendet, jf <https://tachyons.io/docs/>
 
 Bare noen få attributter støttes foreløpig:
 
-class  
-Brukes på input-felter i postskjemaet og celler i tabellen
+- class
 
-style  
-Brukes på input-felter i postskjemaet
+  Brukes på input-felter i postskjemaet og celler i tabellen
 
-title  
-Brukes til feltbeskrivelse i postvisning/postskjema
+- style
 
-pattern  
-Brukes på input-felter av typen 'text' i postskjemaet
+  Brukes på input-felter i postskjemaet
+
+- title
+
+  Brukes til feltbeskrivelse i postvisning/postskjema
+
+- pattern
+
+  Brukes på input-felter av typen 'text' i postskjemaet
 
 Man kan også legge inn attributtet "data-format" med verdi "markdown"
 for å angi at et felt skal formateres med Markdown.
@@ -330,10 +330,10 @@ create table meta_term
 
 Har en tabell `meta_data` med følgende kolonner:
 
-- _(name)
-- label
-- description
-- cache
+- `_name`
+- `label`
+- `description`
+- `cache`
 
 `_name` angir databasenavnet. Sørger for at man ikke kan ha flere rader
 som beskriver databasen. Understrek først i navnet medførerer at

@@ -979,10 +979,7 @@ class Grid:
         cursor = self.db.cnxn.cursor()
         cursor.execute(sql, self.cond.params)
         cursor.skip(self.tbl.offset)
-        if self.tbl.limit:
-            rows = cursor.fetchmany(self.tbl.limit)
-        else:
-            rows = cursor.fetchall()
+        rows = cursor.fetchmany(self.tbl.limit)
 
         result = []
         colnames = [column[0] for column in cursor.description]

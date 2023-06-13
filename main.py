@@ -249,7 +249,12 @@ async def get_options(request: Request):
         view = field.view or field.name
         conds.append(f"lower(cast({view} as char)) like '%{search}%'")
     cond = " and ".join(conds)
-    data = column.get_options(field, cond, [])
+    # Get condition defining classification relations
+    cond2, params = column.get_condition(field)
+    if cond2:
+        cond = cond + ' and ' + cond2
+
+    data = column.get_options(field, cond, params)
     return data
 
 

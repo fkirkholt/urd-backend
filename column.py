@@ -130,6 +130,8 @@ class Column:
         return field
 
     def get_condition(self, field, fields=None):
+        from table import Table
+
         fkeys = []
         for fkey in self.tbl.get_fkeys().values():
             if (field.name in fkey.foreign and fkey.foreign.index(field.name)):
@@ -153,6 +155,27 @@ class Column:
                         cond = fkey.primary[idx] + " = ?"
                         conditions.append(cond)
                         params.append(fields[col].value)
+
+        # Find possible field defining class
+        ref_tbl = Table(self.db, field.fkey.table)
+        indexes = ref_tbl.get_indexes()
+        class_idx = indexes.get(ref_tbl.name + "_classification_idx", None)
+        class_field = Dict({'options': []})
+        if class_idx:
+            class_field_name = class_idx.columns[0]
+            fields = ref_tbl.get_fields()
+            class_field = fields[class_field_name]
+
+        # Tables with suffixes that's part of types
+        # should just be shown when the specific type is chosen
+        parts = self.tbl.name.split("_")
+        suff_1 = parts[-1]
+        suff_2 = '' if len(parts) == 1 else parts[-2]
+        condition = None
+        for class_ in [opt['value'] for opt in class_field.options]:
+            if (suff_1.startswith(class_) or suff_2.startswith(class_)):
+                conditions.append(class_field_name + ' = ?')
+                params.append(class_)
 
         condition = " AND ".join(conditions) if len(conditions) else ''
 

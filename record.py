@@ -48,7 +48,8 @@ class Record:
                 if field.fkey.table not in self.db.user_tables:
                     continue
                 column = Column(self.tbl, field.name)
-                field.options = column.get_options(field, fields)
+                condition, params = column.get_condition(field, fields)
+                field.options = column.get_options(field, condition, params)
 
                 fields[key] = field
 
@@ -67,7 +68,7 @@ class Record:
 
         indexes = self.tbl.get_indexes()
         class_idx = indexes.get(self.tbl.name + "_classification_idx", None)
-        class_field = None
+        class_field = Dict({'options': []})
         if class_idx:
             class_field_name = class_idx.columns[0]
             fields = self.tbl.get_fields()

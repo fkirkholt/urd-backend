@@ -362,7 +362,8 @@ class Expression:
                     data_type as type_name, data_length as column_size,
                     case nullable when 'Y' then 1 else 0 end as nullable
             from all_tab_columns
-            where owner = ? and table_name = nvl(?, table_name)
+            where owner = ? and table_name = nvl(?, table_name) and
+                  column_name = nvl(?, column_name)
             """
         else:
             return None

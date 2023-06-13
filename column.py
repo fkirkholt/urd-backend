@@ -101,7 +101,9 @@ class Column:
                 if 'column_view' not in field and 'view' in field:
                     field.column_view = field.view
 
-                field.options = self.get_options(field)
+                condition, params = self.get_condition(field)
+
+                field.options = self.get_options(field, condition, params)
 
         if (
             col.get('auto_increment', None) or (
@@ -127,31 +129,7 @@ class Column:
 
         return field
 
-    @measure_time
-    def get_options(self, field, fields=None):
-        from database import Database
-        from table import Table, Grid
-
-        fk = field.fkey
-        pkey_col = fk.primary[-1]
-
-        if fk.base == self.db.cat and fk.schema == self.db.schema:
-            base = self.db
-        else:
-            base = Database(self.db.cnxn, fk.base or fk.schema)
-
-        cand_tbl = Table(base, fk.table)
-        grid = Grid(cand_tbl)
-
-        # Field that holds the value of the options
-        value_field = f'"{field.name}".' + pkey_col
-
-        # Sorting
-        cand_sort_columns = grid.get_sort_columns()
-        sort_cols = [field.name + '.' + col for col in cand_sort_columns]
-
-        order = "order by " + ', '.join(sort_cols) if len(sort_cols) else ''
-
+    def get_condition(self, field, fields=None):
         fkeys = []
         for fkey in self.tbl.get_fkeys().values():
             if (field.name in fkey.foreign and fkey.foreign.index(field.name)):
@@ -172,34 +150,46 @@ class Column:
 
                 for idx, col in enumerate(fkey.foreign):
                     if col != field.name and fields[col].value:
-                        cond = pkey_col + ' in '
-                        cond += '(select ' + fkey.primary[fkey.foreign_idx]
-                        cond += ' from ' + fkey.table
-                        cond += ' where ' + fkey.primary[idx] + " = ?)"
+                        cond = fkey.primary[idx] + " = ?"
                         conditions.append(cond)
                         params.append(fields[col].value)
 
         condition = " AND ".join(conditions) if len(conditions) else ''
 
+        return condition, params
+
+    @measure_time
+    def get_options(self, field, condition, params):
+
+        fkey = field.fkey
+        pkey_col = fkey.primary[-1] if fkey else field.name
+        from_table = fkey.table if fkey else self.tbl.name
+
+        # Field that holds the value of the options
+        value_field = f'"{field.name}".' + pkey_col
+
+        condition = condition or '1=1'
+
         # Count records
 
-        sql = "select count(*)\n"
-        sql += f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" '
-        sql += f'"{field.name}"\n'
-        sql += f'where {condition}' if condition else ''
+        sql = f"""
+        select count(*)
+        from {self.db.schema or self.db.cat}."{from_table}" "{field.name}"
+        where {condition}
+        """
 
         count = self.db.query(sql, params).fetchval()
 
         if (count > 200):
             return False
 
-        sql = "select " + value_field + " as value, "
-        sql += "(" + (field.view or value_field) + ") as label, "
-        sql += "(" + (field.column_view or value_field) + ") as coltext "
-        sql += f'from {self.db.schema or self.db.cat}."{cand_tbl.name}" '
-        sql += f'"{field.name}"\n'
-        sql += f'where {condition}\n' if condition else ''
-        sql += order
+        sql = f"""
+        select {value_field} as value, {field.view or value_field} as label,
+               {field.column_view or value_field} as coltext
+        from   {self.db.schema or self.db.cat}."{from_table}" "{field.name}"
+        where  {condition}
+        order by {field.view or value_field}
+        """
 
         rows = self.db.query(sql, params).fetchall()
 
@@ -207,43 +197,6 @@ class Column:
         for row in rows:
             colnames = [column[0] for column in row.cursor_description]
             result.append(dict(zip(colnames, row)))
-
-        return result
-
-    @measure_time
-    def get_select(self, req):
-        """Get options for searchable select"""
-        search = None if 'q' not in req else req.q.replace("*", "%")
-
-        view = req.get('view') or self.name
-        col_view = req.get('column_view') or self.name
-
-        conds = req.condition.split(" and ") if req.condition else []
-        # ignore case
-        if search:
-            search = search.lower()
-            conds.append(f"lower(cast({view} as char)) like '%{search}%'")
-
-        if len(conds):
-            cond = " and ".join(conds)
-        else:
-            cond = self.name + " IS NOT NULL"
-
-        val_col = req.alias + "." + self.name
-
-        sql = f"""
-        select distinct {val_col} as value, {view} as label,
-        {col_view} as coltext\n
-        from {self.tbl.name} {req.alias}\n
-        where {cond}\n
-        order by {view}
-        """
-
-        rows = self.db.query(sql).fetchmany(int(req.limit))
-
-        result = []
-        for row in rows:
-            result.append({'value': row.value, 'label': row.label})
 
         return result
 

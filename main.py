@@ -230,18 +230,26 @@ async def save_table(request: Request):
     return {'data': tbl.save(req['records'])}
 
 
-@app.get("/select")
-async def get_select(request: Request):
-    # todo: skal ikke behøve alias
+@app.get("/options")
+async def get_options(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
     cnxn = Connection(cfg, req.base)
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
-    key = json.loads(req.key)
-    colname = key[-1]
-    col = Column(tbl, colname)
-    data = col.get_select(req)
+    column = Column(tbl, req.column)
+    col = tbl.get_columns(req.column)[0]
+    colnames = [column[0] for column in col.cursor_description]
+    col = Dict(zip(colnames, col))
+    field = column.get_field(col)
+    conds = req.condition.split(" and ") if req.condition else []
+    search = None if 'q' not in req else req.q.replace("*", "%")
+    if search:
+        search = search.lower()
+        view = field.view or field.name
+        conds.append(f"lower(cast({view} as char)) like '%{search}%'")
+    cond = " and ".join(conds)
+    data = column.get_options(field, cond, [])
     return data
 
 

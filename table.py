@@ -355,16 +355,18 @@ class Table:
         self.cache.fkeys = keys
 
     @measure_time
-    def get_columns(self):
+    def get_columns(self, column=None):
         """ Return all columns in table by reflection """
         cursor = self.db.cnxn.cursor()
         if self.db.cnxn.system == 'oracle':
             # cursor.columns doesn't work for all types of oracle columns
             sql = self.db.expr.columns()
-            cols = cursor.execute(sql, self.db.schema, self.name).fetchall()
+            cols = cursor.execute(sql, self.db.schema, self.name,
+                                  column).fetchall()
         else:
             cols = cursor.columns(table=self.name, catalog=self.db.cat,
-                                  schema=self.db.schema).fetchall()
+                                  schema=self.db.schema,
+                                  column=column).fetchall()
 
         return cols
 

@@ -10,7 +10,6 @@ from addict import Dict
 from expression import Expression
 from ruamel.yaml import YAML
 from table import Table
-from column import Column
 
 
 def measure_time(func):

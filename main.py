@@ -239,7 +239,7 @@ async def get_options(request: Request):
     tbl = Table(dbo, req.table)
     col = tbl.get_columns(req.column)[0]
     column = Column(tbl, col)
-    field = column.get_field(col)
+    field = column.get_field()
     conds = req.condition.split(" and ") if req.condition else []
     search = None if 'q' not in req else req.q.replace("*", "%")
     if search:
@@ -248,9 +248,11 @@ async def get_options(request: Request):
         conds.append(f"lower(cast({view} as char)) like '%{search}%'")
     cond = " and ".join(conds)
     # Get condition defining classification relations
-    cond2, params = column.get_condition(field)
-    if cond2:
-        cond = cond + ' and ' + cond2
+    params = []
+    if field.fkey:
+        cond2, params = column.get_condition(field)
+        if cond2:
+            cond = cond + ' and ' + cond2
 
     data = column.get_options(field, cond, params)
     return data

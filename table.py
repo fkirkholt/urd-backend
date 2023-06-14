@@ -2,6 +2,7 @@
 import re
 import math
 import time
+import pypandoc
 from addict import Dict
 from record import Record
 from column import Column
@@ -136,12 +137,24 @@ class Table:
 
         return self.cache.fkeys
 
-    def get_fkey(self, key):
-        """Return single foreign key"""
+    def get_fkey(self, name):
+        """Return single foreign key based on key name or last column"""
         if not self.cache.get('fkeys', None):
             self.init_fkeys()
 
-        return self.cache.fkeys[key]
+        if name in self.cache.fkeys:
+            return self.cache.fkeys[name]
+        else:
+            col_fkey = None
+            for fkey in self.cache.fkeys.values():
+                if (fkey.foreign[-1] == name):
+                    if (
+                        not col_fkey or
+                        len(fkey.foreign) < len(col_fkey.foreign)
+                    ):
+                        col_fkey = fkey
+
+            return col_fkey
 
     def get_fields(self):
         """Return all fields of table"""
@@ -368,7 +381,12 @@ class Table:
                                   schema=self.db.schema,
                                   column=column).fetchall()
 
-        return cols
+        result = []
+        colnames = [column[0] for column in cursor.description]
+        for col in cols:
+            result.append(Dict(zip(colnames, col)))
+
+        return result
 
     @measure_time
     def init_fields(self):
@@ -388,16 +406,13 @@ class Table:
         #     else self.db.metadata.cache.contents
 
         for col in cols:
-            colnames = [column[0] for column in col.cursor_description]
-            col = Dict(zip(colnames, col))
-            # Strip column size from type_name for sqlite3
-            col.type_name = col.type_name.split('(')[0].strip()
-            if ('column_size' in col or 'display_size' in col):
-                col.column_size = col.get('column_size', col.display_size)
             cname = col.column_name
 
-            column = Column(self, cname)
-            field = column.get_field(col)
+            column = Column(self, col)
+            field = column.get_field()
+            if field.fkey:
+                condition, params = column.get_condition(field)
+                field.options = column.get_options(field, condition, params)
 
             # Get info about column use if user has chosen this option
             if (
@@ -606,6 +621,50 @@ class Table:
                 insert = insert[:-1] + ");\n"
 
         return insert
+
+    def convert(self, colname, from_format, to_format):
+
+        select = ', '.join(self.tbl.pkey.columns)
+
+        sql = f"""
+        select {select}, {colname}
+        from {self.tbl.name}
+        """
+
+        cursor = self.db.query(sql)
+        rows = cursor.fetchall()
+        colnames = [col[0] for col in cursor.description]
+        cursor2 = self.db.cnxn.cursor()
+        for row in rows:
+            row = (dict(zip(colnames, row)))
+            wheres = []
+            params = []
+            for key in self.tbl.pkey.columns:
+                wheres.append(key + '=?')
+                params.append(row[key])
+
+            where = ', '.join(wheres)
+
+            try:
+                text = pypandoc.convert_text(row[colname], to_format,
+                                             format=from_format)
+            except Exception as e:
+                print('kunne ikke konvertere ' + params[-1])
+                print(e.message)
+
+            params.insert(0, text)
+
+            sql = f"""
+            update {self.tbl.name}
+            set {self.name} = ?
+            where {where}
+            """
+
+            cursor2.execute(sql, params)
+
+        cursor2.commit()
+
+        return 'success'
 
 
 class Grid:

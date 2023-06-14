@@ -462,8 +462,7 @@ class Database:
                 subordinate = False
                 tbl = Table(self, tbl_name)
                 for colname in table.pkey.columns:
-                    col = Column(tbl, colname)
-                    if col.get_fkey():
+                    if tbl.get_fkey(colname):
                         subordinate = True
                         break
 
@@ -542,8 +541,7 @@ class Database:
             tbl = Table(self, tbl_name)
 
             for colname in table.pkey.columns:
-                col = Column(tbl, colname)
-                fkey = col.get_fkey()
+                fkey = tbl.get_fkey(colname)
                 if fkey:
                     if (
                         len(name_parts) > 1 and

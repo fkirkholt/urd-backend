@@ -30,28 +30,22 @@ class Record:
             values = self.pk
 
         fields = {}
-        tbl_fields = self.tbl.get_fields()
 
-        for key, field in tbl_fields.items():
-            field.value = values.get(key, None)
-            field.text = displays.get(key, None)
-            # todo: editable
+        cols = self.tbl.get_columns()
+
+        for col in cols:
+            column = Column(self.tbl, col)
+            field = column.get_field()
+            field.value = values.get(field.name, None)
+            field.text = displays.get(field.name, None)
             if 'editable' not in field:
                 field.editable = True
-            field.alias = field.name
 
-            fields[key] = field
-
-        # Add options to selects
-        for key, field in fields.items():
-            if 'fkey' in field:
-                if field.fkey.table not in self.db.user_tables:
-                    continue
-                column = Column(self.tbl, field.name)
+            if 'fkey' in field and field.fkey.table not in self.db.user_tables:
                 condition, params = column.get_condition(field, fields)
                 field.options = column.get_options(field, condition, params)
 
-                fields[key] = field
+            fields[field.name] = field
 
         return Dict({
             'base_name': self.db.name,

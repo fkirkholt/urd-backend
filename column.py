@@ -1,5 +1,4 @@
 import time
-import pypandoc
 from addict import Dict
 
 
@@ -15,20 +14,32 @@ def measure_time(func):
 
 
 class Column:
-    def __init__(self, tbl, name):
+    def __init__(self, tbl, col):
         self.db = tbl.db
         self.tbl = tbl
-        self.name = name
+        self.name = col.column_name
+        self.nullable = col.nullable
+        if 'column_size' in col or 'display_size' in col:
+            self.size = col.get('column_size', col.display_size)
+        if 'scale' in col:
+            self.scale = col.scale
+            self.precision = col.precision
+        if 'auto_increment' in col:
+            self.auto_increment = col.auto_increment
+        self.default = col.column_def
+        # Strip column size from type_name for sqlite3
+        col.type_name = col.type_name.split('(')[0].strip()
+        self.datatype = self.db.expr.to_urd_type(col.type_name)
 
-    def get_element(self, col, type_):
+    def get_element(self):
         """ Get html element for input field """
 
         options = []
         # Decides what sort of input should be used
-        if type_ == 'date':
+        if self.datatype == 'date':
             element = 'input[type=date]'
-        elif type_ == 'boolean':
-            if col.nullable:
+        elif self.datatype == 'boolean':
+            if self.nullable:
                 element = 'select'
                 options = [
                     {
@@ -42,8 +53,8 @@ class Column:
                 ]
             else:
                 element = 'input[type=checkbox]'
-        elif type_ == 'binary' or (type_ == 'string' and (
-                col.column_size == 0 or col.column_size >= 255)):
+        elif self.datatype == 'binary' or (self.datatype == 'string' and (
+                self.size == 0 or self.size >= 255)):
             element = "textarea"
         else:
             element = "input[type=text]"
@@ -51,29 +62,28 @@ class Column:
         return element, options
 
     @measure_time
-    def get_field(self, col):
+    def get_field(self):
         from table import Table
-        type_ = self.db.expr.to_urd_type(col.type_name)
         fkeys = self.tbl.get_fkeys()
         pkey = self.tbl.get_pkey()
 
-        element, options = self.get_element(col, type_)
+        element, options = self.get_element()
 
         field = Dict({
             'name': self.name,
-            'datatype': type_,
+            'datatype': self.datatype,
             'element': element,
-            'nullable': col.nullable == 1,
+            'nullable': self.nullable == 1,
             'label': self.db.get_label(self.name),
             'attrs': self.db.get_attributes(self.tbl.name, self.name)
         })
 
-        fkey = self.get_fkey()
-        if 'column_size' in col:
-            field.size = int(col.column_size)
-        if 'scale' in col and col.scale:
-            field.scale = int(col.scale)
-            field.precision = int(col.precision)
+        fkey = self.tbl.get_fkey(self.name)
+        if hasattr(self, 'size'):
+            field.size = int(self.size)
+        if getattr(self, 'scale', None):
+            field.scale = int(self.scale)
+            field.precision = int(self.precision)
         if element == "select" and len(options):
             field.options = options
         elif fkey:
@@ -101,23 +111,21 @@ class Column:
                 if 'column_view' not in field and 'view' in field:
                     field.column_view = field.view
 
-                condition, params = self.get_condition(field)
-
-                field.options = self.get_options(field, condition, params)
-
         if (
-            col.get('auto_increment', None) or (
-                type_ in ['integer', 'decimal'] and len(pkey.columns) and
-                self.name == pkey.columns[-1] and self.name not in fkeys
+            getattr(self, 'auto_increment', None) or (
+                self.datatype in ['integer', 'decimal'] and
+                len(pkey.columns) and
+                self.name == pkey.columns[-1] and
+                self.name not in fkeys
             )
         ):
             field.extra = "auto_increment"
 
         if (
-            col.column_def and not col.auto_increment and
-            col.column_def != 'NULL'
+            self.default and not getattr(self, 'auto_increment', None) and
+            self.default != 'NULL'
         ):
-            def_vals = col.column_def.split('::')
+            def_vals = self.default.split('::')
             default = def_vals[0]
             default = default.replace("'", "")
 
@@ -296,47 +304,3 @@ class Column:
         frequency = max_in_group/self.tbl.rowcount
 
         return frequency
-
-    def convert(self, from_format, to_format):
-
-        select = ', '.join(self.tbl.pkey.columns)
-
-        sql = f"""
-        select {select}, {self.name}
-        from {self.tbl.name}
-        """
-
-        cursor = self.db.query(sql)
-        rows = cursor.fetchall()
-        colnames = [col[0] for col in cursor.description]
-        cursor2 = self.db.cnxn.cursor()
-        for row in rows:
-            row = (dict(zip(colnames, row)))
-            wheres = []
-            params = []
-            for key in self.tbl.pkey.columns:
-                wheres.append(key + '=?')
-                params.append(row[key])
-
-            where = ', '.join(wheres)
-
-            try:
-                text = pypandoc.convert_text(row[self.name], to_format,
-                                             format=from_format)
-            except Exception as e:
-                print('kunne ikke konvertere ' + params[-1])
-                print(e.message)
-
-            params.insert(0, text)
-
-            sql = f"""
-            update {self.tbl.name}
-            set {self.name} = ?
-            where {where}
-            """
-
-            cursor2.execute(sql, params)
-
-        cursor2.commit()
-
-        return 'success'

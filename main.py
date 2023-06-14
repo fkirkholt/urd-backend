@@ -237,10 +237,8 @@ async def get_options(request: Request):
     cnxn = Connection(cfg, req.base)
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
-    column = Column(tbl, req.column)
     col = tbl.get_columns(req.column)[0]
-    colnames = [column[0] for column in col.cursor_description]
-    col = Dict(zip(colnames, col))
+    column = Column(tbl, col)
     field = column.get_field(col)
     conds = req.condition.split(" and ") if req.condition else []
     search = None if 'q' not in req else req.q.replace("*", "%")
@@ -337,8 +335,7 @@ def convert(base: str, table: str, from_format: str, to_format: str,
     tbl = Table(dbo, table)
     tbl.pkey = tbl.get_pkey()
     for field_name in fields:
-        col = Column(tbl, field_name)
-        result = col.convert(from_format, to_format)
+        result = tbl.convert(field_name, from_format, to_format)
 
     return {'result': result}
 

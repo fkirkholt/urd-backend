@@ -1,4 +1,5 @@
 import time
+import simplejson as json
 from addict import Dict
 
 
@@ -74,8 +75,8 @@ class Column:
             'datatype': self.datatype,
             'element': element,
             'nullable': self.nullable == 1,
-            'label': self.db.get_label(self.name),
-            'attrs': self.db.get_attributes(self.tbl.name, self.name)
+            'label': self.db.get_label('field', self.name),
+            'attrs': self.get_attributes(self.tbl.name, self.name)
         })
 
         fkey = self.tbl.get_fkey(self.name)
@@ -136,6 +137,18 @@ class Column:
                 field.default_expr = default
 
         return field
+
+    def get_attributes(self, table_name, identifier):
+        """Get description based on term"""
+        attrs = self.db.get_html_attributes()
+        column_ref = table_name + '.' + identifier
+        attributes = None
+        if column_ref in attrs.field:
+            attributes = attrs.field[column_ref]
+        elif identifier in attrs.field:
+            attributes = attrs.field[identifier]
+
+        return attributes
 
     def get_condition(self, field, fields=None):
         from table import Table

@@ -118,9 +118,6 @@ Ellers skjules også oppslagstabeller, som angis ved postfix `_list/_liste`.
 Disse vises når man aktiverer admin-modus. Kryssreferansetabeller, som angis
 ved postfix `_xref` eller `_link`, skjules alltid i tabllisten.
 
-Metadatatabeller (jf. under) starter på `meta_`, og disse skjules når man ikke
-er i admin-modus.
-
 ## Ledetekst til har-mange-relasjoner
 
 - 1:M-relasjoner får tabellnavn (minus evt. prefix) pluss evt. kolonnenavn
@@ -257,39 +254,13 @@ Kolonnen som betegner dato eller tid, skal ha defualt-verdi satt til
 `current_date` eller `current_timestamp`. Kolonnen som betegner
 brukernavn skal ha default-verdi `current_user`.
 
-# Terminologi
+# HTML-attributter
 
-Har en egen tabell `meta_term` for å definere ledetekst og attributter, særlig
-ettersom det ikke finnes noen felles sql-standard for å legge til beskrivelser
-til tabeller og kolonner i databasen.
-
-Dessuten gir det mulighet til å beskrive mer (f.eks. prefikser).
-
-Tabellen består kun av tre kolonner:
-
-- term (pk)
-- label
-- attributes
-
-Tabellen beskriver altså terminologien som er brukt i databasen. Det kan
-være et fagsystem med egen terminologi. Man kan angi tabell- og
-kolonnenavn, samt tabell- og kolonne-prefixer.
-
-Vi spesifiserer altså ikke nødvendigvis hvilket objekt dette gjelder. Det er
-kun terminologien som beskrives. Dvs. at når man har to kolonner med samme navn
-i forskjellige tabeller, trenger label og beskrivelse for dette bare å
-beskrives én gang.
-
-Men hvis man trenger å beskrive to kolonner med samme navn forskjellig,
-kan man legge til tabellnavnet først i "term"-kolonnen, og slik angi
-`tabellnavn.kolonnenavn`, dvs. på samme måte som man angir en kolonne i
-en sql-setning.
-
-I kolonnen "attributes" kan man angi html-attributter i YAML. Her kan
-man f.eks. angi en beskrivelse av et felt med "title"-attributtet, så
-blir beskrivelsen til feltet vist når man holder muspekeren over
-ledeteksten eller feltet. Man kan også angi Tachyons-klasser for å tune
-utseendet, jf <https://tachyons.io/docs/>
+Det er mulig å definere html-attributter for å tilpasse spesielle
+html-elementer i grensesnittet. Her kan man f.eks. angi en beskrivelse av et
+felt med "title"-attributtet, så blir beskrivelsen til feltet vist når man
+holder muspekeren over ledeteksten eller feltet. Man kan også angi
+Tachyons-klasser for å tune utseendet, jf <https://tachyons.io/docs/>
 
 Bare noen få attributter støttes foreløpig:
 
@@ -303,61 +274,30 @@ Bare noen få attributter støttes foreløpig:
 
 - title
 
-  Brukes til feltbeskrivelse i postvisning/postskjema
+  Brukes til feltbeskrivelse i postvisning/postskjema. Brukes også til å
+  beskrive selve databasen, og denne teksten vil da vises når man åpner en
+  database.
 
 - pattern
 
   Brukes på input-felter av typen 'text' i postskjemaet
 
-Man kan også legge inn attributtet "data-format" med verdi "markdown" eller
-"json" for å angi at et felt skal vises som markdown/json.
+Man kan også legge inn attributtet "data-label" for å angi ledetekst for et
+felt, samt "data-format" med verdi "markdown" eller "json" for å angi at et
+felt skal vises som markdown/json.
 
-SQL for å opprette terminologi-tabellen:
+Man kan gi attributter til følgende elementer:
+- database
+- tabellsett
+- tabell
+- feltsett
+- felt
 
-``` sql
-create table meta_term
-(
-    term varchar(100) not null,
-    label varchar(100),
-    attributes varchar(1000),
-    primary key (term)
-);
-```
+Et tabellsett kan representeres av et tabellprefiks, som altså brukes til å gruppere tabeller. Feltsett representeres av et kolonneprefiks som grupperer kolonner. F.eks. vil kolonnene `periode_fra` og `periode_til` ha felles prefiks `periode_`, som man kan gi html-attributter ved å registrere en rad med `element` lik "fieldset" og `identifier` lik "periode_".
 
-# Metadata
+Kolonner i databasen som har samme navn, kan gis samme attributter ved å angi kolonneanvnet som `identifier`. Dersom man ønsker å gi spesielle attributter for et felt i en spesifikk tabell, kan man angi `identifier` som `tabellnavn.kolonnenavn`, dvs. på samme måte man bruker tabellnavnet sammen med kolonnenavnet i en sql-spørring.
 
-Har en tabell `meta_data` med følgende kolonner:
-
-- `_name`
-- `label`
-- `description`
-- `cache`
-
-`_name` angir databasenavnet. Sørger for at man ikke kan ha flere rader
-som beskriver databasen. Understrek først i navnet medførerer at
-kolonnen ikke vises i Urdr.
-
-`label` angir hvordan navnet på databasen skal vises i Urdr.
-
-`description` brukes til å beskrive databasen. Denne vises når man går
-inn på en database.
-
-`cache` holder en json-versjon av databasestrukturen. Genereres via
-dialog for å oppdatere skjema fra base.
-
-Tabellen genereres automatisk dersom man genererer et cache av
-databasestrukturen. Ellers kan den også opprettes manuelt:
-
-``` sql
-DROP TABLE IF EXISTS meta_data;
-CREATE TABLE meta_data (
-    _name varchar(30) NOT NULL,
-    label varchar(30) NOT NULL,
-    description text NOT NULL,
-    cache json,
-    PRIMARY KEY (_name)
-);
-```
+Når man oppretter en cachet versjon av databasestrukturen, opprettes det en rad med `element` lik "database" og `identifier` lik databasenavnet, og det opprettes `data-cache` i `attributes`. Hvis ikke html-tabellene finnes fra før, opprettes disse også når man genererer cache.
 
 # Views
 

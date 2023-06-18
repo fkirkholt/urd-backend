@@ -130,8 +130,8 @@ def dblist():
             dbo = Database(cnxn, dbname)
             base = Dict()
             base.columns.name = dbname
-            base.columns.label = dbo.metadata.label or dbname.capitalize()
-            base.columns.description = dbo.metadata.description or None
+            base.columns.label = dbo.attrs['data-label'] or dbname.capitalize()
+            base.columns.description = dbo.attrs.title or None
             result.append(base)
     return {'data': {'records': result}}
 

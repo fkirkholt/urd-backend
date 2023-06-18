@@ -9,6 +9,7 @@ import simplejson as json
 from addict import Dict
 from expression import Expression
 from ruamel.yaml import YAML
+from ruamel.yaml.compat import StringIO
 from table import Table
 
 
@@ -21,6 +22,17 @@ def measure_time(func):
         return res
 
     return wrapper
+
+
+class MyYAML(YAML):
+    def dump(self, data, stream=None, **kw):
+        inefficient = False
+        if stream is None:
+            inefficient = True
+            stream = StringIO()
+        YAML.dump(self, data, stream, **kw)
+        if inefficient:
+            return stream.getvalue()
 
 
 class Connection:
@@ -120,55 +132,39 @@ class Database:
         self.system = cnxn.system
         self.expr = Expression(cnxn.system)
         self.user_tables = self.get_user_tables()
-        self.metadata = self.get_metadata()
-        if self.metadata.get('cache.config', None):
-            self.config = self.metadata.cache.config
+        self.attrs = Dict(self.get_html_attributes('database', self.name))
+        self.attrs.cache = self.attrs.pop('data-cache', None)
+        if self.attrs.get('cache.config', None):
+            self.config = self.attrs.cache.config
         else:
             self.config = Dict()
 
-    def get_metadata(self):
-        """Get data from table meta_data"""
-        if not hasattr(self, 'metadata'):
-            self.init_metadata()
-        return self.metadata
-
-    @measure_time
-    def init_metadata(self):
-        """Store metadata in database object"""
-        cursor = self.cnxn.cursor()
-        metadata = Dict()
-        if 'meta_data' in self.user_tables:
-            sql = f"select * from {self.schema or self.cat}.meta_data"
-            row = cursor.execute(sql).fetchone()
-            colnames = [col[0] for col in cursor.description]
-            if row:
-                metadata = Dict(zip(colnames, row))
-
-        if metadata.cache:
-            metadata.cache = Dict(json.loads(metadata.cache))
-        self.metadata = metadata
-
-    def get_terms(self):
+    def get_html_attributes(self, element=None, identifier=None):
         """Get terms from table meta_terms"""
-        if not hasattr(self, 'terms'):
-            self.init_terms()
-        return self.terms
+        if not hasattr(self, 'html_attributes'):
+            self.init_html_attributes()
+        if not element:
+            return self.html_attributes
+        else:
+            return self.html_attributes[element][identifier]
 
-    def init_terms(self):
+    def init_html_attributes(self):
         """Store terms in database object"""
         cursor = self.cnxn.cursor()
-        terms = Dict()
-        if 'meta_term' in self.user_tables:
-            sql = f"select * from {self.schema or self.cat}.meta_term"
+        attrs = Dict()
+        if 'html_attributes' in self.user_tables:
+            sql = f"""
+            select element, identifier, attributes as attrs
+            from {self.schema or self.cat}.html_attributes
+            """
             try:
                 rows = cursor.execute(sql).fetchall()
-                colnames = [column[0] for column in cursor.description]
                 for row in rows:
-                    terms[row.term] = Dict(zip(colnames, row))
+                    attrs[row.element][row.identifier] = json.loads(row.attrs)
             except Exception as e:
-                print(e.message)
+                print(e)
 
-        self.terms = terms
+        self.html_attributes = attrs
 
     @measure_time
     def get_info(self):
@@ -185,18 +181,18 @@ class Database:
                 "server": self.cnxn.server,
                 "schema": self.schema,
                 "schemata": self.get_schemata(),
-                "label": self.metadata.get('label', self.name.capitalize()),
+                "label": self.attrs.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
-                "description": self.metadata.get('description', None),
+                "description": self.attrs.get('description', None),
             },
             "user": {
                 "name": 'Admin',  # TODO: Autentisering
                 "id": 'admin',  # TODO: Autentisering
                 "admin": self.get_privileges().create
             },
-            "config": (None if not self.metadata.get('cache', None)
-                       else self.metadata.cache.config)
+            "config": (None if not self.attrs.get('cache', None)
+                       else self.attrs.cache.config)
         }
 
         return info
@@ -247,53 +243,57 @@ class Database:
 
         return user_tables
 
-    def create_meta_tables(self):
+    def create_html_tables(self):
         """Create tables holding meta data"""
         cursor = self.cnxn.cursor()
         string_datatype = self.expr.to_native_type('string')
 
-        sql = f"""
-            CREATE TABLE meta_data (
-            const_name varchar(30) NOT NULL default '{self.name}',
-            label varchar(30),
-            description {string_datatype},
-            cache {string_datatype},
-            PRIMARY KEY (const_name)
+        sql = """
+        create table html_element (
+        element varchar(16) not null,
+        primary key (element)
         );
         """
+
         cursor.execute(sql)
-        label = self.get_label(self.name)
+
+        sql = """
+        insert into html_element values (?);
+        """
+
+        params = [('database'), ('tableset'), ('table'), ('fieldset'),
+                  ('field')]
+
+        for param in params:
+            cursor.execute(sql, param)
 
         sql = f"""
-            insert into meta_data (label)
-            values('{label}')
+        CREATE TABLE html_attributes (
+        element varchar(16) NOT NULL,
+        identifier varchar(64),
+        attributes {string_datatype},
+        PRIMARY KEY (element, identifier),
+        foreign key (element) references html_element(element)
+        )
         """
         cursor.execute(sql)
-        self.metadata.cache = None
-        self.user_tables.append('meta_data')
 
-        if 'meta_term' not in self.user_tables:
-            sql = """
-                create table meta_term (
-                term varchar(30) not null,
-                label varchar(50),
-                attributes varchar(255),
-                primary key (term)
-            )
-            """
+        sql = """
+        create index html_attributes_element on html_attributes(element)
+        """
 
-            cursor.execute(sql)
-            self.user_tables.append('meta_term')
+        cursor.execute(sql)
 
-        terms = self.get_terms()
-        if 'meta_data.cache' not in terms:
-            sql = """
-                insert into meta_term (term, label, attributes)
-                values ('meta_data.cache', 'Cache', 'data-format: json')
-            """
-            cursor.execute(sql)
-            # Refresh terms to include cache column
-            self.init_terms()
+        self.attrs.cache = None
+        self.user_tables.append('html_attributes')
+
+        sql = """
+            insert into html_attributes (element, identifier, attributes)
+            values ('field', 'attributes', '{"data-format": "json"}')
+        """
+        cursor.execute(sql)
+        # Refresh attributes
+        self.init_html_attributes()
 
         cursor.commit()
 
@@ -301,16 +301,15 @@ class Database:
     def get_tables(self):
         """Return metadata for every table"""
         # Return metadata from cache if set
-        if (self.metadata.get('cache', None) and not self.config):
-            self.tables = self.metadata.cache.tables
+        if (self.attrs.get('cache', None) and not self.config):
+            self.tables = self.attrs.cache.tables
             return self.tables
 
         cursor = self.cnxn.cursor()
         tables = Dict()
 
-        # Create cache
-        if (self.config and 'cache' not in self.metadata):
-            self.create_meta_tables()
+        if (self.config and 'html_attributes' not in self.user_tables):
+            self.create_html_tables()
 
         start = time.time()
         rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
@@ -326,10 +325,7 @@ class Database:
             if tbl_name not in self.user_tables:
                 continue
 
-            if (tbl_name[-5:] == '_grid' and tbl.table_type == 'VIEW'):
-                continue
-
-            hidden = tbl_name[0:1] == "_" or tbl_name[0:5] == "meta_"
+            hidden = tbl_name[0:1] == "_"
 
             table = Table(self, tbl_name)
             table.cache.pkey = self.get_pkey(tbl_name)
@@ -366,7 +362,7 @@ class Database:
                 'name': tbl_name,
                 'type': tbl_type,
                 'icon': None,
-                'label': self.get_label(tbl_name),
+                'label': self.get_label('table', tbl_name),
                 'rowcount': None if not self.config else table.rowcount,
                 'pkey': table.cache.pkey,
                 'description': tbl.remarks,
@@ -449,6 +445,8 @@ class Database:
         # documenting databases
         if (not self.config.update_cache or self.config.urd_structure):
             for tbl_name, table in self.tables.items():
+                if (tbl_name[-5:] == '_grid' and table.type == 'view'):
+                    continue
                 if tbl_name[0:1] == "_":
                     name = tbl_name[1:]
                 else:
@@ -557,16 +555,23 @@ class Database:
 
         return sub_tables
 
-    def get_label(self, term):
-        """Get label based on term"""
-        terms = self.get_terms()
-        term_parts = term.split('_')
-        if term_parts[-1] in ("list", "liste", "xref", "link"):
-            term = "_".join(term_parts[:-1])
-        if term in terms:
-            label = terms[term].label
+    def get_label(self, element, identifier, prefix=None, postfix=None):
+        """Get label based on identifier"""
+        attrs = self.get_html_attributes()
+        if (
+            identifier in attrs[element] and
+            'data-label' in attrs[element][identifier]
+        ):
+            label = attrs[element][identifier]['data-label']
         else:
-            label = term.replace("_", " ")
+            id_parts = identifier.split('_')
+            if id_parts[-1] in ("list", "liste", "xref", "link"):
+                identifier = "_".join(id_parts[:-1])
+            if prefix:
+                identifier = identifier.replace(prefix, '')
+            if postfix:
+                identifier = identifier.replace(postfix, '')
+            label = identifier.replace('_', ' ')
 
         if self.config.norwegian_chars:
             label = label.replace("ae", "æ")
@@ -576,19 +581,6 @@ class Database:
         label = label.strip().capitalize()
 
         return label
-
-    def get_attributes(self, table_name, term):
-        """Get description based on term"""
-        terms = self.get_terms()
-        column_ref = table_name + '.' + term
-        attributes = None
-        yaml = YAML()
-        if column_ref in terms:
-            attributes = yaml.load(terms[column_ref].attributes)
-        elif term in terms:
-            attributes = yaml.load(terms[term].attributes)
-
-        return attributes
 
     def get_content_node(self, tbl_name):
         """Return a node in the content list, based on a table"""
@@ -600,8 +592,7 @@ class Database:
             node.subitems = Dict()
 
             for subtable in self.sub_tables[tbl_name]:
-                label = subtable.replace(tbl_name + '_', '')
-                label = self.get_label(label)
+                label = self.get_label('table', subtable, prefix=tbl_name)
                 node.subitems[label] = self.get_content_node(subtable)
 
         return node
@@ -609,8 +600,8 @@ class Database:
     @measure_time
     def get_contents(self):
         """Get list of contents"""
-        if (self.metadata.get('cache', None) and not self.config):
-            self.contents = self.metadata.cache.contents
+        if (self.attrs.get('cache', None) and not self.config):
+            self.contents = self.attrs.cache.contents
             return self.contents
 
         contents = Dict()
@@ -621,12 +612,12 @@ class Database:
         for group_name, table_names in tbl_groups.items():
             if len(table_names) == 1:  # and group_name != "meta":
                 tbl_name = table_names[0]
-                label = self.get_label(tbl_name)
+                label = self.get_label('table', tbl_name)
 
                 contents[label] = self.get_content_node(tbl_name)
 
             else:
-                label = self.get_label(group_name)
+                label = self.get_label('tableset', group_name)
                 table_names = list(set(table_names))
 
                 contents[label] = Dict({
@@ -638,24 +629,42 @@ class Database:
                 table_names.sort()
                 for tbl_name in table_names:
                     # Remove group prefix from label
-                    rest = tbl_name.replace(group_name+"_", "")
-                    tbl_label = self.get_label(rest)
+                    tbl_label = self.get_label('table', tbl_name,
+                                               prefix=group_name)
 
                     contents[label].subitems[tbl_label] = \
                         self.get_content_node(tbl_name)
 
-        if ('cache' in self.metadata and self.config):
+        if self.config:
             cursor = self.cnxn.cursor()
-            # self.cache = tables
-            sql = "update meta_data set cache = ?\n"
-            sql += "where const_name = ?"
+            sql = """
+            select count(*) from html_attributes
+            where element = ? and identifier = ?
+            """
+            count = cursor.execute(sql, 'database', self.name).fetchval()
+
             cache = {
                 "tables": self.tables,
                 "contents": contents,
                 "config": self.config
             }
-            cache_txt = json.dumps(cache, ensure_ascii=False)
-            cursor.execute(sql, cache_txt, self.name).commit()
+            self.attrs['data-cache'] = cache
+            self.attrs.pop('cache')
+            attrs_txt = json.dumps(self.attrs)
+
+            if count:
+                sql = """
+                update html_attributes
+                set attributes = ?
+                where element = ? and identifier = ?
+                """
+            else:
+                sql = """
+                insert into html_attributes(attributes, element, identifier)
+                values (?, ?, ?)
+                """
+
+            cursor.execute(sql, attrs_txt, 'database', self.name).commit()
 
         return contents
 
@@ -715,7 +724,7 @@ class Database:
                 rows = cursor.fetchmany(limit)
             else:
                 rows = cursor.fetchall()
-            print('rows', rows)
+
             query.data = []
 
             # Find the table selected from
@@ -857,7 +866,7 @@ class Database:
                         "delete_rule": fkey.delete_rule,
                         "foreign": fkey.foreign,
                         "primary": fkey.primary,
-                        "label": self.get_label(fkey.table)  # TODO: Fix
+                        "label": self.get_label('table', fkey.table)
                     })
 
         self.relations = relations

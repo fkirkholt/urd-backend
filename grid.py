@@ -121,7 +121,7 @@ class Grid:
             'pkey': pkey.columns,
             'fkeys': self.tbl.get_fkeys(),
             'indexes': self.tbl.get_indexes(),
-            'label': self.db.get_label(self.tbl.name),
+            'label': self.db.get_label('table', self.tbl.name),
             'actions': actions,
             'limit': self.tbl.limit,
             'offset': self.tbl.offset,
@@ -264,7 +264,7 @@ class Grid:
             last_col = filepath_idx.columns[-1]
 
             action = Dict({
-                'label': self.db.get_label('show_file'),
+                'label': "Show file",
                 'url': "/file",
                 'icon': "external-link",
                 'communication': "download",
@@ -653,7 +653,7 @@ class Grid:
 
         for group_name, col_names in field_groups.items():
             if len(col_names) == 1:
-                label = self.db.get_label(col_names[0])
+                label = self.db.get_label('field', col_names[0])
                 form['items'][label] = col_names[0]
             else:
                 inline = False
@@ -662,8 +662,8 @@ class Grid:
                 for colname in col_names:
                     # removes group name prefix from column name
                     # and use the rest as label
-                    rest = colname.replace(group_name+"_", "")
-                    label = self.db.get_label(rest)
+                    label = self.db.get_label('field', colname,
+                                              prefix=group_name)
                     subitems[label] = colname
 
                     field = fields[colname]
@@ -675,7 +675,7 @@ class Grid:
                 if sum_size <= 50:
                     inline = True
 
-                group_label = self.db.get_label(group_name)
+                group_label = self.db.get_label('fieldset', group_name)
 
                 form['items'][group_label] = Dict({
                     'inline': inline,
@@ -783,16 +783,16 @@ class Grid:
                     rel.order = len(rel_pkey.columns) - \
                         rel_pkey.columns.index(rel.foreign[-1])
 
-                rel.label = self.db.get_label(
-                    rel_table.name.replace(self.tbl.name + '_', '')
-                    .replace('_' + self.tbl.name, '')
-                )
+                rel.label = self.db.get_label('table', rel_table.name,
+                                              prefix=self.tbl.name + '_',
+                                              postfix='_' + self.tbl.name)
 
                 # Add name of foreign key column if other than name
                 # of reference table
                 if rel.foreign[-1] not in self.tbl.name:
-                    rel.label += " (" + self.db.get_label(rel.foreign[-1]) \
-                        .lower() + ")"
+                    col = rel.foreign[-1]
+                    rel.label += " (" + self.db.get_label('field', col).lower()
+                    rel.label += ")"
             else:
                 rel.hidden = True
 

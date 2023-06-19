@@ -184,7 +184,7 @@ class Database:
                 "label": self.attrs.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
-                "description": self.attrs.get('description', None),
+                "description": self.attrs.get('title', None)
             },
             "user": {
                 "name": 'Admin',  # TODO: Autentisering

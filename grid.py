@@ -653,7 +653,12 @@ class Grid:
 
         for group_name, col_names in field_groups.items():
             if len(col_names) == 1:
-                label = self.db.get_label('field', col_names[0])
+                cname = col_names[0]
+                fkey = fields[cname].fkey
+                postfix = None
+                if fkey and cname == f"{fkey.table}_{'_'.join(fkey.primary)}":
+                    postfix = '_'.join(fkey.primary)
+                label = self.db.get_label('field', col_names[0], postfix)
                 form['items'][label] = col_names[0]
             else:
                 inline = False
@@ -791,8 +796,12 @@ class Grid:
                 # of reference table
                 if rel.foreign[-1] not in self.tbl.name:
                     col = rel.foreign[-1]
-                    rel.label += " (" + self.db.get_label('field', col).lower()
-                    rel.label += ")"
+                    postfix = None
+                    if col == f"{self.tbl.name}_{'_'.join(rel.primary)}":
+                        postfix = '_'.join(rel.primary)
+                    colname = self.db.get_label('field', col, postfix).lower()
+
+                    rel.label += " (" + colname + ")"
             else:
                 rel.hidden = True
 

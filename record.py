@@ -41,7 +41,7 @@ class Record:
             if 'editable' not in field:
                 field.editable = True
 
-            if 'fkey' in field and field.fkey.table not in self.db.user_tables:
+            if 'fkey' in field and field.fkey.table in self.db.user_tables:
                 condition, params = column.get_condition(field, fields)
                 field.options = column.get_options(field, condition, params)
 

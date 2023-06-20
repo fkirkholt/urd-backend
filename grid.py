@@ -191,8 +191,8 @@ class Grid:
         sql = f"""
         select rownum - 1
         from   (select row_number() over ({order_by}) as rownum,
-                       {self.tbl.name}.*
-                from   {self.tbl.name}
+                       {self.tbl.view}.*
+                from   {self.tbl.view}
                 {join}
                 {cond}) tab
         {rec_cond};

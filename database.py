@@ -316,8 +316,13 @@ class Database:
         end = time.time()
         print('cursor.tables', end - start)
 
+        tbl_names = [row.table_name for row in rows]
+
         for tbl in rows:
             tbl_name = tbl.table_name
+
+            if tbl_name[-5:] == '_view' and tbl_name[:-5] in tbl_names:
+                continue
 
             if tbl_name == 'sqlite_sequence':
                 continue
@@ -358,9 +363,14 @@ class Database:
                 table.fields = table.get_fields()
                 table.relations = table.get_relations()
 
+            view = tbl_name
+            if tbl_name + '_view' in tbl_names:
+                view = tbl_name + '_view'
+
             tables[tbl_name] = Dict({
                 'name': tbl_name,
                 'type': tbl_type,
+                'view': view,
                 'icon': None,
                 'label': self.get_label('table', tbl_name),
                 'rowcount': None if not self.config else table.rowcount,

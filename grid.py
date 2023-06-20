@@ -32,7 +32,7 @@ class Grid:
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
         select = ''
-        col.ref = f'"{self.tbl.name}"."{col.name}"'
+        col.ref = f'"{self.tbl.view}"."{col.name}"'
 
         if 'column_view' in col:
             select = col.column_view
@@ -54,7 +54,7 @@ class Grid:
         fields = self.tbl.get_fields()
 
         for col in pkey.columns:
-            selects[col] = f'"{self.tbl.name}"."{col}"'
+            selects[col] = f'"{self.tbl.view}"."{col}"'
 
         expansion_column = self.get_expansion_column()
         if expansion_column:
@@ -64,7 +64,7 @@ class Grid:
 
             # Filters on highest level if not filtered by user
             if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
-                self.add_cond(self.tbl.name + '.' + rel_column.name, "IS NULL")
+                self.add_cond(self.tbl.view + '.' + rel_column.name, "IS NULL")
 
         actions = self.get_actions()
 
@@ -326,7 +326,7 @@ class Grid:
             key = parts[0]
             direction = 'asc' if len(parts) == 1 else parts[1]
             if key in self.tbl.get_fields():
-                tbl_name = self.tbl.name
+                tbl_name = self.tbl.view
             else:
                 tbl_name = self.tbl.name + '_grid'
             sort_fields[key].field = tbl_name + "." + key
@@ -344,7 +344,7 @@ class Grid:
                 order += f"{sort.field} is null, {sort.field} {sort.order}, "
 
         for field in pkey.columns:
-            order += f'"{self.tbl.name}"."{field}", '
+            order += f'"{self.tbl.view}"."{field}", '
 
         order = order[0:-2]
 
@@ -363,7 +363,7 @@ class Grid:
                 (key in fields or key == 'rowid') and
                 'source' not in fields[key]
             ):
-                cols.append(f'"{self.tbl.name}"."{key}"')
+                cols.append(f'"{self.tbl.view}"."{key}"')
 
         select = ', '.join(cols)
         join = self.tbl.get_join()
@@ -380,7 +380,7 @@ class Grid:
 
         sql = "select " + select + "\n"
         sql += "from " + (self.db.schema or self.db.cat)
-        sql += '."' + self.tbl.name + '"\n'
+        sql += '."' + self.tbl.view + '"\n'
         sql += join + "\n"
         sql += join_view
         sql += "" if not cond else "where " + cond + "\n"
@@ -413,7 +413,7 @@ class Grid:
             join_view = ""
 
         sql = "select count(*)\n"
-        sql += f'from {namespace}."{self.tbl.name}"\n'
+        sql += f'from {namespace}."{self.tbl.view}"\n'
         sql += join + "\n"
         sql += join_view
         sql += "" if not conds else f"where {conds}\n"
@@ -459,7 +459,7 @@ class Grid:
         select = ', '.join(alias_selects.values())
 
         sql = "select " + select + "\n"
-        sql += f'from {(self.db.schema or self.db.cat)}."{self.tbl.name}"\n'
+        sql += f'from {(self.db.schema or self.db.cat)}."{self.tbl.view}"\n'
         sql += join + "\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order
@@ -549,10 +549,10 @@ class Grid:
                         params.append(value)
                     elif field.datatype == "string":
                         if case_sensitive:
-                            conds.append(f"{self.tbl.name}.{field.name}"
+                            conds.append(f"{self.tbl.view}.{field.name}"
                                          " LIKE ?")
                         else:
-                            conds.append(f"lower({self.tbl.name}.{field.name})"
+                            conds.append(f"lower({self.tbl.view}.{field.name})"
                                          " LIKE ?")
                         params.append(value)
                 expr = "(" + " OR ".join(conds) + ")"
@@ -561,7 +561,7 @@ class Grid:
                 field = parts[0]
                 if "." not in field:
                     if field in self.tbl.get_fields():
-                        tbl_name = self.tbl.name
+                        tbl_name = self.tbl.view
                     else:
                         tbl_name = self.tbl.name + '_grid'
                     field = tbl_name + "." + field

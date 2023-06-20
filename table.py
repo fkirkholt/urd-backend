@@ -27,6 +27,9 @@ class Table:
         self.name = tbl_name
         self.label = db.get_label('table', tbl_name)
         self.cache = Dict()
+        self.view = tbl_name
+        if tbl_name + '_view' in db.user_tables:
+            self.view = tbl_name + '_view'
         if hasattr(db, 'tables'):
             for key, val in db.tables[tbl_name].items():
                 self.cache[key] = val
@@ -219,7 +222,7 @@ class Table:
             aliases.append(alias)
 
             # Get the ON statement in the join
-            ons = [f'"{alias}"."{fkey.primary[idx]}" = "{self.name}"."{col}"'
+            ons = [f'"{alias}"."{fkey.primary[idx]}" = "{self.view}"."{col}"'
                    for idx, col in enumerate(fkey.foreign)]
             on_list = ' AND '.join(ons)
 

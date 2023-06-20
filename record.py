@@ -110,13 +110,13 @@ class Record:
                     rel.primary == list(self.pk.keys()) and
                     rel.index.unique is True
                 ):
-                    grid2.add_cond(expr=f'"{rel.table}"."{col}"',
+                    grid2.add_cond(expr=f'"{tbl_rel.view}"."{col}"',
                                    operator="IS NULL")
                     count_null_conds += 1
                 else:
-                    grid2.add_cond(f'"{rel.table}"."{col}"', "=", val)
+                    grid2.add_cond(f'"{tbl_rel.view}"."{col}"', "=", val)
 
-                grid.add_cond(f'"{rel.table}"."{col}"', "=", val)
+                grid.add_cond(f'"{tbl_rel.view}"."{col}"', "=", val)
                 conds[col] = val
 
             count_records = grid.get_rowcount() if len(self.pk) else 0
@@ -209,10 +209,10 @@ class Record:
                 rel.primary == list(self.pk.keys()) and
                 rel.index.unique is True
             ):
-                grid.add_cond(expr=f'("{rel.table}"."{col}" = ? or "'
-                              f'{rel.table}"."{col}" is null)', value=val)
+                grid.add_cond(expr=f'("{tbl_rel.view}"."{col}" = ? or "'
+                              f'{tbl_rel.view}"."{col}" is null)', value=val)
             else:
-                grid.add_cond(f'"{rel.table}"."{col}"', "=", val)
+                grid.add_cond(f'"{tbl_rel.view}"."{col}"', "=", val)
             conds[col] = val
             pkey_vals[col] = val
             # grid.add_cond(f"coalesce({rel.table}.{col}, '-')",
@@ -258,7 +258,7 @@ class Record:
         params = [val for val in self.pk.values()]
 
         sql = f"""
-        select * from {self.db.schema or self.db.cat}."{self.tbl.name}"\n
+        select * from {self.db.schema or self.db.cat}."{self.tbl.view}"\n
         where {cond}
         """
         cursor = self.db.cnxn.cursor()
@@ -285,12 +285,12 @@ class Record:
 
         select = ', '.join(displays.values())
 
-        conds = [f"{self.tbl.name}.{key} = ?" for key in self.pk]
+        conds = [f"{self.tbl.view}.{key} = ?" for key in self.pk]
         cond = " and ".join(conds)
         params = [val for val in self.pk.values()]
 
         sql = "select " + select + "\n"
-        sql += f"from {self.db.schema or self.db.cat}.{self.tbl.name}\n"
+        sql += f"from {self.db.schema or self.db.cat}.{self.tbl.view}\n"
         sql += join + "\n"
         sql += " where " + cond
 

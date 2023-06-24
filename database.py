@@ -286,10 +286,15 @@ class Database:
 
         self.attrs.cache = None
         self.user_tables.append('html_attributes')
+        attributes = {
+            'data-type': 'json',
+            'data-format': 'yaml',
+            'class': 'w7 bg-near-white'
+        }
 
-        sql = """
+        sql = f"""
             insert into html_attributes (element, identifier, attributes)
-            values ('field', 'attributes', '{"data-format": "json"}')
+            values ('field', 'attributes', '{json.dumps(attributes)}')
         """
         cursor.execute(sql)
         # Refresh attributes

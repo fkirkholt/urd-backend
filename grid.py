@@ -373,8 +373,12 @@ class Grid:
         user_tables = self.db.get_user_tables()
         if (self.tbl.name + '_grid') in user_tables:
             pkey = self.tbl.get_pkey()
-            join_view = "join " + self.tbl.name + "_grid using ("
-            join_view += ','.join(pkey.columns) + ")\n"
+            view_alias = self.tbl.name + "_grid"
+            join_view = "join " + self.tbl.name + "_grid on "
+
+            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
+                   for col in pkey.columns]
+            join_view += ' AND '.join(ons) + ' '
         else:
             join_view = ""
 
@@ -407,8 +411,11 @@ class Grid:
         user_tables = self.db.get_user_tables()
         if (self.tbl.name + '_grid') in user_tables:
             pkey = self.tbl.get_pkey()
-            join_view = "join " + self.tbl.name + "_grid using ("
-            join_view += ','.join(pkey.columns) + ")\n"
+            view_alias = self.tbl.name + '_grid'
+            join_view = f"join {view_alias} on "
+            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
+                   for col in pkey.columns]
+            join_view += ' AND '.join(ons) + ' '
         else:
             join_view = ""
 
@@ -430,7 +437,7 @@ class Grid:
 
         sql = "select " + ', '.join(selects) + "\n"
         sql += "from " + view.name + "\n"
-        sql += f"join {self.tbl.name} using ({', '.join(pkey.columns)})\n"
+        sql += f"join {self.tbl.view} using ({', '.join(pkey.columns)})\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order
 

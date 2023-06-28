@@ -1,5 +1,5 @@
 import os
-from column import Column
+from field import Field
 from addict import Dict
 from datetime import datetime
 
@@ -31,19 +31,18 @@ class Record:
 
         fields = {}
 
-        cols = self.tbl.get_columns()
+        fields = self.tbl.get_fields()
 
-        for col in cols:
-            column = Column(self.tbl, col)
-            field = column.get_field()
+        for field in fields.values():
+            fld = Field(self.tbl, field.name)
             field.value = values.get(field.name, None)
             field.text = displays.get(field.name, None)
             if 'editable' not in field:
                 field.editable = True
 
             if 'fkey' in field and field.fkey.table in self.db.user_tables:
-                condition, params = column.get_condition(field, fields)
-                field.options = column.get_options(field, condition, params)
+                condition, params = fld.get_condition(fields=fields)
+                field.options = fld.get_options(condition, params)
 
             fields[field.name] = field
 
@@ -384,7 +383,7 @@ class Record:
             inserts[key] = value
 
         sql = f"""
-        insert into "{self.tbl.name}" ({','.join(inserts.keys())})
+        insert into "{self.tbl.view}" ({','.join(inserts.keys())})
         values ({', '.join(["?" for key in inserts])})
         """
 
@@ -424,7 +423,7 @@ class Record:
         params = list(params) + list(self.pk.values())
 
         sql = f"""
-        update {self.tbl.name}\n
+        update {self.tbl.view}\n
         set {set_str}\n
         where {where_str}
         """
@@ -449,7 +448,7 @@ class Record:
         where_str = " and ".join(wheres)
 
         sql = f"""
-        delete from {self.tbl.name}
+        delete from {self.tbl.view}
         where {where_str}
         """
 

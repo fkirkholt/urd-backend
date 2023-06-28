@@ -32,7 +32,7 @@ class Grid:
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
         select = ''
-        col.ref = f'"{self.tbl.view}"."{col.name}"'
+        col.ref = f'"{self.tbl.grid_view}"."{col.name}"'
 
         if 'column_view' in col:
             select = col.column_view
@@ -74,31 +74,26 @@ class Grid:
                     continue
                 selects[key] = action.disabled
 
-        grid_columns = self.get_grid_columns()
-
         if has_view:
             view_name = self.tbl.name + '_grid'
             view = Table(self.db, view_name)
             cols = view.get_columns()
-            display_cols = [f'{view_name}.{col.column_name}' for col in cols]
             grid_columns = [col.column_name for col in cols]
-            display_values = self.get_values_from_view(view, display_cols)
             view_fields = view.get_fields()
             for field_name, field in view_fields.items():
                 if field_name not in fields:
                     field.virtual = True
                     field.table_name = view_name
                     fields[field_name] = field
+        else:
+            grid_columns = self.get_grid_columns()
 
         # Uses grid_columns from view if exists
         for colname in grid_columns:
             col = fields[colname]
-            if col.virtual:
-                continue
             selects[colname] = self.get_select_expression(col)
 
-        if not has_view:
-            display_values = self.get_display_values(selects)
+        display_values = self.get_display_values(selects)
 
         values = self.get_values(selects)
         recs = self.get_records(display_values, values)
@@ -363,7 +358,7 @@ class Grid:
                 (key in fields or key == 'rowid') and
                 'source' not in fields[key]
             ):
-                cols.append(f'"{self.tbl.view}"."{key}"')
+                cols.append(f'"{self.tbl.grid_view}"."{key}"')
 
         select = ', '.join(cols)
         join = self.tbl.get_join()
@@ -430,29 +425,6 @@ class Grid:
 
         return count
 
-    def get_values_from_view(self, view, selects):
-        pkey = self.tbl.get_pkey()
-        order = self.make_order_by()
-        conds = self.get_cond_expr()
-
-        sql = "select " + ', '.join(selects) + "\n"
-        sql += "from " + view.name + "\n"
-        sql += f"join {self.tbl.view} using ({', '.join(pkey.columns)})\n"
-        sql += "" if not conds else "where " + conds + "\n"
-        sql += order
-
-        cursor = self.db.cnxn.cursor()
-        cursor.execute(sql, self.cond.params)
-        cursor.skip(self.tbl.offset)
-        rows = cursor.fetchmany(self.tbl.limit)
-
-        result = []
-        colnames = [column[0] for column in cursor.description]
-        for row in rows:
-            result.append(dict(zip(colnames, row)))
-
-        return result
-
     def get_display_values(self, selects):
         """Return display values for columns in grid"""
 
@@ -465,8 +437,21 @@ class Grid:
             alias_selects[key] = f'{value} as "{key}"'
         select = ', '.join(alias_selects.values())
 
+        user_tables = self.db.get_user_tables()
+        if (self.tbl.name + '_grid') in user_tables:
+            pkey = self.tbl.get_pkey()
+            view_alias = self.tbl.name + "_grid"
+            join_view = "join " + self.tbl.view + " on "
+
+            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
+                   for col in pkey.columns]
+            join_view += ' AND '.join(ons) + "\n"
+        else:
+            join_view = ""
+
         sql = "select " + select + "\n"
-        sql += f'from {(self.db.schema or self.db.cat)}."{self.tbl.view}"\n'
+        sql += f'from {(self.db.schema or self.db.cat)}."{self.tbl.grid_view}"\n'
+        sql += join_view
         sql += join + "\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order

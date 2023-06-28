@@ -10,7 +10,7 @@ import urllib.parse
 from database import Database, Connection
 from table import Table, Grid
 from record import Record
-from column import Column
+from field import Field
 import json
 import os
 from addict import Dict
@@ -237,24 +237,23 @@ async def get_options(request: Request):
     cnxn = Connection(cfg, req.base)
     dbo = Database(cnxn, req.base)
     tbl = Table(dbo, req.table)
-    col = tbl.get_columns(req.column)[0]
-    column = Column(tbl, col)
-    field = column.get_field()
+    fld = Field(tbl, req.column)
     conds = req.condition.split(" and ") if req.condition else []
     search = None if 'q' not in req else req.q.replace("*", "%")
+    fkey = tbl.get_fkey(req.column)
     if search:
         search = search.lower()
-        view = field.view or field.name
+        view = fld.get_view(fkey) if fkey else req.column
         conds.append(f"lower(cast({view} as char)) like '%{search}%'")
     cond = " and ".join(conds)
     # Get condition defining classification relations
     params = []
-    if field.fkey:
-        cond2, params = column.get_condition(field)
+    if fkey:
+        cond2, params = fld.get_condition()
         if cond2:
             cond = cond + ' and ' + cond2
 
-    data = column.get_options(field, cond, params)
+    data = fld.get_options(cond, params)
     return data
 
 

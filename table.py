@@ -4,6 +4,7 @@ import pypandoc
 from addict import Dict
 from record import Record
 from column import Column
+from field import Field
 from expression import Expression
 from grid import Grid
 
@@ -30,6 +31,9 @@ class Table:
         self.view = tbl_name
         if tbl_name + '_view' in db.user_tables:
             self.view = tbl_name + '_view'
+        self.grid_view = self.view
+        if tbl_name + '_grid' in db.user_tables:
+            self.grid_view = tbl_name + '_grid'
         if hasattr(db, 'tables'):
             for key, val in db.tables[tbl_name].items():
                 self.cache[key] = val
@@ -169,6 +173,9 @@ class Table:
     def get_pkey(self):
         """Return primary key of table"""
         if self.cache.pkey:
+            return self.cache.pkey
+        if (self.db.attrs.get("cache", None) and not self.db.config):
+            self.cache.pkey = self.db.attrs.cache.tables[self.name].pkey
             return self.cache.pkey
         if self.db.cnxn.system == 'sqlite3':
             sql = self.db.expr.pkey(self.name)
@@ -411,10 +418,11 @@ class Table:
             cname = col.column_name
 
             column = Column(self, col)
-            field = column.get_field()
+            fld = Field(self, cname)
+            field = fld.get(col)
             if field.fkey:
-                condition, params = column.get_condition(field)
-                field.options = column.get_options(field, condition, params)
+                condition, params = fld.get_condition()
+                field.options = fld.get_options(condition, params)
 
             # Get info about column use if user has chosen this option
             if (

@@ -49,8 +49,6 @@ class Field:
             field.fkey = fkey
             field.element = 'select'
             field.view = self.get_view(fkey)
-            field.column_view = field.view
-
         if (
             col.get('auto_increment', None) or (
                 type_ in ['integer', 'decimal'] and
@@ -200,11 +198,9 @@ class Field:
             return False
 
         self.view = self.get_view(fkey) if fkey else self.name
-        self.column_view = self.view
 
         sql = f"""
-        select {value_field} as value, {self.view or value_field} as label,
-               {self.column_view or value_field} as coltext
+        select {value_field} as value, {self.view or value_field} as label
         from   {self.db.schema or self.db.cat}."{from_table}" "{self.name}"
         where  {condition}
         order by {self.view or value_field}

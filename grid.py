@@ -34,8 +34,8 @@ class Grid:
         select = ''
         col.ref = f'"{self.tbl.grid_view}"."{col.name}"'
 
-        if 'column_view' in col:
-            select = col.column_view
+        if 'view' in col:
+            select = col.view
         elif col.element == 'textarea':
             select = "substr(" + col.ref + ', 1, 255)'
         else:

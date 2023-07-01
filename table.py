@@ -196,6 +196,12 @@ class Table:
         if (not pkey.columns and self.db.system == 'sqlite3'):
             pkey.columns = ['rowid']
             pkey.data_type = ['integer']
+
+        if (not pkey.columns):
+            attrs = self.db.get_html_attributes()
+            if attrs.table[self.name]['data-pkey']:
+                pkey.columns = attrs.table[self.name]['data-pkey']
+
         return pkey
 
     def get_parent_fk(self):

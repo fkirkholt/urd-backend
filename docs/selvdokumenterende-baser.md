@@ -313,6 +313,33 @@ antall underliggende, mm.
 Alle ekstra kolonner i viewet blir også tilgjengelig i postvisningen, og
 blir søkbare.
 
+## Bruke view til tilgangsstyring
+
+Hvis man oppretter et view med navn `<tabellnavn>_view`, vil dette viewet
+erstatte tabellen når man foretar spørringer. Man kan dermed legge inn
+tilgangsstyring i dette viewet.
+
+Eksempel:
+
+~~~ sql
+create view serie_view as
+select * from serie
+where serie.skjerming is null or
+serie.skjerming in (
+select skjerming from bruker_skjerming
+where brukernavn = current_user()
+);
+~~~
+
+Man skal altså velge alt fra opprinnelig tabell, da denne rett og slett skal
+erstattes av viewet. Metadata for viewet hentes fra opprinnelig tabell.
+
+Man gir da brukeren tilgang til viewet, men ikke til opprinnelig tabell. Dette
+forutsetter at man lager en cachet versjon av databasestrukturen først.
+
+Man kan ha view for tilgangsstyring og view for grid samtidig. Men da bør view
+for grid også ha tilgangsstyring.
+
 # Relasjoner
 
 For at relasjoner skal vises, må det være en indeks på de kolonnene som

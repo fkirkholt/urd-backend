@@ -643,6 +643,10 @@ class Grid:
         fields = self.tbl.get_fields()
         field_groups = self.get_field_groups(fields)
 
+        attrs = self.db.get_html_attributes()
+        if attrs.table[self.tbl.name]['data-form']:
+            return attrs.table[self.tbl.name]['data-form']
+
         for group_name, col_names in field_groups.items():
             if len(col_names) == 1:
                 cname = col_names[0]

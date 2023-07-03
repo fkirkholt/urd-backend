@@ -410,3 +410,14 @@ class Expression:
             """
         else:
             return None
+
+    def view_definition(self):
+        if self.platform == 'mysql':
+            return """
+            SELECT  VIEW_DEFINITION
+            FROM    INFORMATION_SCHEMA.VIEWS
+            WHERE   TABLE_SCHEMA    = ?
+            AND     TABLE_NAME      = ?;
+            """
+        else:
+            return None

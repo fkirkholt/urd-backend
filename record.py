@@ -92,17 +92,12 @@ class Record:
 
             # todo: filtrate on highest level
 
-            # Don't get values for new records that's not saved
-            if hasattr(self, 'pk') and len(set(self.pk)):
-                rec_values = self.get_values() or self.pk
-
             # Add condition to fetch only rows that link to record
             conds = Dict()
             count_null_conds = 0
 
-            for idx, col in enumerate(rel.foreign):
-                ref_key = rel.primary[idx]
-                val = None if len(self.pk) == 0 else rec_values[ref_key]
+            for i, col in enumerate(rel.foreign):
+                val = None if len(self.pk) == 0 else list(self.pk.values())[i]
                 if (
                     tbl_rel.fields[col].nullable and
                     col != rel.foreign[0] and
@@ -192,16 +187,11 @@ class Record:
 
         # todo: filter
 
-        # Don't get values for new records that's not saved
-        if hasattr(self, 'pk') and len(set(self.pk)):
-            rec_values = self.get_values() or self.pk
-
         # Add condition to fetch only rows that link to record
         conds = Dict()
         pkey_vals = {}
         for idx, col in enumerate(rel.foreign):
-            ref_key = rel.primary[idx]
-            val = None if len(self.pk) == 0 else rec_values[ref_key]
+            val = None if len(self.pk) == 0 else list(self.pk.values())[idx]
             if (
                 len(self.pk) and tbl_rel.fields[col].nullable and
                 col != rel.foreign[0] and
@@ -220,12 +210,8 @@ class Record:
         relation = grid.get()
         relation.conds = conds
 
-        # Don't get values for new records that's not saved
-        if hasattr(self, 'pk') and len(set(self.pk)):
-            rec_values = self.get_values()
-
-        values = [None if len(self.pk) == 0 else rec_values[key]
-                  for key in rel.primary]
+        values = [None if len(self.pk) == 0 else list(self.pk.values())[i]
+                  for i in range(len(rel.primary))]
 
         for idx, col in enumerate(rel.foreign):
             relation.fields[col].default = values[idx]

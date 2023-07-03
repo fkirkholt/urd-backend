@@ -7,6 +7,7 @@ from column import Column
 from field import Field
 from expression import Expression
 from grid import Grid
+from sqlglot import parse_one, exp
 
 
 def measure_time(func):
@@ -517,7 +518,19 @@ class Table:
         relations = Dict()
         fktable_name = None
 
-        for row in cursor.foreignKeys(table=self.name, catalog=self.db.cat,
+        if not self.cache.type:
+            self.get_type()
+
+        table_name = self.name
+        if self.cache.type == 'view':
+            sql = self.db.expr.view_definition()
+            if sql:
+                params = [self.db.name, self.name]
+                view_def = cursor.execute(sql, params).fetchone()[0]
+                table = parse_one(view_def, read="mysql").find(exp.Table)
+                table_name = table.name
+
+        for row in cursor.foreignKeys(table=table_name, catalog=self.db.cat,
                                       schema=self.db.schema):
             delete_rules = ["cascade", "restrict", "set null", "no action",
                             "set default"]

@@ -57,7 +57,7 @@ class Table:
         if not main_type:
             tbl = crsr.tables(catalog=self.db.cat, schema=self.db.schema,
                               table=self.name).fetchone()
-            self.type_ = tbl.table_type.lower()
+            main_type = tbl.table_type.lower()
 
         pkey = self.get_pkey()
         # Data type of primary key column

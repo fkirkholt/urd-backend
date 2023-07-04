@@ -107,7 +107,7 @@ class Field:
         """Get description based on term"""
         attrs = self.db.get_html_attributes()
         column_ref = table_name + '.' + identifier
-        attributes = None
+        attributes = {}
         if column_ref in attrs.field:
             attributes = attrs.field[column_ref]
         elif identifier in attrs.field:

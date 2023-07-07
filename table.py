@@ -426,7 +426,7 @@ class Table:
 
             column = Column(self, col)
             fld = Field(self, cname)
-            field = fld.get(col)
+            field = fld.get(column)
             if field.fkey:
                 condition, params = fld.get_condition()
                 field.options = fld.get_options(condition, params)

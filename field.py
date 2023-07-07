@@ -24,13 +24,12 @@ class Field:
     def get(self, col):
         fkeys = self.tbl.get_fkeys()
         pkey = self.tbl.get_pkey()
-        type_ = self.db.expr.to_urd_type(col.type_name)
 
         element, options = self.get_element(col)
 
         field = Dict({
             'name': self.name,
-            'datatype': type_,
+            'datatype': col.datatype,
             'element': element,
             'nullable': col.nullable == 1,
             'label': self.db.get_label('field', self.name),
@@ -38,20 +37,21 @@ class Field:
         })
 
         fkey = self.tbl.get_fkey(self.name)
-        if 'column_size' in col:
-            field.size = int(col.column_size)
-        if 'scale' in col and col.scale:
-            field.scale = int(col.scale)
-            field.precision = int(col.precision)
+        if hasattr(col, 'size'):
+            field.size = col.size
+        if hasattr(col, 'scale'):
+            field.scale = col.scale
+            field.precision = col.precision
         if element == "select" and len(options):
             field.options = options
         elif fkey:
             field.fkey = fkey
             field.element = 'select'
             field.view = self.get_view(fkey)
+            field.expandable = self.expandable or False
         if (
-            col.get('auto_increment', None) or (
-                type_ in ['integer', 'decimal'] and
+            hasattr(col, 'auto_increment') or (
+                col.datatype in ['integer', 'decimal'] and
                 len(pkey.columns) and
                 self.name == pkey.columns[-1] and
                 self.name not in fkeys
@@ -60,10 +60,10 @@ class Field:
             field.extra = "auto_increment"
 
         if (
-            col.column_def and not col.auto_increment and
-            col.column_def != 'NULL'
+            col.default and not hasattr(col, 'auto_increment') and
+            col.default != 'NULL'
         ):
-            def_vals = col.column_def.split('::')
+            def_vals = col.default.split('::')
             default = def_vals[0]
             default = default.replace("'", "")
 

@@ -81,20 +81,7 @@ class Field:
         if col.datatype == 'date':
             element = 'input[type=date]'
         elif col.datatype == 'boolean':
-            if col.nullable:
-                element = 'select'
-                options = [
-                    {
-                        'value': 0,
-                        'label': 'Nei'
-                    },
-                    {
-                        'value': 1,
-                        'label': 'Ja'
-                    }
-                ]
-            else:
-                element = 'input[type=checkbox]'
+            element = 'input[type=checkbox]'
         elif col.datatype == 'binary' or (col.datatype == 'string' and (
                 col.size == 0 or col.size >= 255)):
             element = "textarea"

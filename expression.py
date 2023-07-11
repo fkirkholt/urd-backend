@@ -144,6 +144,8 @@ class Expression:
         type_ = type_.lower()
         if re.search("char|text|clob", type_):
             return "string"
+        elif re.search("bool|bit|tinyint", type_):
+            return "boolean"
         elif re.search("int|number", type_):
             return "integer"
         elif re.search("double|decimal|numeric", type_):
@@ -152,8 +154,6 @@ class Expression:
             return "float"
         elif re.search("date|time", type_):
             return "date"
-        elif re.search("bool|bit", type_):
-            return "boolean"
         elif re.search("json", type_):
             return "json"
         elif type_ == "blob":

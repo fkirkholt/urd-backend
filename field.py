@@ -25,15 +25,18 @@ class Field:
         fkeys = self.tbl.get_fkeys()
         pkey = self.tbl.get_pkey()
 
-        element, options = self.get_element(col)
+        self.element, type_ = self.get_element(col)
 
+        attrs = Dict()
+        if type_:
+            attrs['type'] = type_
         field = Dict({
             'name': self.name,
             'datatype': col.datatype,
-            'element': element,
+            'element': self.element,
             'nullable': col.nullable == 1,
             'label': self.db.get_label('field', self.name),
-            'attrs': self.get_attributes(self.tbl.name, self.name),
+            'attrs': attrs
         })
 
         fkey = self.tbl.get_fkey(self.name)
@@ -42,9 +45,7 @@ class Field:
         if hasattr(col, 'scale'):
             field.scale = col.scale
             field.precision = col.precision
-        if element == "select" and len(options):
-            field.options = options
-        elif fkey:
+        if fkey:
             field.fkey = fkey
             field.element = 'select'
             field.view = self.get_view(fkey)
@@ -76,29 +77,32 @@ class Field:
     def get_element(self, col):
         """ Get html element for input field """
 
-        options = []
+        type_ = None
         # Decides what sort of input should be used
         if col.datatype == 'date':
-            element = 'input[type=date]'
+            element = 'input'
+            type_ = 'date'
         elif col.datatype == 'boolean':
-            element = 'input[type=checkbox]'
+            element = 'input'
+            type_ = 'checkbox'
         elif col.datatype == 'binary' or (col.datatype == 'string' and (
                 col.size == 0 or col.size >= 255)):
             element = "textarea"
         else:
-            element = "input[type=text]"
+            element = "input"
+            type_ = 'text'
 
-        return element, options
+        return element, type_
 
     def get_attributes(self, table_name, identifier):
         """Get description based on term"""
         attrs = self.db.get_html_attributes()
-        column_ref = table_name + '.' + identifier
+        column_ref = f'{self.element}[data-table="{table_name}"][name="{identifier}"]'
         attributes = {}
-        if column_ref in attrs.field:
-            attributes = attrs.field[column_ref]
-        elif identifier in attrs.field:
-            attributes = attrs.field[identifier]
+        if column_ref in attrs:
+            attributes = attrs[column_ref]
+        elif f'input[name="{identifier}"]' in attrs:
+            attributes = attrs[f'input[name="{identifier}"]']
 
         return attributes
 

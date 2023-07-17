@@ -200,8 +200,9 @@ class Table:
 
         if (not pkey.columns):
             attrs = self.db.get_html_attributes()
-            if attrs.table[self.name]['data-pkey']:
-                pkey.columns = attrs.table[self.name]['data-pkey']
+            selector = f'table[data-name="{self.name}"]'
+            if attrs[selector]['data-pkey']:
+                pkey.columns = attrs[selector]['data-pkey']
 
         return pkey
 

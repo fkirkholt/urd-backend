@@ -132,39 +132,30 @@ class Database:
         self.system = cnxn.system
         self.expr = Expression(cnxn.system)
         self.user_tables = self.get_user_tables()
-        self.attrs = Dict(self.get_html_attributes('database', self.name))
+        self.html_attrs = self.get_html_attributes()
+        self.attrs = Dict(self.html_attrs.pop('base', None))
         self.attrs.cache = self.attrs.pop('data-cache', None)
         if self.attrs.get('cache.config', None):
             self.config = self.attrs.cache.config
         else:
             self.config = Dict()
 
-    def get_html_attributes(self, element=None, identifier=None):
-        """Get terms from table meta_terms"""
-        if not hasattr(self, 'html_attributes'):
-            self.init_html_attributes()
-        if not element:
-            return self.html_attributes
-        else:
-            return self.html_attributes[element][identifier]
-
-    def init_html_attributes(self):
-        """Store terms in database object"""
+    def get_html_attributes(self):
         cursor = self.cnxn.cursor()
         attrs = Dict()
         if 'html_attributes' in self.user_tables:
             sql = f"""
-            select element, identifier, attributes as attrs
+            select selector, attributes as attrs
             from {self.schema or self.cat}.html_attributes
             """
             try:
                 rows = cursor.execute(sql).fetchall()
                 for row in rows:
-                    attrs[row.element][row.identifier] = json.loads(row.attrs)
+                    attrs[row.selector] = json.loads(row.attrs)
             except Exception as e:
                 print(e)
 
-        self.html_attributes = attrs
+        return attrs
 
     @measure_time
     def get_info(self):
@@ -184,7 +175,8 @@ class Database:
                 "label": self.attrs.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
-                "description": self.attrs.get('title', None)
+                "description": self.attrs.get('title', None),
+                "html_attrs": self.html_attrs,
             },
             "user": {
                 "name": 'Admin',  # TODO: Autentisering
@@ -298,7 +290,8 @@ class Database:
         """
         cursor.execute(sql)
         # Refresh attributes
-        self.init_html_attributes()
+        self.html_attrs = self.get_html_attributes()
+        self.attrs = Dict(self.html_attrs.pop('base', None))
 
         cursor.commit()
 
@@ -654,9 +647,9 @@ class Database:
             cursor = self.cnxn.cursor()
             sql = """
             select count(*) from html_attributes
-            where element = ? and identifier = ?
+            where selector = ?
             """
-            count = cursor.execute(sql, 'database', self.name).fetchval()
+            count = cursor.execute(sql, 'base').fetchval()
 
             cache = {
                 "tables": self.tables,
@@ -671,15 +664,15 @@ class Database:
                 sql = """
                 update html_attributes
                 set attributes = ?
-                where element = ? and identifier = ?
+                where selector = ?
                 """
             else:
                 sql = """
-                insert into html_attributes(attributes, element, identifier)
-                values (?, ?, ?)
+                insert into html_attributes(attributes, selector)
+                values (?, ?)
                 """
 
-            cursor.execute(sql, attrs_txt, 'database', self.name).commit()
+            cursor.execute(sql, attrs_txt, 'base').commit()
 
         return contents
 

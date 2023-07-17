@@ -30,6 +30,13 @@ class Field:
         attrs = Dict()
         if type_:
             attrs['type'] = type_
+
+        html_attrs = self.get_attributes(self.tbl.name, self.name)
+        if 'data-type' in html_attrs:
+            attrs['data-type'] = html_attrs['data-type']
+        if 'data-format' in html_attrs:
+            attrs['data-format'] = html_attrs['data-format']
+
         field = Dict({
             'name': self.name,
             'datatype': col.datatype,

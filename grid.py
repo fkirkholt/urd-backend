@@ -679,6 +679,7 @@ class Grid:
                 group_label = self.db.get_label('fieldset', group_name)
 
                 form['items'][group_label] = Dict({
+                    'name': group_name,
                     'inline': inline,
                     'expandable': True,
                     'items': subitems

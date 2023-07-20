@@ -130,7 +130,7 @@ class Grid:
         return data
 
     def get_records(self, display_values, values):
-        """"Return formatted records from values and display values"""
+        """"Return records from values and display values"""
         recs = []
         for row in display_values:
             cols = {k: {'text': text} for k, text in row.items()}
@@ -148,16 +148,6 @@ class Grid:
             for col, val in row.items():
                 recs[index]['columns'][col]['value'] = val
             recs[index]['pkey'] = {key: row[key] for key in pkey.columns}
-
-        row_formats = self.get_format()
-        for idx, row in enumerate(row_formats.rows):
-            classes = []
-            for key, value in row.items():
-                id_ = int(key[1:])
-                if int(value):
-                    classes.append(row_formats.formats[id_]['class'])
-            class_ = " ".join(classes)
-            recs[idx]['class'] = class_
 
         return recs
 
@@ -688,65 +678,6 @@ class Grid:
         form = self.relations_form(form)
 
         return form
-
-    def get_format(self):
-
-        if 'meta_format' not in self.db.user_tables:
-            return Dict({
-                'formats': [],
-                'rows': []
-            })
-
-        sql = """
-        select id, class, filter
-        from   meta_format
-        where  table_ = ?
-        """
-
-        cursor = self.db.cnxn.cursor()
-        rows = cursor.execute(sql, self.tbl.name).fetchall()
-        colnames = [column[0] for column in cursor.description]
-        selects = []
-        formats = {}
-        for row in rows:
-            selects.append("(" + row.filter + ") AS f" + str(row.id))
-            formats[row.id] = dict(zip(colnames, row))
-
-        if len(selects) == 0:
-            return Dict({
-                'formats': [],
-                'rows': []
-            })
-
-        select = ", ".join(selects)
-        join = self.tbl.get_join()
-        conds = self.get_cond_expr()
-        cond = "" if not conds else f"where {conds}\n"
-        params = self.cond.params
-        ordr = self.make_order_by()
-
-        sql = f"""
-        select {select}
-        from {self.tbl.name}
-        {join}
-        {cond}
-        {ordr}
-        """
-
-        cursor = self.db.cnxn.cursor()
-        cursor.execute(sql, params)
-        cursor.skip(self.tbl.offset)
-        rows = cursor.fetchmany(self.tbl.limit)
-
-        result = []
-        colnames = [column[0] for column in cursor.description]
-        for row in rows:
-            result.append(dict(zip(colnames, row)))
-
-        return Dict({
-            'formats': formats,
-            'rows': result
-        })
 
     def relations_form(self, form):
         """Add relations to form"""

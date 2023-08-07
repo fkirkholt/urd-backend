@@ -25,7 +25,7 @@ class Grid:
         self.sort_columns = []
         self.cond = Dict({
             'prep_stmnts': [],
-            'params': [],
+            'params': {},
             'stmnts': []
         })
 
@@ -49,8 +49,7 @@ class Grid:
         """Return all metadata and data to display grid"""
         selects = {}  # dict of select expressions
         pkey = self.tbl.get_pkey()
-        user_tables = self.db.get_user_tables()
-        has_view = self.tbl.name + '_grid' in user_tables
+        has_view = self.tbl.name + '_grid' in self.db.user_tables
         fields = self.tbl.get_fields()
 
         for col in pkey.columns:
@@ -59,12 +58,13 @@ class Grid:
         expansion_column = self.get_expansion_column()
         if expansion_column:
             fkey = self.tbl.get_parent_fk()
-            rel_column = fields[fkey.foreign[-1]]
+            rel_column = fields[fkey.constrained_columns[-1]]
             selects['count_children'] = self.select_children_count(fkey)
 
             # Filters on highest level if not filtered by user
             if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
-                self.add_cond(self.tbl.view + '.' + rel_column.name, "IS NULL")
+                expr = f"{self.tbl.view}.{rel_column.name} IS NULL"
+                self.cond.prep_stmnts.append(expr)
 
         actions = self.get_actions()
 
@@ -77,8 +77,8 @@ class Grid:
         if has_view:
             view_name = self.tbl.name + '_grid'
             view = Table(self.db, view_name)
-            cols = view.get_columns()
-            grid_columns = [col.column_name for col in cols]
+            cols = self.db.refl.get_columns(view_name)
+            grid_columns = [col['name'] for col in cols]
             view_fields = view.get_fields()
             for field_name, field in view_fields.items():
                 if field_name not in fields:
@@ -157,10 +157,10 @@ class Grid:
             return None
 
         prep_stmnts = []
-        params = []
+        params = {}
         for colname, value in pkey_vals.items():
-            prep_stmnts.append(f"{colname} = ?")
-            params.append(value)
+            prep_stmnts.append(f"{colname} = :{colname}")
+            params[colname] = value
 
         # rec_conds = [f"{colname} = '{value}'" for colname, value
         #              in pkey_vals.items()]
@@ -184,7 +184,8 @@ class Grid:
         """
 
         params = self.cond.params + params
-        idx = self.db.query(sql, params).fetchval()
+        row = self.db.query(sql, params).fetchone()
+        idx = row[0] if row else None
         if idx is not None:
             page_nr = math.floor(idx / self.tbl.limit)
             self.tbl.offset = page_nr * self.tbl.limit
@@ -198,15 +199,15 @@ class Grid:
         """ number of relations to same table for expanding row"""
         wheres = []
 
-        for idx, colname in enumerate(fkey.foreign):
-            primary = fkey.primary[idx]
+        for idx, colname in enumerate(fkey.constrained_columns):
+            primary = fkey.referred_columns[idx]
             wheres.append(colname + ' = ' + self.tbl.name + '.' + primary)
 
         where = ' and '.join(wheres)
 
         return f"""(
             select count(*)
-            from {self.db.schema or self.db.cat}.{self.tbl.name} child_table
+            from {self.db.schema}.{self.tbl.name} child_table
             where {where}
             )"""
 
@@ -235,7 +236,7 @@ class Grid:
         fields = self.tbl.get_fields()
         for colname in ident_cols:
             col = fields[colname]
-            if col.datatype == 'string':
+            if col.datatype == 'str':
                 ident_col = colname
 
         return ident_col
@@ -285,7 +286,7 @@ class Grid:
                     continue
                 if (
                     [field.name] == pkey.columns
-                    and field.datatype == "integer"
+                    and field.datatype == "int"
                     and type_ != 'list'
                     and field.name not in fkeys
                     and hidden is False
@@ -321,11 +322,11 @@ class Grid:
             return ""
 
         for sort in sort_fields.values():
-            if self.db.cnxn.system == 'mysql':
+            if self.db.engine.name == 'mysql':
                 order += f"isnull({sort.field}), {sort.field} {sort.order}, "
-            elif self.db.cnxn.system in ['oracle', 'postgres']:
+            elif self.db.engine.name in ['oracle', 'postgresql']:
                 order += f"{sort.field} {sort.order}, "
-            elif self.db.cnxn.system == 'sqlite3':
+            elif self.db.engine.name == 'sqlite':
                 order += f"{sort.field} is null, {sort.field} {sort.order}, "
 
         for field in pkey.columns:
@@ -333,7 +334,7 @@ class Grid:
 
         order = order[0:-2]
 
-        if self.db.cnxn.system in ['oracle', 'postgres']:
+        if self.db.engine.name in ['oracle', 'postgresql']:
             order += " nulls last"
 
         return order
@@ -355,8 +356,7 @@ class Grid:
         cond = self.get_cond_expr()
         order = self.make_order_by()
 
-        user_tables = self.db.get_user_tables()
-        if (self.tbl.name + '_grid') in user_tables:
+        if (self.tbl.name + '_grid') in self.db.user_tables:
             pkey = self.tbl.get_pkey()
             view_alias = self.tbl.name + "_grid"
             join_view = "join " + self.tbl.name + "_grid on "
@@ -368,33 +368,25 @@ class Grid:
             join_view = ""
 
         sql = "select " + select + "\n"
-        sql += "from " + (self.db.schema or self.db.cat)
-        sql += '."' + self.tbl.view + '"\n'
+        sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += join + "\n"
         sql += join_view
         sql += "" if not cond else "where " + cond + "\n"
         sql += order
 
-        cursor = self.db.cnxn.cursor()
-        cursor.execute(sql, self.cond.params)
-        cursor.skip(self.tbl.offset)
-        rows = cursor.fetchmany(self.tbl.limit)
+        result = self.db.query(sql, self.cond.params)
+        if self.tbl.offset:
+            result.fetchmany(self.tbl.offset)
+        records = result.mappings().fetchmany(self.tbl.limit)
 
-        result = []
-        colnames = [column[0] for column in cursor.description]
-        for row in rows:
-            result.append(dict(zip(colnames, row)))
-
-        return result
+        return records
 
     def get_rowcount(self):
         """Return rowcount for grid"""
         conds = self.get_cond_expr()
         join = self.tbl.get_join()
-        namespace = self.db.schema or self.db.cat
 
-        user_tables = self.db.get_user_tables()
-        if (self.tbl.name + '_grid') in user_tables:
+        if (self.tbl.name + '_grid') in self.db.user_tables:
             pkey = self.tbl.get_pkey()
             view_alias = self.tbl.name + '_grid'
             join_view = f"join {view_alias} on "
@@ -405,13 +397,12 @@ class Grid:
             join_view = ""
 
         sql = "select count(*)\n"
-        sql += f'from {namespace}."{self.tbl.view}"\n'
+        sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += join + "\n"
         sql += join_view
         sql += "" if not conds else f"where {conds}\n"
 
-        cursor = self.db.cnxn.cursor()
-        count = cursor.execute(sql, self.cond.params).fetchval()
+        count = self.db.query(sql, self.cond.params).first()[0]
 
         return count
 
@@ -427,8 +418,7 @@ class Grid:
             alias_selects[key] = f'{value} as "{key}"'
         select = ', '.join(alias_selects.values())
 
-        user_tables = self.db.get_user_tables()
-        if (self.tbl.name + '_grid') in user_tables:
+        if (self.tbl.name + '_grid') in self.db.user_tables:
             pkey = self.tbl.get_pkey()
             view_alias = self.tbl.name + "_grid"
             join_view = "join " + self.tbl.view + " on "
@@ -440,23 +430,18 @@ class Grid:
             join_view = ""
 
         sql = "select " + select + "\n"
-        sql += f'from {(self.db.schema or self.db.cat)}."{self.tbl.grid_view}"\n'
+        sql += f'from {self.db.schema}."{self.tbl.grid_view}"\n'
         sql += join_view
         sql += join + "\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order
 
-        cursor = self.db.cnxn.cursor()
-        cursor.execute(sql, self.cond.params)
-        cursor.skip(self.tbl.offset)
-        rows = cursor.fetchmany(self.tbl.limit)
+        result = self.db.query(sql, self.cond.params)
+        if self.tbl.offset:
+            result.fetchmany(self.tbl.offset)
+        records = result.mappings().fetchmany(self.tbl.limit)
 
-        result = []
-        colnames = [column[0] for column in cursor.description]
-        for row in rows:
-            result.append(dict(zip(colnames, row)))
-
-        return result
+        return records
 
     def get_sums(self):
         """Return list of sums for summation columns"""
@@ -478,10 +463,7 @@ class Grid:
             sql += join + "\n"
             sql += "" if not cond else "where " + cond
 
-            cursor = self.db.cnxn.cursor()
-            row = cursor.execute(sql, params).fetchone()
-            cols = [col[0] for col in cursor.description]
-            sums = dict(zip(cols, row))
+            sums = self.db.query(sql, params).mappings().first()
 
         return sums
 
@@ -520,25 +502,26 @@ class Grid:
 
                 fields = self.tbl.get_fields()
                 conds = []
-                params = []
+                params = {}
                 for field in fields.values():
                     if field.fkey:
                         view = field.name if not field.view else field.view
                         if case_sensitive:
-                            conds.append(f"{view} LIKE ?")
+                            conds.append(f"{view} LIKE :{field.name}")
                         else:
-                            conds.append(f"lower({view}) LIKE ?")
-                        params.append(value)
-                    elif field.datatype == "string":
+                            conds.append(f"lower({view}) LIKE :{field.name}")
+                        params[field.name] = value
+                    elif field.datatype == "str":
                         if case_sensitive:
                             conds.append(f"{self.tbl.view}.{field.name}"
-                                         " LIKE ?")
+                                         f" LIKE :{field.name}")
                         else:
                             conds.append(f"lower({self.tbl.view}.{field.name})"
-                                         " LIKE ?")
-                        params.append(value)
+                                         f" LIKE :{field.name}")
+                        params[field.name] = value
                 expr = "(" + " OR ".join(conds) + ")"
-                self.add_cond(expr=expr, value=params)
+                self.cond.prep_stmnts.append(expr)
+                self.cond.params.update(params)
             else:
                 field = parts[0]
                 if "." not in field:
@@ -547,43 +530,20 @@ class Grid:
                     else:
                         tbl_name = self.tbl.name + '_grid'
                     field = tbl_name + "." + field
+                mark = field.replace('.', '_')
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
                 case_sensitive = value.lower() != value
+                field_expr = field
                 if (not case_sensitive and value.lower() != value.upper()):
-                    field = f"lower({field})"
+                    field_expr = f"lower({field})"
                 if operator == "IN":
                     value = value.strip().split(",")
                 if value == "":
                     value = None
-                self.add_cond(field, operator, value)
-
-    def add_cond(self, expr, operator=None, value=None):
-        """Add condition used in grid queries"""
-        if value is None:
-            if operator in ["IS NULL", "IS NOT NULL"]:
-                self.cond.prep_stmnts.append(f"{expr} {operator}")
-            elif operator == "=":
-                self.cond.prep_stmnts.append(f"{expr} IS NULL")
-            else:
+                expr = f"{field_expr} {operator} :{mark}"
                 self.cond.prep_stmnts.append(expr)
-        elif operator == "IN":
-            marks = ",".join(['?' for val in value])
-            self.cond.prep_stmnts.append(f"{expr} {operator} ({marks})")
-            self.cond.params.extend(value)
-            value = "('" + "','".join(str(value)) + "')"
-            self.cond.stmnts.append(f"{expr} {operator} {value}")
-        elif operator is None:
-            self.cond.prep_stmnts.append(expr)
-            if isinstance(value, list):
-                self.cond.params.extend(value)
-            else:
-                self.cond.params.append(value)
-
-        else:
-            self.cond.prep_stmnts.append(f"{expr} {operator} ?")
-            self.cond.params.append(value)
-            self.cond.stmnts.append(f"{expr} {operator} {value}")
+                self.cond.params[mark] = value
 
     def get_cond_expr(self):
         """Return expression with all query conditions"""
@@ -633,7 +593,7 @@ class Grid:
         fields = self.tbl.get_fields()
         field_groups = self.get_field_groups(fields)
 
-        attrs = self.db.get_html_attributes()
+        attrs = self.db.html_attrs
         if attrs.table[self.tbl.name]['data-form']:
             return attrs.table[self.tbl.name]['data-form']
 
@@ -642,8 +602,10 @@ class Grid:
                 cname = col_names[0]
                 fkey = fields[cname].fkey
                 postfix = None
-                if fkey and cname == f"{fkey.table}_{'_'.join(fkey.primary)}":
-                    postfix = '_'.join(fkey.primary)
+                if fkey:
+                    join_ref_cols = '_'.join(fkey.referred_columns)
+                    if cname == f"{fkey.referred_table}_{join_ref_cols}":
+                        postfix = join_ref_cols
                 label = self.db.get_label('field', col_names[0], postfix)
                 form['items'][label] = col_names[0]
             else:
@@ -658,9 +620,9 @@ class Grid:
                     subitems[label] = colname
 
                     field = fields[colname]
-                    if 'size' in field:
+                    if field.get('size', None):
                         sum_size += field.size
-                    elif field.datatype in ["date", "integer"]:
+                    elif field.datatype in ["date", "int"]:
                         sum_size += 10
 
                 if sum_size <= 50:
@@ -695,26 +657,26 @@ class Grid:
 
             # Find indexes that can be used to get relation
             index_exist = False
-            slice_obj = slice(0, len(rel.foreign))
+            slice_obj = slice(0, len(rel.constrained_columns))
             rel_indexes = rel_table.get_indexes()
             for index in rel_indexes.values():
-                if index.columns[slice_obj] == rel.foreign:
+                if index.columns[slice_obj] == rel.constrained_columns:
                     index_exist = True
 
             if index_exist and not rel.get('hidden', False):
                 rel_pkey = rel_table.get_pkey()
 
-                if set(rel_pkey.columns) <= set(rel.foreign):
+                if set(rel_pkey.columns) <= set(rel.constrained_columns):
                     # Put 1:1 relations first
                     rel.order = 1
                     rel.relationship = '1:1'
                 else:
                     rel.relationship = '1:M'
-                if set(rel_pkey.columns) > set(rel.foreign):
+                if set(rel_pkey.columns) > set(rel.constrained_columns):
                     # Set order priority so that tables higher up in hierarchy
                     # comes before tables further down
                     rel.order = len(rel_pkey.columns) - \
-                        rel_pkey.columns.index(rel.foreign[-1])
+                        rel_pkey.columns.index(rel.constrained_columns[-1])
 
                 rel.label = self.db.get_label('table', rel_table.name,
                                               prefix=self.tbl.name + '_',
@@ -722,11 +684,12 @@ class Grid:
 
                 # Add name of foreign key column if other than name
                 # of reference table
-                if rel.foreign[-1] not in self.tbl.name:
-                    col = rel.foreign[-1]
+                if rel.constrained_columns[-1] not in self.tbl.name:
+                    col = rel.constrained_columns[-1]
                     postfix = None
-                    if col == f"{self.tbl.name}_{'_'.join(rel.primary)}":
-                        postfix = '_'.join(rel.primary)
+                    join_ref_cols = '_'.join(rel.referred_columns)
+                    if col == f"{self.tbl.name}_{join_ref_cols}":
+                        postfix = join_ref_cols
                     colname = self.db.get_label('field', col, postfix).lower()
 
                     rel.label += " (" + colname + ")"

@@ -1,5 +1,4 @@
 import time
-from addict import Dict
 
 
 def measure_time(func):
@@ -17,27 +16,37 @@ class Column:
     def __init__(self, tbl, col):
         self.db = tbl.db
         self.tbl = tbl
-        self.name = col.column_name
+        self.name = col.name
         self.nullable = col.nullable
-        if 'column_size' in col or 'display_size' in col:
-            self.size = col.get('column_size', col.display_size)
-        if 'scale' in col:
-            self.scale = col.scale
-            self.precision = col.precision
+        if hasattr(col.type, 'length'):
+            self.size = col.type.length
+        if hasattr(col.type, 'display_width'):
+            self.size = col.type.display_width
+        if hasattr(col.type, 'scale'):
+            self.scale = col.type.scale
+            self.precision = col.type.precision
         if 'auto_increment' in col:
             self.auto_increment = col.auto_increment
         self.default = col.column_def
-        # Strip column size from type_name for sqlite3
-        col.type_name = col.type_name.split('(')[0].strip()
-        self.datatype = self.db.expr.to_urd_type(col.type_name)
+        try:
+            self.datatype = col.type.python_type.__name__
+        except Exception as e:
+            print(e)
+            print(col.type)
+            self.datatype = 'unknown'
+        if self.datatype == 'int' and getattr(self, 'size', 0) == 1:
+            self.datatype = 'bool'
 
     def get_fkey(self):
         """Get foreign key for primary key column"""
         col_fkey = None
         fkeys = self.tbl.get_fkeys()
         for fkey in fkeys.values():
-            if (fkey.foreign[-1] == self.name):
-                if (not col_fkey or len(fkey.foreign) < len(col_fkey.foreign)):
+            if (fkey.constrained_columns[-1] == self.name):
+                if (
+                    not col_fkey or len(fkey.constrained_columns) <
+                    len(col_fkey.constrained_columns)
+                ):
                     col_fkey = fkey
 
         return col_fkey

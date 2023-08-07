@@ -1,10 +1,9 @@
 """Module for handling databases and connections"""
 import os
 import time
-import pyodbc
-from sqlglot import parse_one, exp
-from fastapi import HTTPException
-from starlette import status
+from graphlib import TopologicalSorter
+from sqlalchemy import text, inspect, bindparam, exc
+import sqlglot
 import simplejson as json
 from addict import Dict
 from expression import Expression
@@ -35,104 +34,30 @@ class MyYAML(YAML):
             return stream.getvalue()
 
 
-class Connection:
-    """Connect to database"""
-
-    def __init__(self, cfg, db_name=None):
-        self.system = cfg.db_system
-        self.server = cfg.db_server
-        driver = self.get_driver()
-        cnxnstr = 'Driver={' + driver + '};'
-        if (db_name and cfg.db_system != 'oracle'):
-            path = db_name.split('.')
-            cnxnstr += 'Database=' + path[0] + ';'
-        if cfg.db_system == 'oracle':
-            cnxnstr += "DBQ=" + cfg.db_server + ';'
-        else:
-            srv_parts = cfg.db_server.split(':')
-            cnxnstr += 'Server=' + srv_parts[0] + ';'
-            if len(srv_parts) == 2:
-                cnxnstr += 'Port=' + srv_parts[1] + ';'
-        cnxnstr += 'Uid=' + cfg.db_uid + ';Pwd=' + cfg.db_pwd + ';'
-        pyodbc.lowercase = True
-        if cfg.db_system == 'sql server':
-            cnxnstr += 'ENCRYPT=no;MARS_Connection=yes;'
-            pyodbc.lowercase = False
-        if cfg.db_system == 'sqlite3':
-            pyodbc.lowercase = False
-            path = os.path.join(cfg.db_server, db_name)
-            cnxnstr = 'Driver=SQLite3;Database=' + path
-            if os.path.exists(path):
-                cnxn = pyodbc.connect(cnxnstr)
-            else:
-                raise HTTPException(
-                    status_code=404, detail="Database not found"
-                )
-        else:
-            try:
-                cnxn = pyodbc.connect(cnxnstr)
-            except Exception as e:
-                print(e)
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid authentication"
-                )
-        cnxn.setencoding(encoding='utf8')
-        self.cursor = cnxn.cursor
-        self.user = cfg.db_uid
-        self.expr = Expression(self.system)
-        self.string = cnxnstr
-
-    def get_driver(self):
-        """Get ODBC driver"""
-        drivers = [d for d in pyodbc.drivers() if self.system in d.lower()]
-        drivers.sort(reverse=True, key=lambda x: 'unicode' in x.lower())
-
-        try:
-            return drivers[0]
-        except IndexError:
-            raise HTTPException(
-                status_code=501, detail=self.system + " ODBC driver missing"
-            )
-
-    def get_databases(self):
-        """Get all databases in database system"""
-        sql = self.expr.databases()
-        rows = self.cursor().execute(sql).fetchall()
-
-        return [row[0] for row in rows]
-
-
 class Database:
     """Contains methods for getting data and metadata from database"""
 
-    def __init__(self, cnxn, db_name):
-        self.cnxn = cnxn
+    def __init__(self, engine, db_name):
+        self.engine = engine
         self.name = db_name
-        if cnxn.system == 'mysql':
-            self.cat = db_name
-            self.schema = None
-        elif cnxn.system == 'postgres':
-            path = db_name.split('.')
-            self.cat = path[0]
+        path = db_name.split('.')
+        if engine.name == 'postgresql':
             self.schema = 'public' if len(path) == 1 else path[1]
-        elif cnxn.system == 'oracle':
-            self.cat = None
-            self.schema = db_name
-        elif cnxn.system == 'sqlite3':
-            self.schema = 'main'
-            self.cat = None
-        elif cnxn.system == 'sql server':
-            path = db_name.split('.')
-            self.cat = path[0]
+        elif engine.name == 'mssql':
             self.schema = 'dbo' if len(path) == 1 else path[1]
+        elif engine.name == 'sqlite':
+            self.schema = 'main'
         else:
-            self.schema = 'public'
-            self.cat = None
-        self.system = cnxn.system
-        self.expr = Expression(cnxn.system)
-        self.user_tables = self.get_user_tables()
-        self.html_attrs = self.get_html_attributes()
+            self.schema = db_name
+
+        self.refl = inspect(engine)
+
+        self.user = engine.url.username
+        self.expr = Expression(self.engine.name)
+        table_names = self.refl.get_table_names(self.schema)
+        view_names = self.refl.get_view_names(self.schema)
+        self.user_tables = table_names + view_names
+        self.html_attrs = self.init_html_attributes()
         self.attrs = Dict(self.html_attrs.pop('base', None))
         self.attrs.cache = self.attrs.pop('data-cache', None)
         if self.attrs.get('cache.config', None):
@@ -140,22 +65,38 @@ class Database:
         else:
             self.config = Dict()
 
-    def get_html_attributes(self):
-        cursor = self.cnxn.cursor()
+    # @measure_time
+    @measure_time
+    def init_html_attributes(self):
+        """Get data from table html_attributes"""
         attrs = Dict()
         if 'html_attributes' in self.user_tables:
             sql = f"""
             select selector, attributes as attrs
-            from {self.schema or self.cat}.html_attributes
+            from {self.schema}.html_attributes
             """
             try:
-                rows = cursor.execute(sql).fetchall()
+                with self.engine.connect() as cnxn:
+                    rows = cnxn.execute(text(sql))
                 for row in rows:
                     attrs[row.selector] = json.loads(row.attrs)
             except Exception as e:
                 print(e)
 
         return attrs
+
+    def is_ordinary_schema(self, schema):
+        system_schemas = [
+            'information_schema',
+            'performance_schema',
+            'mysql'
+        ]
+        if self.engine.name == 'postgresql' and schema.startswith('pg_'):
+            return False
+        elif schema in system_schemas:
+            return False
+
+        return True
 
     @measure_time
     def get_info(self):
@@ -168,10 +109,11 @@ class Database:
             "branch": branch,
             "base": {
                 "name": self.name,
-                "system": self.cnxn.system,
-                "server": self.cnxn.server,
+                "system": self.engine.name,
+                "server": self.engine.url.host,
                 "schema": self.schema,
-                "schemata": self.get_schemata(),
+                "schemata": list(filter(self.is_ordinary_schema,
+                                        self.refl.get_schema_names())),
                 "label": self.attrs.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
@@ -194,87 +136,31 @@ class Database:
         """Get user privileges"""
         privilege = Dict()
         sql = self.expr.privilege()
-        cursor = self.cnxn.cursor()
 
         if not sql:
             privilege.create = 1
         else:
-            priv = cursor.execute(sql, self.schema or self.cat).fetchone()
+            with self.engine.connect() as cnxn:
+                param = {'schema': self.schema}
+                priv = cnxn.execute(text(sql), param).fetchone()
             privilege.create = int(priv.create)
             privilege.usage = 0
 
         return privilege
 
-    @measure_time
-    def get_schemata(self):
-        """Get all schemata in database"""
-        cursor = self.cnxn.cursor()
-        schemata = []
+    def create_html_attributes(self):
+        """Create table holding html_attributes"""
 
-        if self.cnxn.system == 'postgres':
-            sql = self.expr.schemata()
-            rows = cursor.execute(sql).fetchall()
-            for row in rows:
-                schemata.append(row.schema_name)
-
-        return schemata
-
-    @measure_time
-    def get_user_tables(self):
-        """Get tables user has access to"""
-        sql = self.expr.user_tables()
-        cursor = self.cnxn.cursor()
-        user_tables = []
-
-        if self.cnxn.system == 'sqlite3':
-            rows = cursor.execute(sql).fetchall()
-        else:
-            rows = cursor.execute(sql, self.schema or self.cat).fetchall()
-        for row in rows:
-            user_tables.append(row.table_name)
-
-        return user_tables
-
-    def create_html_tables(self):
-        """Create tables holding meta data"""
-        cursor = self.cnxn.cursor()
-        string_datatype = self.expr.to_native_type('string')
-
-        sql = """
-        create table html_element (
-        element varchar(16) not null,
-        primary key (element)
-        );
-        """
-
-        cursor.execute(sql)
-
-        sql = """
-        insert into html_element values (?);
-        """
-
-        params = [('database'), ('tableset'), ('table'), ('fieldset'),
-                  ('field')]
-
-        for param in params:
-            cursor.execute(sql, param)
+        string_datatype = self.expr.to_native_type('str')
 
         sql = f"""
-        CREATE TABLE html_attributes (
-        element varchar(16) NOT NULL,
-        identifier varchar(64),
-        attributes {string_datatype},
-        PRIMARY KEY (element, identifier),
-        foreign key (element) references html_element(element)
+        create table html_attributes(
+            selector varchar(100) not null,
+            attributes {string_datatype} not null,
+            primary key (selector)
         )
         """
-        cursor.execute(sql)
-
-        sql = """
-        create index html_attributes_element on html_attributes(element)
-        """
-
-        cursor.execute(sql)
+        self.query(sql)
 
         self.attrs.cache = None
         self.user_tables.append('html_attributes')
@@ -285,15 +171,13 @@ class Database:
         }
 
         sql = f"""
-            insert into html_attributes (element, identifier, attributes)
-            values ('field', 'attributes', '{json.dumps(attributes)}')
+            insert into html_attributes (selector, attributes)
+            values ('input[name=attributes]', '{json.dumps(attributes)}')
         """
-        cursor.execute(sql)
+        self.query(sql)
         # Refresh attributes
-        self.html_attrs = self.get_html_attributes()
+        self.html_attrs = self.init_html_attributes()
         self.attrs = Dict(self.html_attrs.pop('base', None))
-
-        cursor.commit()
 
     @measure_time
     def get_tables(self):
@@ -303,36 +187,24 @@ class Database:
             self.tables = self.attrs.cache.tables
             return self.tables
 
-        cursor = self.cnxn.cursor()
-        tables = Dict()
-
+        self.tables = Dict()
         if (self.config and 'html_attributes' not in self.user_tables):
-            self.create_html_tables()
+            self.create_html_attributes()
 
-        start = time.time()
-        rows = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
-        end = time.time()
-        print('cursor.tables', end - start)
+        tbl_names = self.refl.get_table_names(self.schema)
+        view_names = self.refl.get_view_names(self.schema)
+        rows = tbl_names + view_names
 
-        tbl_names = [row.table_name for row in rows]
-
-        for tbl in rows:
-            tbl_name = tbl.table_name
-
-            if tbl_name[-5:] == '_view' and tbl_name[:-5] in tbl_names:
-                continue
-
-            if tbl_name == 'sqlite_sequence':
-                continue
-
-            if tbl_name not in self.user_tables:
+        for tbl_name in rows:
+            if tbl_name[-5:] == '_view' and tbl_name[:-5] in rows:
                 continue
 
             hidden = tbl_name[0:1] == "_"
 
             table = Table(self, tbl_name)
-            table.cache.pkey = self.get_pkey(tbl_name)
-            main_type = tbl.table_type.lower()
+
+            table.pkey = self.get_pkey(tbl_name)
+            main_type = 'table' if tbl_name in (tbl_names) else 'view'
             tbl_type = table.get_type(main_type)
 
             # Hides table if user has marked the table to be hidden
@@ -356,26 +228,25 @@ class Database:
             if self.config:
                 table.rowcount = table.count_rows()
                 space = ' ' * (30 - len(tbl_name))
-                print('gjennomgår tabell: ',
-                      tbl_name + space + f"({table.rowcount})")
+                print('Table: ', f"{tbl_name}{space}({table.rowcount})")
                 table.fields = table.get_fields()
                 table.relations = table.get_relations()
 
             view = tbl_name
-            if tbl_name + '_view' in tbl_names:
+            if tbl_name + '_view' in view_names:
                 view = tbl_name + '_view'
 
-            tables[tbl_name] = Dict({
+            self.tables[tbl_name] = Dict({
                 'name': tbl_name,
                 'type': tbl_type,
                 'view': view,
                 'icon': None,
                 'label': self.get_label('table', tbl_name),
                 'rowcount': None if not self.config else table.rowcount,
-                'pkey': table.cache.pkey,
-                'description': tbl.remarks,
-                'indexes': self.get_indexes(tbl_name),
+                'pkey': table.pkey,
+                'description': self.refl.get_table_comment(tbl_name),
                 'fkeys': self.get_fkeys(tbl_name),
+                # Get more info about relations for cache, including use
                 'relations': (self.get_relations(tbl_name) if not self.config
                               else table.relations),
                 'hidden': hidden,
@@ -383,9 +254,7 @@ class Database:
                 'fields': None if not self.config else table.fields,
             })
 
-        self.tables = tables
-
-        return tables
+        return self.tables
 
     def is_top_level(self, table):
         """Check if table is top level, i.e. not subordinate to other tables"""
@@ -393,13 +262,13 @@ class Database:
             return False
 
         for fkey in table.fkeys.values():
-            if fkey.table not in self.tables:
+            if fkey.referred_table not in self.tables:
                 continue
 
             # Not top level if has foreign keys to other table
             # that is not a hidden table
-            if fkey.table != table.name:
-                fk_table = self.tables[fkey.table]
+            if fkey.referred_table != table.name:
+                fk_table = self.tables[fkey.referred_table]
                 if fk_table.hidden is False and fk_table.type != 'list':
                     return False
 
@@ -551,21 +420,21 @@ class Database:
                     if (
                         len(name_parts) > 1 and
                         name_parts[0] in self.tables and
-                        name_parts[0] != fkey.table
+                        name_parts[0] != fkey.referred_table
                     ):
                         continue
 
-                    if fkey.table not in sub_tables:
-                        sub_tables[fkey.table] = []
+                    if fkey.referred_table not in sub_tables:
+                        sub_tables[fkey.referred_table] = []
 
-                    sub_tables[fkey.table].append(tbl_name)
+                    sub_tables[fkey.referred_table].append(tbl_name)
                     break
 
         return sub_tables
 
     def get_label(self, element, identifier, prefix=None, postfix=None):
         """Get label based on identifier"""
-        attrs = self.get_html_attributes()
+        attrs = self.attrs
         if (
             identifier in attrs[element] and
             'data-label' in attrs[element][identifier]
@@ -644,12 +513,11 @@ class Database:
                         self.get_content_node(tbl_name)
 
         if self.config:
-            cursor = self.cnxn.cursor()
             sql = """
             select count(*) from html_attributes
-            where selector = ?
+            where selector = :selector
             """
-            count = cursor.execute(sql, 'base').fetchval()
+            count = self.query(sql, {'selector': 'base'}).first()[0]
 
             cache = {
                 "tables": self.tables,
@@ -663,30 +531,37 @@ class Database:
             if count:
                 sql = """
                 update html_attributes
-                set attributes = ?
-                where selector = ?
+                set attributes = :attrs
+                where selector = :selector
                 """
             else:
                 sql = """
                 insert into html_attributes(attributes, selector)
-                values (?, ?)
+                values (:attrs, :selector)
                 """
 
-            cursor.execute(sql, attrs_txt, 'base').commit()
+            with self.engine.connect() as cnxn:
+                params = {
+                    'attrs': attrs_txt,
+                    'selector': 'base'
+                }
+                cnxn.execute(text(sql), params)
+                cnxn.commit()
 
         return contents
-
-    def get_indexes(self, tbl_name):
-        """Get all indexes for table"""
-        if not hasattr(self, 'indexes'):
-            self.init_indexes()
-
-        return self.indexes[tbl_name]
 
     def get_pkey(self, tbl_name):
         """Get primary key of table"""
         if not hasattr(self, 'pkeys'):
-            self.init_pkeys()
+            self.pkeys = Dict()
+            pkey_constraints = self.refl.get_multi_pk_constraint(self.schema)
+            for (schema, table), pkey in pkey_constraints.items():
+                self.pkeys[table] = Dict({
+                    'table_name': table,
+                    'name': pkey['name'] or 'PRIMARY',
+                    'unique': True,
+                    'columns': pkey['constrained_columns']
+                })
 
         return self.pkeys[tbl_name]
 
@@ -705,204 +580,145 @@ class Database:
         return self.relations[tbl_name]
 
     def query_result(self, sql, limit):
+        """Get query result for user defined sql"""
         query = Dict()
-        query.string = sql.strip()
+        sql = sql.strip()
+        query.string = sql
         if len(query.string) == 0:
             return None
         t1 = time.time()
-        try:
-            cursor = self.query(query.string)
-        except pyodbc.Error as ex:
-            sqlstate = ex.args[1]
-            sqlstate = sqlstate.replace('[HY000]', '')
-            sqlstate = sqlstate.replace('[SQLite]', '')
-            sqlstate = sqlstate.replace('(1)', '')
-            sqlstate = sqlstate.replace('(SQLExecDirectW)', '')
+        with self.engine.connect() as cnxn:
+            try:
+                result = cnxn.execute(text(query.string))
+            except exc.StatementError as ex:
+                query.time = round(time.time() - t1, 4)
+                query.success = False
+                query.result = 'ERROR: {}'.format(ex.orig)
+
+                return query
+
+            query.success = True
             query.time = round(time.time() - t1, 4)
-            query.success = False
-            query.result = 'ERROR: ' + sqlstate.strip()
 
-            return query
+            # if cursor.description:
+            if result.cursor:
+                if limit:
+                    query.data = result.mappings().fetchmany(limit)
+                else:
+                    query.data = result.mappings().fetchall()
 
-        query.success = True
-        query.time = round(time.time() - t1, 4)
-
-        if cursor.description:
-            if limit:
-                rows = cursor.fetchmany(limit)
+                # Find the table selected from
+                query.table = str(sqlglot.parse_one(sql)
+                                  .find(sqlglot.exp.Table))
             else:
-                rows = cursor.fetchall()
+                rowcount = result.rowcount
 
-            query.data = []
+                cnxn.commit()
 
-            # Find the table selected from
-            query.table = str(parse_one(query.string).find(exp.Table))
-            colnames = [column[0] for column in cursor.description]
-            for row in rows:
-                query.data.append(dict(zip(colnames, row)))
-        else:
-            rowcount = cursor.rowcount
-
-            cursor.commit()
-
-            query.rowcount = rowcount
-            query.result = f"Query OK, {rowcount} rows affected"
+                query.rowcount = rowcount
+                query.result = f"Query OK, {rowcount} rows affected"
 
         return query
 
-    def query(self, sql, params=[]):
+    def query(self, sql, params={}):
         """Execute sql query"""
-        cursor = self.cnxn.cursor()
         t = time.time()
-        cursor.execute(sql, params)
+        with self.engine.connect() as cnxn:
+            stmt = text(sql)
+            for col, val in params.items():
+                if isinstance(val, list):
+                    stmt = stmt.bindparams(bindparam(col, expanding=True))
+            cursor = cnxn.execute(stmt, params)
         if (time.time()-t) > 1:
             print("Query took " + str(time.time()-t) + " seconds")
             print('query:', sql)
         return cursor
 
     @measure_time
-    def init_indexes(self):
-        """Store all indexes in database object"""
-        crsr = self.cnxn.cursor()
-        indexes = Dict()
-        if self.cnxn.system in ['mysql', 'oracle']:
-            sql = self.expr.indexes()
-            for row in crsr.execute(sql, self.cat or self.schema):
-                name = row.index_name
-
-                indexes[row.table_name][name].name = name
-                indexes[row.table_name][name].unique = not row.non_unique
-                if 'columns' not in indexes[row.table_name][name]:
-                    indexes[row.table_name][name].columns = []
-                indexes[row.table_name][name].columns.append(row.column_name)
-        else:
-            tbls = crsr.tables(catalog=self.cat, schema=self.schema).fetchall()
-            for tbl in tbls:
-                tbl_name = tbl.table_name
-                for row in crsr.statistics(tbl_name):
-                    name = row.index_name
-                    indexes[tbl_name][name].name = name
-                    indexes[tbl_name][name].unique = not row.non_unique
-                    if 'columns' not in indexes[tbl_name][name]:
-                        indexes[tbl_name][name].columns = []
-                    indexes[tbl_name][name].columns.append(row.column_name)
-
-        self.indexes = indexes
-
-    @measure_time
-    def init_pkeys(self):
-        """Store all primary keys in database object"""
-        crsr = self.cnxn.cursor()
-        pkeys = Dict()
-        if self.cnxn.system in ['mysql', 'oracle']:
-            sql = self.expr.pkeys()
-            rows = crsr.execute(sql, self.schema or self.cat)
-            colnames = [column[0] for column in rows.description]
-            for row in rows:
-                pkeys[row.table_name].table_name = row.table_name
-                pkeys[row.table_name].pkey_name = row.index_name
-                if 'columns' not in pkeys[row.table_name]:
-                    pkeys[row.table_name].columns = []
-                    pkeys[row.table_name].data_types = []
-                pkeys[row.table_name].columns.append(row.column_name)
-                if 'data_type' in colnames:
-                    pkeys[row.table_name].data_types.append(row.data_type)
-        else:
-            tbls = crsr.tables(catalog=self.cat, schema=self.schema).fetchall()
-            for tbl in tbls:
-                if self.cnxn.system in ['sqlite3']:
-                    # Wrong order for pkeys using cursor.primaryKeys
-                    sql = self.expr.pkey(tbl.table_name)
-                    rows = self.query(sql)
-                else:
-                    rows = crsr.primaryKeys(table=tbl.table_name,
-                                            catalog=self.cat,
-                                            schema=self.schema)
-                for row in rows:
-                    pkeys[tbl.table_name].table_name = tbl.table_name
-                    pkeys[tbl.table_name].pkey_name = row.pk_name
-                    if 'columns' not in pkeys[tbl.table_name]:
-                        pkeys[tbl.table_name].columns = []
-                    pkeys[tbl.table_name].columns.append(row.column_name)
-
-        self.pkeys = pkeys
-
-    @measure_time
     def init_fkeys(self):
         """Store all foreign keys in database object"""
-        crsr = self.cnxn.cursor()
-        fkeys = Dict()
-        if self.cnxn.system in ["mysql", "oracle", "postgres"]:
-            sql = self.expr.fkeys()
-            for row in crsr.execute(sql, self.schema or self.cat):
-                name = row.fk_name
-                fkeys[row.fktable_name][name].name = row.fk_name
-                fkeys[row.fktable_name][name].table = row.pktable_name
-                fkeys[row.fktable_name][name].base = self.cat
-                fkeys[row.fktable_name][name].schema = row.pktable_schema
-                fkeys[row.fktable_name][name].delete_rule = row.delete_rule
-                if 'foreign' not in fkeys[row.fktable_name][name]:
-                    fkeys[row.fktable_name][name].foreign = []
-                    fkeys[row.fktable_name][name].primary = []
-                fkeys[row.fktable_name][name].foreign.append(row.fkcolumn_name)
-                fkeys[row.fktable_name][name].primary.append(row.pkcolumn_name)
-        else:
-            rows = crsr.tables(catalog=self.cat, schema=self.schema).fetchall()
-            for row in rows:
-                tbl = Table(self, row.table_name)
-                fkeys[row.table_name] = tbl.get_fkeys()
+        self.fkeys = Dict()
 
-        self.fkeys = fkeys
+        schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+
+        for key, fkeys in schema_fkeys.items():
+
+            for fkey in fkeys:
+                fkey = Dict(fkey)
+                table_name = key[-1]
+
+                # Can't extract constraint names in SQLite
+                if not fkey.name:
+                    fkey.name = table_name + '_'
+                    fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
+
+                self.fkeys[table_name][fkey.name] = Dict(fkey)
 
     @measure_time
     def init_relations(self):
         """Store all has-many relations in database object"""
-        if not hasattr(self, 'fkeys'):
-            self.init_fkeys()
 
-        relations = Dict()
+        self.relations = Dict()
 
-        for fktable_name, fkeys in self.fkeys.items():
-            for fkey in fkeys.values():
-                # For mysql fkey.schema refers to catalog/database
-                if fkey.schema == self.schema or self.cat:
-                    relations[fkey.table][fkey.name] = Dict({
-                        "name": fkey.name,
-                        "table": fktable_name,
-                        "base": fkey.base or None,
-                        "schema": fkey.schema,
-                        "delete_rule": fkey.delete_rule,
-                        "foreign": fkey.foreign,
-                        "primary": fkey.primary,
-                        "label": self.get_label('table', fkey.table)
-                    })
+        schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
 
-        self.relations = relations
+        for key, fkeys in schema_fkeys.items():
+
+            for fkey in fkeys:
+                fkey = Dict(fkey)
+                self.relations[fkey.referred_table][fkey.name] = Dict(fkey)
 
     def export_as_sql(self, dialect: str, include_recs: bool,
                       select_recs: bool):
         """Create sql for exporting a database
 
         Parameters:
-        dialect: The sql dialect used (mysql, postgres, sqlite)
+        dialect: The sql dialect used (mysql, postgresql, sqlite)
         include_recs: If records should be included
         select_recs: If included records should be selected from
                      existing database
         """
         ddl = ''
-        if dialect == 'mysql':
-            ddl += 'SET foreign_key_checks = 0;'
-        cursor = self.cnxn.cursor()
-        tbls = cursor.tables(catalog=self.cat, schema=self.schema).fetchall()
-        for tbl in tbls:
-            if tbl.table_name == 'sqlite_sequence':
+        graph = {}
+        self_referring = {}
+
+        tbl_names = self.refl.get_table_names(self.schema)
+
+        # Make graph to use in topologic sort
+        for tbl_name in tbl_names:
+            ref_tables = []
+            fkeys = self.refl.get_foreign_keys(tbl_name, self.schema)
+            for fkey in fkeys:
+                if fkey['referred_table'] == tbl_name:
+                    self_referring[tbl_name] = fkey
+                    continue
+                ref_tables.append(fkey['referred_table'])
+            graph[tbl_name] = ref_tables
+
+        sorter = TopologicalSorter(graph)
+        ordered_tables = tuple(sorter.static_order())
+
+        for view_name in self.refl.get_view_names(self.schema):
+            ddl += f"drop view if exists {view_name};\n"
+
+        for tbl_name in reversed(ordered_tables):
+            ddl += f"drop table if exists {tbl_name};\n"
+
+        for i, (tbl_name, fkeys) in ordered_tables:
+            if tbl_name is None:
                 continue
-            table = Table(self, tbl.table_name)
+            if tbl_name == 'sqlite_sequence':
+                continue
+            table = Table(self, tbl_name)
             ddl += table.export_ddl(dialect)
             if include_recs:
-                ddl += table.export_records(select_recs)
+                self_ref = None
+                if tbl_name in self_referring:
+                    self_ref = self_referring[tbl_name]
+                ddl += table.export_records(select_recs, self_ref)
 
-        if dialect == 'mysql':
-            ddl += 'SET foreign_key_checks = 1;'
+        for view_name in self.refl.get_view_names(self.schema):
+            view_def = self.refl.get_view_definition(view_name, self.schema)
+            ddl += view_def + ";\n"
 
         return ddl

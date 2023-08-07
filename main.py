@@ -1,13 +1,15 @@
 import uvicorn
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import (HTMLResponse, JSONResponse, StreamingResponse,
                                FileResponse)
 from fastapi.staticfiles import StaticFiles
+from starlette import status
 from pydantic import BaseSettings
 import io
 import urllib.parse
-from database import Database, Connection
+from sqlalchemy import create_engine, text
+from database import Database
 from table import Table, Grid
 from record import Record
 from field import Field
@@ -16,16 +18,25 @@ import os
 from addict import Dict
 from jose import jwt
 import time
+from expression import Expression
 
 
 class Settings(BaseSettings):
     secret_key: str = "some_secret_key"
     timeout: int = 30 * 60  # 30 minutes
-    db_system: str = None
-    db_server: str = None
-    db_name: str = None
-    db_uid: str = None
-    db_pwd: str = None
+    system: str = None
+    host: str = None
+    database: str = None
+    uid: str = None
+    pwd: str = None
+    mysql_driver: str = 'mysqlconnector'
+    postgresql_driver: str = 'psycopg2'
+    sqlite_driver: str = 'pysqlite'
+    oracle_driver: str = 'cx_oracle'
+    mssql_driver: str = 'pyodbc'
+
+    class Config:
+        env_prefix = 'urdr_'
 
 
 cfg = Settings()
@@ -38,13 +49,41 @@ templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/dist/bundle.js")
 
 
+def get_engine(cfg, db_name=None):
+    # driver = cfg.driver[cfg.db_system]
+    driver = getattr(cfg, f'{cfg.system}_driver')
+
+    if cfg.system == 'sqlite':
+        path = os.path.join(cfg.host, db_name)
+        url = f"sqlite+{driver}:///{path}"
+    else:
+        url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}"
+        if db_name:
+            path = db_name.split('.')
+            url += '/' + path[0]
+        elif cfg.system == 'postgresql':
+            url += '/postgres'
+
+    engine = create_engine(url)
+    try:
+        engine.connect()
+    except Exception as ex:
+        print(ex)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication"
+        )
+
+    return engine
+
+
 def token():
     return jwt.encode({
-        "system": cfg.db_system,
-        "server": cfg.db_server,
-        "uid": cfg.db_uid,
-        "pwd": cfg.db_pwd,
-        "database": cfg.db_name,
+        "system": cfg.system,
+        "server": cfg.host,
+        "uid": cfg.uid,
+        "pwd": cfg.pwd,
+        "database": cfg.database,
         "timestamp": time.time()
     }, cfg.secret_key)
 
@@ -55,11 +94,11 @@ async def check_login(request: Request, call_next):
 
     if session:
         payload = jwt.decode(session, cfg.secret_key)
-        cfg.db_system = payload["system"]
-        cfg.db_server = payload["server"]
-        cfg.db_uid = payload["uid"]
-        cfg.db_pwd = payload["pwd"]
-        cfg.db_name = payload["database"]
+        cfg.system = payload["system"]
+        cfg.host = payload["server"]
+        cfg.uid = payload["uid"]
+        cfg.pwd = payload["pwd"]
+        cfg.database = payload["database"]
     elif (
         request.url.path not in ("/login", "/") and
         not request.url.path.startswith('/static')
@@ -69,7 +108,7 @@ async def check_login(request: Request, call_next):
         }, status_code=401)
 
     response = await call_next(request)
-    if cfg.db_uid is not None and request.url.path != "/logout":
+    if cfg.uid is not None and request.url.path != "/logout":
         # Update cookie to renew expiration time
         response.set_cookie(key="session", value=token(), expires=cfg.timeout)
 
@@ -79,20 +118,20 @@ async def check_login(request: Request, call_next):
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("urd.html", {
-        "request": request, "v": mod, "base": cfg.db_name
+        "request": request, "v": mod, "base": cfg.database
     })
 
 
 @app.post("/login")
 def login(response: Response, system: str, server: str, username: str,
           password: str, database: str):
-    cfg.db_system = system
-    cfg.db_uid = username
-    cfg.db_pwd = password
-    cfg.db_name = database
-    cfg.db_server = server or 'localhost'
+    cfg.system = system
+    cfg.uid = username
+    cfg.pwd = password
+    cfg.database = database
+    cfg.host = server or 'localhost'
 
-    cfg.timeout = None if cfg.db_system == 'sqlite3' else cfg.timeout
+    cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
     response.set_cookie(key="session", value=token(), expires=cfg.timeout)
 
     return {"success": True}
@@ -101,19 +140,19 @@ def login(response: Response, system: str, server: str, username: str,
 @app.get("/logout")
 def logout(response: Response):
     response.delete_cookie("session")
-    cfg.db_system = None
-    cfg.db_server = None
-    cfg.db_name = None
-    cfg.db_uid = None
-    cfg.db_pwd = None
+    cfg.system = None
+    cfg.host = None
+    cfg.database = None
+    cfg.uid = None
+    cfg.pwd = None
     return {"success": True}
 
 
 @app.get("/dblist")
 def dblist():
     result = []
-    if cfg.db_system == 'sqlite3':
-        file_list = os.listdir(cfg.db_server)
+    if cfg.system == 'sqlite':
+        file_list = os.listdir(cfg.host)
         for filename in file_list:
             if os.path.splitext(filename)[1] not in ('.db', '.sqlite3'):
                 continue
@@ -123,11 +162,15 @@ def dblist():
             base.columns.description = None
             result.append(base)
     else:
-        cnxn = Connection(cfg)
-        dbnames = cnxn.get_databases()
+        expr = Expression(cfg.system)
+        sql = expr.databases()
+        engine = get_engine(cfg)
+        with engine.connect() as conn:
+            rows = conn.execute(text(sql)).fetchall()
+        dbnames = [row[0] for row in rows]
+
         for dbname in dbnames:
-            cnxn = Connection(cfg, dbname)
-            dbo = Database(cnxn, dbname)
+            dbo = Database(engine, dbname)
             base = Dict()
             base.columns.name = dbname
             base.columns.label = dbo.attrs['data-label'] or dbname.capitalize()
@@ -138,8 +181,8 @@ def dblist():
 
 @app.get("/database")
 def db_info(base: str):
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     info = dbo.get_info()
 
     return {'data': info}
@@ -149,13 +192,13 @@ def db_info(base: str):
 async def get_table(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(cfg, req.base)
+    engine = get_engine(cfg, req.base)
     schema = req.get('schema', None)
-    if cnxn.system == 'postgres' and schema:
+    if cfg.system == 'postgresql' and schema:
         base_path = req.base + '.' + req.schema
     else:
         base_path = req.base or schema
-    dbo = Database(cnxn, base_path)
+    dbo = Database(engine, base_path)
     table = Table(dbo, req.table)
     grid = Grid(table)
     table.limit = int(req.get('limit', 30))
@@ -165,7 +208,7 @@ async def get_table(request: Request):
         req['filter'] = urllib.parse.unquote(req['filter'])
         if req['filter'].startswith('where '):
             where = req['filter'][6:].split(';')[0]
-            grid.add_cond(where)
+            grid.cond.prep_stmnts.append(where)
         else:
             grid.set_search_cond(req['filter'])
 
@@ -181,12 +224,12 @@ async def get_table(request: Request):
 
 @app.get("/record")
 def get_record(base: str, table: str, pkey: str, schema: str = None):
-    cnxn = Connection(cfg, base)
-    if cnxn.system == 'postgres' and schema:
+    engine = get_engine(cfg, base)
+    if cfg.system == 'postgresql' and schema:
         base_path = base + '.' + schema
     else:
         base_path = base or schema
-    dbo = Database(cnxn, base_path)
+    dbo = Database(engine, base_path)
     tbl = Table(dbo, table)
     pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
@@ -195,8 +238,8 @@ def get_record(base: str, table: str, pkey: str, schema: str = None):
 
 @app.get("/children")
 def get_children(base: str, table: str, pkey: str):
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     tbl = Table(dbo, table)
     tbl.offset = 0
     tbl.limit = 30
@@ -208,8 +251,8 @@ def get_children(base: str, table: str, pkey: str):
 @app.get("/relations")
 def get_relations(base: str, table: str, pkey: str, count: bool,
                   alias: str = None):
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     tbl = Table(dbo, table)
     pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
@@ -224,8 +267,8 @@ def get_relations(base: str, table: str, pkey: str, count: bool,
 async def save_table(request: Request):
     req = await request.json()
     base = req['base_name']
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     tbl = Table(dbo, req['table_name'])
     return {'data': tbl.save(req['records'])}
 
@@ -234,8 +277,8 @@ async def save_table(request: Request):
 async def get_options(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
-    cnxn = Connection(cfg, req.base)
-    dbo = Database(cnxn, req.base)
+    engine = get_engine(cfg, req.base)
+    dbo = Database(engine, req.base)
     tbl = Table(dbo, req.table)
     fld = Field(tbl, req.column)
     conds = req.condition.split(" and ") if req.condition else []
@@ -247,7 +290,7 @@ async def get_options(request: Request):
         conds.append(f"lower(cast({view} as char)) like '%{search}%'")
     cond = " and ".join(conds)
     # Get condition defining classification relations
-    params = []
+    params = {}
     if fkey:
         cond2, params = fld.get_condition()
         if cond2:
@@ -266,8 +309,8 @@ def dialog_cache(request: Request):
 
 @app.put('/urd/update_cache')
 async def update_cache(base: str, config: str):
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     dbo.config = Dict(json.loads(config))
     dbo.config.update_cache = True
     dbo.get_tables()
@@ -280,8 +323,8 @@ async def update_cache(base: str, config: str):
 def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool,
                table: str = None):
     # Fiks alle slike connections
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     if table:
         table = Table(dbo, table)
         ddl = table.export_ddl(dialect)
@@ -300,8 +343,8 @@ def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool,
 
 @app.get('/table_csv')
 def export_csv(base: str, table: str, fields: str):
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     table = Table(dbo, table)
     table.offset = 0
     table.limit = None
@@ -317,12 +360,12 @@ def export_csv(base: str, table: str, fields: str):
 @app.get('/file')
 def get_file(base: str, table: str, pkey: str):
     pkey = json.loads(urllib.parse.unquote(pkey))
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     tbl = Table(dbo, table)
     rec = Record(dbo, tbl, pkey)
     path = rec.get_file_path()
-    path = os.path.join(cfg.db_server, path)
+    path = os.path.join(cfg.host, path)
 
     return FileResponse(path)
 
@@ -331,8 +374,8 @@ def get_file(base: str, table: str, pkey: str):
 def convert(base: str, table: str, from_format: str, to_format: str,
             fields: str):
     fields = json.loads(fields)
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     tbl = Table(dbo, table)
     tbl.pkey = tbl.get_pkey()
     for field_name in fields:
@@ -344,8 +387,8 @@ def convert(base: str, table: str, from_format: str, to_format: str,
 @app.get('/query')
 def query(base: str, sql: str, limit: str):
     print('sql', sql)
-    cnxn = Connection(cfg, base)
-    dbo = Database(cnxn, base)
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
     limit = 0 if not limit else int(limit)
     result = dbo.query_result(sql, limit)
 

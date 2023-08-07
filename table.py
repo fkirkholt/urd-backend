@@ -1,5 +1,6 @@
 """Module for handling tables"""
 import time
+import datetime
 import pypandoc
 from addict import Dict
 from record import Record
@@ -28,7 +29,6 @@ class Table:
         self.db = db
         self.name = tbl_name
         self.label = db.get_label('table', tbl_name)
-        self.cache = Dict()
         self.view = tbl_name
         if tbl_name + '_view' in db.user_tables:
             self.view = tbl_name + '_view'
@@ -37,42 +37,38 @@ class Table:
             self.grid_view = tbl_name + '_grid'
         if hasattr(db, 'tables'):
             for key, val in db.tables[tbl_name].items():
-                self.cache[key] = val
+                setattr(self, key, val)
 
     def get_type(self, main_type=None):
         """Return type of table"""
-        if not self.cache.get('type', None):
+        if not hasattr(self, 'type'):
             self.init_type(main_type)
 
-        return self.cache.type
+        return self.type
 
     def init_type(self, main_type=None):
         """Find type. One of 'table', 'list', 'xref', 'view' """
         if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.cache.type = self.db.attrs.cache.tables[self.name].type
-            return self.cache.type
-
-        crsr = self.db.cnxn.cursor()
+            self.type = self.db.attrs.cache.tables[self.name].type
+            return self.type
 
         if not main_type:
-            tbl = crsr.tables(catalog=self.db.cat, schema=self.db.schema,
-                              table=self.name).fetchone()
-            main_type = tbl.table_type.lower()
+            tbl_names = self.db.refl.get_table_names(self.db.schema)
+            main_type = 'table' if self.name in tbl_names else 'view'
 
         pkey = self.get_pkey()
         # Data type of primary key column
         type_ = None
 
-        if pkey and len(pkey.data_types):
-            type_ = self.db.expr.to_urd_type(pkey.data_types[0])
-        elif pkey and len(pkey.columns) and pkey.columns != ['rowid']:
-            pkey_col_name = pkey.columns[0]
-            pkey_col = crsr.columns(catalog=self.db.cat,
-                                    schema=self.db.schema,
-                                    table=self.name,
-                                    column=pkey_col_name).fetchone()
-            pkey_col.type_name = pkey_col.type_name.split('(')[0]
-            type_ = self.db.expr.to_urd_type(pkey_col.type_name)
+        # Find data type for first pkey column
+        if pkey and len(pkey.columns) and pkey.columns != ['rowid']:
+            colname = pkey.columns[0]
+            cols = self.db.refl.get_columns(self.name, self.db.schema)
+            for col in cols:
+                if col['name'] == colname:
+                    pkey_col = col
+                    break
+            type_ = pkey_col['type'].python_type.__name__
 
         tbl_type = main_type
 
@@ -82,10 +78,10 @@ class Table:
             tbl_type = "xref"
         elif self.name[-4:] == "_ext":
             tbl_type = "ext"
-        elif type_ == 'string':
+        elif type_ == 'str':
             tbl_type = "list"
 
-        self.cache.type = tbl_type
+        self.type = tbl_type
 
         return tbl_type
 
@@ -99,7 +95,7 @@ class Table:
         })
         sql = self.db.expr.table_privileges()
         if sql:
-            params = [self.db.cnxn.user, self.name]
+            params = {'user': self.db.user, 'table': self.name}
             rows = self.db.query(sql, params).fetchall()
             for row in rows:
                 if row.privilege_type == 'SELECT':
@@ -116,7 +112,7 @@ class Table:
     @measure_time
     def count_rows(self):
         sql = f'select count(*) from "{self.name}"'
-        return self.db.query(sql).fetchval()
+        return self.db.query(sql).first()[0]
 
     def is_hidden(self):
         """Decide if this is a hidden table"""
@@ -132,32 +128,35 @@ class Table:
 
     def get_indexes(self):
         """Return all table indexes"""
-        if not self.cache.get('indexes', None):
+        if not hasattr(self, 'indexes'):
             self.init_indexes()
 
-        return self.cache.indexes
+        return self.indexes
 
     def get_fkeys(self):
         """Return all foreign keys of table"""
-        if 'fkeys' not in self.cache:
+        if not hasattr(self, 'fkeys'):
             self.init_fkeys()
 
-        return self.cache.fkeys
+        return self.fkeys
 
     def get_fkey(self, name):
         """Return single foreign key based on key name or last column"""
-        if not self.cache.get('fkeys', None):
+        if not hasattr(self, 'fkeys'):
             self.init_fkeys()
 
-        if name in self.cache.fkeys:
-            return self.cache.fkeys[name]
+        if name in self.fkeys:
+            return self.fkeys[name]
         else:
             col_fkey = None
-            for fkey in self.cache.fkeys.values():
-                if (fkey.foreign[-1] == name):
+            for fkey in self.fkeys.values():
+                if (fkey.constrained_columns[-1] == name):
                     if (
                         not col_fkey or
-                        len(fkey.foreign) < len(col_fkey.foreign)
+                        # If more than one fkey meets the requirement,
+                        # choose the one with fewest columns
+                        len(fkey.constrained_columns) <
+                        len(col_fkey.constrained_columns)
                     ):
                         col_fkey = fkey
 
@@ -165,45 +164,32 @@ class Table:
 
     def get_fields(self):
         """Return all fields of table"""
-        if not self.cache.get('fields', None):
+        if not hasattr(self, 'fields'):
             self.init_fields()
 
-        return self.cache.fields
+        return self.fields
 
     @measure_time
     def get_pkey(self):
         """Return primary key of table"""
-        if self.cache.pkey:
-            return self.cache.pkey
+        if hasattr(self, 'pkey'):
+            return self.pkey
         if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.cache.pkey = self.db.attrs.cache.tables[self.name].pkey
-            return self.cache.pkey
-        if self.db.cnxn.system == 'sqlite3':
-            sql = self.db.expr.pkey(self.name)
-            rows = self.db.query(sql)
-        else:
-            cursor = self.db.cnxn.cursor()
-            rows = cursor.primaryKeys(table=self.name, catalog=self.db.cat,
-                                      schema=self.db.schema)
-        pkey = Dict()
-        pkey.table_name = self.name
+            self.pkey = self.db.attrs.cache.tables[self.name].pkey
+            return self.pkey
 
-        for row in rows:
-            pkey.pkey_name = row.pk_name
-            if 'columns' not in pkey:
-                pkey.columns = []
-            pkey.columns.append(row.column_name)
+        pkey = self.db.get_pkey(self.name)
 
-        if (not pkey.columns and self.db.system == 'sqlite3'):
+        if (not pkey.columns and self.db.engine.name == 'sqlite'):
             pkey.columns = ['rowid']
-            pkey.data_type = ['integer']
 
         if (not pkey.columns):
-            attrs = self.db.get_html_attributes()
+            attrs = self.db.html_attrs
             selector = f'table[data-name="{self.name}"]'
             if attrs[selector]['data-pkey']:
                 pkey.columns = attrs[selector]['data-pkey']
 
+        self.pkey = pkey
         return pkey
 
     def get_parent_fk(self):
@@ -217,17 +203,17 @@ class Table:
 
     def get_join(self):
         """Return all joins to table as single string"""
-        if self.cache.get('join', None):
-            return self.cache.join
+        if hasattr(self, 'join'):
+            return self.join
         joins = []
         fkeys = self.get_fkeys()
         aliases = []
 
         for key, fkey in fkeys.items():
-            if fkey.table not in self.db.user_tables:
+            if fkey.referred_table not in self.db.user_tables:
                 continue
 
-            alias = fkey.foreign[-1]
+            alias = fkey.constrained_columns[-1]
 
             # In seldom cases there might be two foreign keys ending
             # in same column
@@ -237,35 +223,35 @@ class Table:
             aliases.append(alias)
 
             # Get the ON statement in the join
-            ons = [f'"{alias}"."{fkey.primary[idx]}" = "{self.view}"."{col}"'
-                   for idx, col in enumerate(fkey.foreign)]
+            ons = [f'"{alias}"."{fkey.referred_columns[idx]}" = '
+                   f'"{self.view}"."{col}"'
+                   for idx, col in enumerate(fkey.constrained_columns)]
             on_list = ' AND '.join(ons)
 
-            namespace = self.db.schema or self.db.cat
-            joins.append(f'left join {namespace}."{fkey.table}" "{alias}" '
-                         f'on {on_list}')
+            joins.append(f'left join {self.db.schema}."{fkey.referred_table}" '
+                         f'"{alias}" on {on_list}')
 
-        self.cache.join = "\n".join(joins)
+        self.join = "\n".join(joins)
 
-        return self.cache.join
+        return self.join
 
     def get_relation(self, alias):
         """Return single relation"""
-        if not self.cache.get('relations', None):
+        if not hasattr(self, 'relations'):
             self.init_relations()
 
-        return self.cache.relations[alias]
+        return self.relations[alias]
 
     def get_relations(self):
         """Return all 'has many' relations of table"""
-        if not self.cache.get('relations', None):
+        if not hasattr(self, 'relations'):
             self.init_relations()
 
-        return self.cache.relations
+        return self.relations
 
     def get_rel_tbl_names(self):
         tbl_names = []
-        for rel in self.cache.relations.values():
+        for rel in self.relations.values():
             tbl_names.append(rel.table)
 
         return tbl_names
@@ -322,7 +308,7 @@ class Table:
                 if rel.base_name == self.db.name:
                     rel_db = self.db
                 else:
-                    rel_db = Database(self.db.cnxn, rel.base_name)
+                    rel_db = Database(self.db.engine, rel.base_name)
 
                 rel_table = Table(rel_db, rel.table_name)
 
@@ -330,8 +316,8 @@ class Table:
                 for rel_rec in rel.records:
                     if 'values' not in rel_rec:
                         continue
-                    for idx, col in enumerate(rel.foreign):
-                        pkcol = rel.primary[idx]
+                    for idx, col in enumerate(rel.constrained_columns):
+                        pkcol = rel.referred_columns[idx]
                         rel_rec['values'][col] = record.get_value(pkcol)
 
                         # Primary keys of relation may be updated by
@@ -347,69 +333,27 @@ class Table:
     def init_fkeys(self):
         """Store foreign keys in table object"""
         if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.cache.fkeys = self.db.attrs.cache.tables[self.name].fkeys
+            self.fkeys = self.db.attrs.cache.tables[self.name].fkeys
             return
-        cursor = self.db.cnxn.cursor()
-        keys = Dict()
-        fk_nbr = 0
+        self.fkeys = Dict()
 
-        for row in cursor.foreignKeys(foreignTable=self.name,
-                                      foreignCatalog=self.db.cat,
-                                      foreignSchema=self.db.schema):
-            if row.pktable_name not in self.db.user_tables:
+        for fkey in self.db.refl.get_foreign_keys(self.name, self.db.schema):
+            fkey = Dict(fkey)
+            if fkey.referred_table not in self.db.user_tables:
                 continue
 
-            if not row.fk_name:
-                if row.key_seq == 1:
-                    fk_nbr += 1
-                    name = self.name + '_fk' + str(fk_nbr)
-            else:
-                name = row.fk_name
-            if name not in keys:
-                keys[name] = Dict({
-                    'name': name,
-                    'table': row.pktable_name,
-                    'base': row.pktable_cat or None,
-                    'schema': row.pktable_schem,
-                    'delete_rule': row.delete_rule,
-                    'update_rule': row.update_rule,
-                    'foreign': [],
-                    'primary': []
-                })
-            keys[name].foreign.append(row.fkcolumn_name)
-            keys[name].primary.append(row.pkcolumn_name)
+            # Can't extract constraint names in SQLite
+            if not fkey.name:
+                fkey.name = self.name + '_'
+                fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
 
-            if (self.db.system == 'sqlite3'):
-                keys[name].schema = 'main'
-
-        self.cache.fkeys = keys
-
-    @measure_time
-    def get_columns(self, column=None):
-        """ Return all columns in table by reflection """
-        cursor = self.db.cnxn.cursor()
-        if self.db.cnxn.system == 'oracle':
-            # cursor.columns doesn't work for all types of oracle columns
-            sql = self.db.expr.columns()
-            cols = cursor.execute(sql, self.db.schema, self.name,
-                                  column).fetchall()
-        else:
-            cols = cursor.columns(table=self.name, catalog=self.db.cat,
-                                  schema=self.db.schema,
-                                  column=column).fetchall()
-
-        result = []
-        colnames = [column[0] for column in cursor.description]
-        for col in cols:
-            result.append(Dict(zip(colnames, col)))
-
-        return result
+            self.fkeys[fkey.name] = Dict(fkey)
 
     @measure_time
     def init_fields(self):
         """Store Dict of fields in table object"""
         if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.cache.fields = self.db.attrs.cache.tables[self.name].fields
+            self.fields = self.db.attrs.cache.tables[self.name].fields
             return
 
         fields = Dict()
@@ -418,15 +362,15 @@ class Table:
         for key, index in indexes.items():
             indexed_cols.append(index.columns[0])
         pkey = self.get_pkey()
-        cols = self.get_columns()
+        cols = self.db.refl.get_columns(self.name, self.db.schema)
         # contents = None if not self.db.attrs.cache \
         #     else self.db.attrs.cache.contents
 
         for col in cols:
-            cname = col.column_name
+            col = Dict(col)
 
             column = Column(self, col)
-            fld = Field(self, cname)
+            fld = Field(self, col.name)
             field = fld.get(column)
             if field.fkey:
                 condition, params = fld.get_condition()
@@ -435,7 +379,7 @@ class Table:
             # Get info about column use if user has chosen this option
             if (
                 self.db.config and self.db.config.column_use and
-                cname not in pkey.columns and
+                col.name not in pkey.columns and
                 not self.name.startswith('meta_')
                 # table not in group named '...'
                 # and (
@@ -443,13 +387,13 @@ class Table:
                 #     contents['...'].subitems.values()
                 # )
             ):
-                if cname not in indexed_cols:
+                if col.name not in indexed_cols:
                     column.create_index(col.type_name)
 
                 # Find if column is (largely) empty
                 field.use = column.check_use()
 
-                # if (field.use and field.datatype == "string"):
+                # if (field.use and field.datatype == "str"):
                 #     field.size = column.get_size()
                 #     if field.size < 256:
                 #         field.element = "input[type=text]"
@@ -457,7 +401,7 @@ class Table:
                 if col.type_name not in ['blob', 'clob', 'text']:
                     field.frequency = column.check_frequency()
 
-            fields[cname] = field
+            fields[col.name] = field
 
         updated_idx = indexes.get(self.name + "_updated_idx", None)
         if updated_idx:
@@ -466,7 +410,7 @@ class Table:
                 fields[col].editable = False
             if len(updated_idx.columns) == 2:
                 col = updated_idx.columns[1]
-                fields[col].default = self.db.cnxn.user
+                fields[col].default = self.db.user
         created_idx = indexes.get(self.name + "_created_idx", None)
         if created_idx:
             for col in created_idx.columns:
@@ -474,95 +418,83 @@ class Table:
                 fields[col].editable = False
             if len(created_idx.columns) == 2:
                 col = created_idx.columns[1]
-                fields[col].default = self.db.cnxn.user
+                fields[col].default = self.db.user
 
-        self.cache.fields = fields
+        self.fields = fields
 
     @measure_time
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
         if self.db.attrs.get("cache", None) and not self.db.config:
-            self.cache.indexes = \
+            self.indexes = \
                 self.db.attrs.cache.tables[self.name].indexes
             return
-        cursor = self.db.cnxn.cursor()
+
         indexes = Dict()
 
-        for row in cursor.statistics(table=self.name, catalog=self.db.cat,
-                                     schema=self.db.schema):
-            name = row.index_name
-            # Sometimes rows not part of index is returned
-            if name is None:
-                continue
+        refl_indexes = self.db.refl.get_indexes(self.name, self.db.schema)
+        for index in refl_indexes:
+            index = Dict(index)
+            indexes[index.name] = Dict({
+                'name': index.name,
+                'unique': index.unique,
+                'columns': index.column_names
+            })
 
-            if name not in indexes:
-                indexes[name] = Dict({
-                    'name': name,
-                    'unique': not row.non_unique,
-                    'columns': []
-                })
+        if self.get_pkey():
+            indexes[self.pkey.name] = self.pkey
 
-            indexes[name].columns.append(row.column_name)
-
-        self.cache.indexes = indexes
+        self.indexes = indexes
 
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
         if hasattr(self.db, 'relations'):
-            self.cache.relations = self.db.relations[self.name]
+            self.relations = self.db.relations[self.name]
             return
         if self.db.attrs.get("cache", None) and not self.db.config:
-            self.cache.relations = \
+            self.relations = \
                 self.db.attrs.cache.tables[self.name].relations
             return
-        cursor = self.db.cnxn.cursor()
-        relations = Dict()
-        fktable_name = None
 
-        if not self.cache.type:
+        relations = Dict()
+
+        if not hasattr(self, 'type'):
             self.get_type()
 
         table_name = self.name
-        if self.cache.type == 'view':
+        if self.type == 'view':
             sql = self.db.expr.view_definition()
-            if sql:
-                params = [self.db.name, self.name]
-                view_def = cursor.execute(sql, params).fetchone()[0]
-                table = parse_one(view_def, read="mysql").find(exp.Table)
-                table_name = table.name
+            params = {'schema': self.db.schema, 'table': self.name}
+            view_def = self.db.query(sql, params).first()[0]
 
-        for row in cursor.foreignKeys(table=table_name, catalog=self.db.cat,
-                                      schema=self.db.schema):
-            delete_rules = ["cascade", "restrict", "set null", "no action",
-                            "set default"]
-            if (fktable_name != row.fktable_name):
-                fktable_name = row.fktable_name
-                fk_nbr = 0
-            if not row.fk_name:
-                if row.key_seq == 1:
-                    fk_nbr += 1
-                    name = row.fktable_name + '_fk' + str(fk_nbr)
-            else:
-                name = row.fk_name
+            # get dialect for SQLGlot
+            dialect = self.db.engine.name
+            if dialect == 'mssql':
+                dialect = 'tsql'
+            if dialect == 'postgresql':
+                dialect = 'postgres'
 
-            if name not in relations:
-                relations[name] = Dict({
-                    'name': name,
-                    'table': row.fktable_name,
-                    'base': row.fktable_cat or self.db.name,
-                    'schema': row.fktable_schem,
-                    'delete_rule': delete_rules[row.delete_rule],
-                    'foreign': [],
-                    'primary': []
-                })
+            table = parse_one(view_def, read=dialect).find(exp.Table)
+            table_name = table.name
 
-            relations[name].foreign.append(row.fkcolumn_name)
-            relations[name].primary.append(row.pkcolumn_name)
+        for key, fkeys in self.db.refl.get_multi_foreign_keys().items():
+            for fkey in fkeys:
+                fkey = Dict(fkey)
+
+                if (
+                    fkey.referred_schema not in [self.db.schema, None] or
+                    fkey.referred_table != table_name
+                ):
+                    continue
+
+                relations[fkey.name] = Dict(fkey)
+                relations[fkey.name].table = key[1]
+                relations[fkey.name].schema = key[0] or self.db.schema
 
         # find how much the relation is used
         if self.db.config.column_use:
             for name, relation in relations.items():
-                fkey_col = relation.foreign[-1]
+                fkey_col = relation.constrained_columns[-1]
 
                 sql = f"""
                 select count(distinct({fkey_col})) from {relation.table}
@@ -572,7 +504,7 @@ class Table:
 
                 relations[name].use = count/self.rowcount
 
-        self.cache.relations = relations
+        self.relations = relations
 
     def export_ddl(self, system):
         """Return ddl for table"""
@@ -592,7 +524,7 @@ class Table:
                 default = col.default if not col.default_expr \
                     else col.default_expr
                 if (
-                    col.datatype in ['string', 'date'] and
+                    col.datatype in ['str', 'date'] and
                     default[0:8] != 'CURRENT_'
                 ):
                     coldef += " DEFAULT '" + default + "'"
@@ -604,8 +536,10 @@ class Table:
             ddl += ",\n" + "    primary key (" + ", ".join(pkey.columns) + ")"
 
         for fkey in self.get_fkeys().values():
-            ddl += ",\n    foreign key (" + ", ".join(fkey.foreign) + ") "
-            ddl += f"references {fkey.table}(" + ", ".join(fkey.primary) + ")"
+            ddl += ",\n    foreign key ("
+            ddl += ", ".join(fkey.constrained_columns) + ") "
+            ddl += f"references {fkey.referred_table}("
+            ddl += ", ".join(fkey.referred_columns) + ")"
         ddl += ");\n\n"
 
         for idx in self.get_indexes().values():
@@ -614,37 +548,72 @@ class Table:
             ddl += "create "
             if idx.unique:
                 ddl += "unique "
-            ddl += f"index {idx.name} on {self.name} ("
+            # Only mysql has index within table namespace
+            idx_name = idx.name
+            if idx.name == '_'.join(idx.columns):
+                idx_name = self.name + '_' + idx.name
+            ddl += f"index {idx_name} on {self.name} ("
             ddl += ",".join(idx.columns) + ");\n"
 
         return ddl
 
-    def export_records(self, select_recs: bool):
+    def export_records(self, select_recs: bool, fkey: dict):
         """Export records as sql
 
         Parameters:
         select_recs: If records should be selected from existing database
         """
         insert = '\n'
-        sql = f"select * from {self.name}"
-        cursor = self.db.cnxn.cursor()
-        cursor.execute(sql)
-        colnames = [column[0] for column in cursor.description]
+        if fkey and self.db.engine.name in ['mysql', 'postgresql', 'sqlite']:
+            cols = self.db.refl.get_columns(self.name, self.db.schema)
+            colnames = []
+            for col in cols:
+                colnames.append(col['name'])
+
+            select = ', '.join(colnames)
+            fkey_cc = fkey['constrained_columns'][0]
+            fkey_rc = fkey['referred_columns'][0]
+            sql = f"""
+            with recursive tbl_data as (
+                select {self.name}.*, 1 as level
+                from {self.name}
+                where {fkey_cc} is null
+
+                union all
+
+                select this.*, prior.level + 1
+                from tbl_data prior
+                inner join {self.name} this
+                   on this.{fkey_cc} = prior.{fkey_rc}
+            )
+            select {select}
+            from tbl_data
+            order by level
+            """
+        else:
+            sql = f"select * from {self.name}"
+
+        rows = self.db.query(sql).mappings()
+        cols = self.get_fields()
 
         if select_recs:
             db_name = self.db.name.split('.')[0]
             insert += f'insert into {self.name}\n'
-            insert += 'select ' + ', '.join(colnames)
+            insert += 'select ' + ', '.join(rows.keys())
             insert += f' from {db_name}.{self.name};\n\n'
         else:
-            for row in cursor:
+            for row in rows:
                 insert += f'insert into {self.name} values ('
-                row = Dict(zip(colnames, row))
                 for colname, val in row.items():
+                    col = cols[colname]
                     if (self.name == 'meta_data' and colname == 'cache'):
                         val = ''
                     if type(val) is str:
                         val = "'" + val.replace("'", "''") + "'"
+                    elif isinstance(val, datetime.date):
+                        val = "'" + str(val) + "'"
+                    elif (col.datatype == 'bool' and type(val) is int):
+                        val = 'FALSE' if val == 0 else 'TRUE'
                     elif val is None:
                         val = 'null'
                     insert += str(val) + ','
@@ -695,5 +664,3 @@ class Table:
         cursor2.commit()
 
         return 'success'
-
-

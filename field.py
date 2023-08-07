@@ -59,7 +59,7 @@ class Field:
             field.expandable = self.expandable or False
         if (
             hasattr(col, 'auto_increment') or (
-                col.datatype in ['integer', 'decimal'] and
+                col.datatype in ['int', 'Decimal'] and
                 len(pkey.columns) and
                 self.name == pkey.columns[-1] and
                 self.name not in fkeys
@@ -89,11 +89,11 @@ class Field:
         if col.datatype == 'date':
             element = 'input'
             type_ = 'date'
-        elif col.datatype == 'boolean':
+        elif col.datatype == 'bool':
             element = 'input'
             type_ = 'checkbox'
-        elif col.datatype == 'binary' or (col.datatype == 'string' and (
-                col.size == 0 or col.size >= 255)):
+        elif col.datatype == 'bytes' or (col.datatype == 'str' and (
+                col.size is None or col.size >= 255)):
             element = "textarea"
         else:
             element = "input"
@@ -103,11 +103,11 @@ class Field:
 
     def get_attributes(self, table_name, identifier):
         """Get description based on term"""
-        attrs = self.db.get_html_attributes()
-        column_ref = f'{self.element}[data-table="{table_name}"][name="{identifier}"]'
+        attrs = self.db.html_attrs
+        ref = f'{self.element}[data-table="{table_name}"][name="{identifier}"]'
         attributes = {}
-        if column_ref in attrs:
-            attributes = attrs[column_ref]
+        if ref in attrs:
+            attributes = attrs[ref]
         elif f'input[name="{identifier}"]' in attrs:
             attributes = attrs[f'input[name="{identifier}"]']
 
@@ -120,33 +120,37 @@ class Field:
         # These represents hierarchy, and usually linked selects.
         fkeys = []
         for fkey in self.tbl.get_fkeys().values():
-            if (self.name in fkey.foreign and fkey.foreign.index(self.name)):
-                fkey.foreign_idx = fkey.foreign.index(self.name)
-                fkey.length = len(fkey.foreign)
+            if (
+                self.name in fkey.constrained_columns and
+                fkey.constrained_columns.index(self.name)
+            ):
+                fkey.foreign_idx = fkey.constrained_columns.index(self.name)
+                fkey.length = len(fkey.constrained_columns)
                 fkeys.append(fkey)
 
         # Get conditions for fetching options, based on
         # other fields representing hierarchy of linked selects
         conditions = []
-        params = []
+        params = {}
         # Holds list over foreign keys, to check hierarchy
         fkeys_list = []
         if fields:
             for fkey in sorted(fkeys, key=lambda x: x['length']):
-                fkeys_list.append(fkey.foreign)
+                fkeys_list.append(fkey.constrained_columns)
 
-                if fkey.foreign[:-1] in fkeys_list:
+                if fkey.constrained_columns[:-1] in fkeys_list:
                     continue
 
-                for idx, col in enumerate(fkey.foreign):
+                for idx, col in enumerate(fkey.constrained_columns):
                     if col != self.name and fields[col].value:
-                        cond = fkey.primary[idx] + " = ?"
+                        colname = fkey.referred_columns[idx]
+                        cond = f"{colname} = :{colname}"
                         conditions.append(cond)
-                        params.append(fields[col].value)
+                        params[colname] = fields[col].value
 
         # Find possible field defining class
         fkey = self.tbl.get_fkey(self.name)
-        ref_tbl = Table(self.db, fkey.table)
+        ref_tbl = Table(self.db, fkey.referred_table)
         indexes = ref_tbl.get_indexes()
         class_idx = indexes.get(ref_tbl.name + "_classification_idx", None)
         class_field = Dict({'options': []})
@@ -163,8 +167,8 @@ class Field:
         condition = None
         for class_ in [opt['value'] for opt in class_field.options]:
             if (suff_1.startswith(class_) or suff_2.startswith(class_)):
-                conditions.append(class_field_name + ' = ?')
-                params.append(class_)
+                conditions.append(f"{class_field_name} = :{class_field_name}")
+                params[class_field_name] = class_
 
         condition = " AND ".join(conditions) if len(conditions) else ''
 
@@ -174,8 +178,8 @@ class Field:
     def get_options(self, condition, params):
 
         fkey = self.tbl.get_fkey(self.name)
-        pkey_col = fkey.primary[-1] if fkey else self.name
-        from_table = fkey.table if fkey else self.tbl.name
+        pkey_col = fkey.referred_columns[-1] if fkey else self.name
+        from_table = fkey.referred_table if fkey else self.tbl.name
 
         # Field that holds the value of the options
         value_field = f'"{self.name}".' + pkey_col
@@ -186,11 +190,11 @@ class Field:
 
         sql = f"""
         select count(*)
-        from {self.db.schema or self.db.cat}."{from_table}" "{self.name}"
+        from {self.db.schema}."{from_table}" "{self.name}"
         where {condition}
         """
 
-        count = self.db.query(sql, params).fetchval()
+        count = self.db.query(sql, params).first()[0]
 
         if (count > 200):
             return False
@@ -199,28 +203,26 @@ class Field:
 
         sql = f"""
         select {value_field} as value, {self.view or value_field} as label
-        from   {self.db.schema or self.db.cat}."{from_table}" "{self.name}"
+        from   {self.db.schema}."{from_table}" "{self.name}"
         where  {condition}
         order by {self.view or value_field}
         """
 
-        rows = self.db.query(sql, params).fetchall()
+        options = self.db.query(sql, params).all()
 
-        result = []
-        for row in rows:
-            colnames = [column[0] for column in row.cursor_description]
-            result.append(dict(zip(colnames, row)))
-
-        return result
+        # Return list of recular python dicts so that it can be
+        # json serialized and put in cache
+        return [dict(row._mapping) for row in options]
 
     def get_view(self, fkey):
         """ Decide what should be shown in options """
         from table import Table
-        ref_tbl = Table(self.db, fkey.table)
+
+        ref_tbl = Table(self.db, fkey.referred_table)
         ref_pk = ref_tbl.get_pkey()
         view = self.name + '.' + ref_pk.columns[-1]
 
-        if fkey.table in self.db.user_tables:
+        if fkey.referred_table in self.db.user_tables:
 
             if ref_tbl.is_hidden() is False:
                 self.expandable = True

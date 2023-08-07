@@ -121,8 +121,7 @@ class Database:
                 "html_attrs": self.html_attrs,
             },
             "user": {
-                "name": 'Admin',  # TODO: Autentisering
-                "id": 'admin',  # TODO: Autentisering
+                "name": self.user,
                 "admin": self.get_privileges().create
             },
             "config": (None if not self.attrs.get('cache', None)

@@ -28,7 +28,7 @@ class Table:
     def __init__(self, db, tbl_name):
         self.db = db
         self.name = tbl_name
-        self.label = db.get_label('table', tbl_name)
+        self.label = db.get_label(tbl_name)
         self.view = tbl_name
         if tbl_name + '_view' in db.user_tables:
             self.view = tbl_name + '_view'

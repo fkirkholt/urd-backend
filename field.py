@@ -42,7 +42,7 @@ class Field:
             'datatype': col.datatype,
             'element': self.element,
             'nullable': col.nullable == 1,
-            'label': self.db.get_label('field', self.name),
+            'label': self.db.get_label(self.name),
             'attrs': attrs
         })
 

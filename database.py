@@ -240,7 +240,7 @@ class Database:
                 'type': tbl_type,
                 'view': view,
                 'icon': None,
-                'label': self.get_label('table', tbl_name),
+                'label': self.get_label(tbl_name),
                 'rowcount': None if not self.config else table.rowcount,
                 'pkey': table.pkey,
                 'description': self.refl.get_table_comment(tbl_name)['text'],
@@ -431,23 +431,16 @@ class Database:
 
         return sub_tables
 
-    def get_label(self, element, identifier, prefix=None, postfix=None):
+    def get_label(self, identifier, prefix=None, postfix=None):
         """Get label based on identifier"""
-        attrs = self.attrs
-        if (
-            identifier in attrs[element] and
-            'data-label' in attrs[element][identifier]
-        ):
-            label = attrs[element][identifier]['data-label']
-        else:
-            id_parts = identifier.split('_')
-            if id_parts[-1] in ("list", "liste", "xref", "link"):
-                identifier = "_".join(id_parts[:-1])
-            if prefix:
-                identifier = identifier.replace(prefix, '')
-            if postfix:
-                identifier = identifier.replace(postfix, '')
-            label = identifier.replace('_', ' ')
+        id_parts = identifier.split('_')
+        if id_parts[-1] in ("list", "liste", "xref", "link"):
+            identifier = "_".join(id_parts[:-1])
+        if prefix:
+            identifier = identifier.replace(prefix, '')
+        if postfix:
+            identifier = identifier.replace(postfix, '')
+        label = identifier.replace('_', ' ')
 
         if self.config.norwegian_chars:
             label = label.replace("ae", "æ")
@@ -468,7 +461,7 @@ class Database:
             node.subitems = Dict()
 
             for subtable in self.sub_tables[tbl_name]:
-                label = self.get_label('table', subtable, prefix=tbl_name)
+                label = self.get_label(subtable, prefix=tbl_name)
                 node.subitems[label] = self.get_content_node(subtable)
 
         return node
@@ -488,12 +481,12 @@ class Database:
         for group_name, table_names in tbl_groups.items():
             if len(table_names) == 1:  # and group_name != "meta":
                 tbl_name = table_names[0]
-                label = self.get_label('table', tbl_name)
+                label = self.get_label(tbl_name)
 
                 contents[label] = self.get_content_node(tbl_name)
 
             else:
-                label = self.get_label('tableset', group_name)
+                label = self.get_label(group_name)
                 table_names = list(set(table_names))
 
                 contents[label] = Dict({
@@ -505,8 +498,7 @@ class Database:
                 table_names.sort()
                 for tbl_name in table_names:
                     # Remove group prefix from label
-                    tbl_label = self.get_label('table', tbl_name,
-                                               prefix=group_name)
+                    tbl_label = self.get_label(tbl_name, prefix=group_name)
 
                     contents[label].subitems[tbl_label] = \
                         self.get_content_node(tbl_name)

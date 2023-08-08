@@ -116,7 +116,7 @@ class Grid:
             'pkey': pkey.columns,
             'fkeys': self.tbl.get_fkeys(),
             'indexes': self.tbl.get_indexes(),
-            'label': self.db.get_label('table', self.tbl.name),
+            'label': self.db.get_label(self.tbl.name),
             'actions': actions,
             'limit': self.tbl.limit,
             'offset': self.tbl.offset,
@@ -606,7 +606,7 @@ class Grid:
                     join_ref_cols = '_'.join(fkey.referred_columns)
                     if cname == f"{fkey.referred_table}_{join_ref_cols}":
                         postfix = join_ref_cols
-                label = self.db.get_label('field', col_names[0], postfix)
+                label = self.db.get_label(col_names[0], postfix)
                 form['items'][label] = col_names[0]
             else:
                 inline = False
@@ -615,8 +615,7 @@ class Grid:
                 for colname in col_names:
                     # removes group name prefix from column name
                     # and use the rest as label
-                    label = self.db.get_label('field', colname,
-                                              prefix=group_name)
+                    label = self.db.get_label(colname, prefix=group_name)
                     subitems[label] = colname
 
                     field = fields[colname]
@@ -628,7 +627,7 @@ class Grid:
                 if sum_size <= 50:
                     inline = True
 
-                group_label = self.db.get_label('fieldset', group_name)
+                group_label = self.db.get_label(group_name)
 
                 form['items'][group_label] = Dict({
                     'name': group_name,
@@ -678,7 +677,7 @@ class Grid:
                     rel.order = len(rel_pkey.columns) - \
                         rel_pkey.columns.index(rel.constrained_columns[-1])
 
-                rel.label = self.db.get_label('table', rel_table.name,
+                rel.label = self.db.get_label(rel_table.name,
                                               prefix=self.tbl.name + '_',
                                               postfix='_' + self.tbl.name)
 
@@ -690,7 +689,7 @@ class Grid:
                     join_ref_cols = '_'.join(rel.referred_columns)
                     if col == f"{self.tbl.name}_{join_ref_cols}":
                         postfix = join_ref_cols
-                    colname = self.db.get_label('field', col, postfix).lower()
+                    colname = self.db.get_label(col, postfix).lower()
 
                     rel.label += " (" + colname + ")"
             else:

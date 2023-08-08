@@ -243,7 +243,7 @@ class Database:
                 'label': self.get_label('table', tbl_name),
                 'rowcount': None if not self.config else table.rowcount,
                 'pkey': table.pkey,
-                'description': self.refl.get_table_comment(tbl_name),
+                'description': self.refl.get_table_comment(tbl_name)['text'],
                 'fkeys': self.get_fkeys(tbl_name),
                 # Get more info about relations for cache, including use
                 'relations': (self.get_relations(tbl_name) if not self.config

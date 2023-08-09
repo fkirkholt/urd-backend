@@ -168,14 +168,12 @@ def dblist():
         engine = get_engine(cfg)
         with engine.connect() as conn:
             rows = conn.execute(text(sql)).fetchall()
-        dbnames = [row[0] for row in rows]
 
-        for dbname in dbnames:
-            dbo = Database(engine, dbname)
+        for row in rows:
             base = Dict()
-            base.columns.name = dbname
-            base.columns.label = dbo.attrs['data-label'] or dbname.capitalize()
-            base.columns.description = dbo.attrs.title or None
+            base.columns.name = row.db_name
+            base.columns.label = row.db_name.capitalize()
+            base.columns.description = row.db_comment
             result.append(base)
     return {'data': {'records': result}}
 

@@ -141,21 +141,31 @@ class Expression:
     def databases(self):
         if self.platform == 'postgresql':
             return """
-            select datname from pg_database
+            select d.datname as db_name,
+                   shobj_description(d.oid, 'pg_database') as db_comment
+            from pg_database d
             where datistemplate is false and datname != 'postgres'
             """
         elif self.platform == 'oracle':
             return """
-            SELECT DISTINCT OWNER
+            SELECT DISTINCT OWNER as db_name, NULL as db_comment
               FROM ALL_OBJECTS
              WHERE OBJECT_TYPE = 'TABLE'
             order by owner;
             """
-        elif self.platform in ['mysql', 'mariadb']:
-            return "show databases;"
+        elif self.platform == 'mysql':
+            return """
+            select schema_name as db_name, NULL as db_comment
+            from information_schema.schemata
+            """
+        elif self.platform == 'mariadb':
+            return """
+            select schema_name as db_name, schema_comment as db_comment
+            from information_schema.schemata
+            """
         elif self.platform == 'mssql':
             return """
-            select name
+            select name as db_name, NULL as db_comment
             from sys.Databases
             WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')
                   and HAS_DBACCESS(name) = 1;

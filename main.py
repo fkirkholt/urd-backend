@@ -167,7 +167,7 @@ def dblist():
         sql = expr.databases()
         engine = get_engine(cfg)
         with engine.connect() as conn:
-            rows = conn.execute(text(sql)).fetchall()
+            rows = conn.execute(text(sql), {'db_name': None}).fetchall()
 
         for row in rows:
             base = Dict()

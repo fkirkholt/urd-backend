@@ -138,13 +138,14 @@ class Expression:
 
         return sql
 
-    def databases(self):
+    def databases(self, db_name=None):
         if self.platform == 'postgresql':
             return """
             select d.datname as db_name,
                    shobj_description(d.oid, 'pg_database') as db_comment
             from pg_database d
             where datistemplate is false and datname != 'postgres'
+                  and :db_name is null or d.datname = :db_name
             """
         elif self.platform == 'oracle':
             return """
@@ -162,6 +163,7 @@ class Expression:
             return """
             select schema_name as db_name, schema_comment as db_comment
             from information_schema.schemata
+            where :db_name is null or schema_name = :db_name
             """
         elif self.platform == 'mssql':
             return """

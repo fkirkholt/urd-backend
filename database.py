@@ -117,7 +117,7 @@ class Database:
                 "label": self.attrs.get('label', self.name.capitalize()),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
-                "description": self.attrs.get('title', None),
+                "description": self.get_comment(),
                 "html_attrs": self.html_attrs,
             },
             "user": {
@@ -129,6 +129,12 @@ class Database:
         }
 
         return info
+
+    def get_comment(self):
+        """Get database comment"""
+        sql = self.expr.databases(self.name)
+
+        return self.query(sql, {'db_name': self.name}).first().db_comment
 
     @measure_time
     def get_privileges(self):

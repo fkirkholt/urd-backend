@@ -112,7 +112,7 @@ class Expression:
             return "blob"
 
     def to_native_type(self, type_, size=None):
-        if self.platform == "mysql":
+        if self.platform in ['mysql', 'mariadb']:
             return self.get_mysql_type(type_, size)
         elif self.platform == 'mssql':
             return self.get_sqlserver_type(type_, size)
@@ -151,7 +151,7 @@ class Expression:
              WHERE OBJECT_TYPE = 'TABLE'
             order by owner;
             """
-        elif self.platform == 'mysql':
+        elif self.platform in ['mysql', 'mariadb']:
             return "show databases;"
         elif self.platform == 'mssql':
             return """
@@ -184,7 +184,7 @@ class Expression:
             return None
 
     def view_definition(self):
-        if self.platform == 'mysql':
+        if self.platform in ['mysql', 'mariadb']:
             return """
             SELECT  VIEW_DEFINITION
             FROM    INFORMATION_SCHEMA.VIEWS

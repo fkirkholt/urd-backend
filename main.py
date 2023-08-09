@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     uid: str = None
     pwd: str = None
     mysql_driver: str = 'mysqlconnector'
+    mariadb_driver: str = 'mysqlconnector'
     postgresql_driver: str = 'psycopg2'
     sqlite_driver: str = 'pysqlite'
     oracle_driver: str = 'cx_oracle'

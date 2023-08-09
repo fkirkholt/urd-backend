@@ -187,6 +187,7 @@ class Table:
             attrs = self.db.html_attrs
             selector = f'table[data-name="{self.name}"]'
             if attrs[selector]['data-pkey']:
+                pkey.name = self.name + '_pkey'
                 pkey.columns = attrs[selector]['data-pkey']
 
         self.pkey = pkey
@@ -471,8 +472,10 @@ class Table:
             dialect = self.db.engine.name
             if dialect == 'mssql':
                 dialect = 'tsql'
-            if dialect == 'postgresql':
+            elif dialect == 'postgresql':
                 dialect = 'postgres'
+            elif dialect == 'mariadb':
+                dialect = 'mysql'
 
             table = parse_one(view_def, read=dialect).find(exp.Table)
             table_name = table.name

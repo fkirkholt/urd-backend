@@ -58,10 +58,10 @@ class Database:
         view_names = self.refl.get_view_names(self.schema)
         self.user_tables = table_names + view_names
         self.html_attrs = self.init_html_attributes()
-        self.attrs = Dict(self.html_attrs.pop('base', None))
-        self.attrs.cache = self.attrs.pop('data-cache', None)
-        if self.attrs.get('cache.config', None):
-            self.config = self.attrs.cache.config
+        attrs = Dict(self.html_attrs.pop('base', None))
+        self.cache = attrs.pop('data-cache', None)
+        if attrs.get('cache.config', None):
+            self.config = self.cache.config
         else:
             self.config = Dict()
 
@@ -114,7 +114,7 @@ class Database:
                 "schema": self.schema,
                 "schemata": list(filter(self.is_ordinary_schema,
                                         self.refl.get_schema_names())),
-                "label": self.attrs.get('label', self.name.capitalize()),
+                "label": self.get_label(self.name),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
                 "description": self.get_comment(),
@@ -124,8 +124,7 @@ class Database:
                 "name": self.user,
                 "admin": self.get_privileges().create
             },
-            "config": (None if not self.attrs.get('cache', None)
-                       else self.attrs.cache.config)
+            "config": self.config
         }
 
         return info
@@ -167,7 +166,6 @@ class Database:
         """
         self.query(sql)
 
-        self.attrs.cache = None
         self.user_tables.append('html_attributes')
         attributes = {
             'data-type': 'json',
@@ -182,14 +180,15 @@ class Database:
         self.query(sql)
         # Refresh attributes
         self.html_attrs = self.init_html_attributes()
-        self.attrs = Dict(self.html_attrs.pop('base', None))
+        attrs = Dict(self.html_attrs.pop('base', None))
+        self.cache = attrs.pop('data-cache', None)
 
     @measure_time
     def get_tables(self):
         """Return metadata for every table"""
         # Return metadata from cache if set
-        if (self.attrs.get('cache', None) and not self.config):
-            self.tables = self.attrs.cache.tables
+        if (self.cache and not self.config):
+            self.tables = self.cache.tables
             return self.tables
 
         self.tables = Dict()
@@ -475,8 +474,8 @@ class Database:
     @measure_time
     def get_contents(self):
         """Get list of contents"""
-        if (self.attrs.get('cache', None) and not self.config):
-            self.contents = self.attrs.cache.contents
+        if (self.cache and not self.config):
+            self.contents = self.cache.contents
             return self.contents
 
         contents = Dict()

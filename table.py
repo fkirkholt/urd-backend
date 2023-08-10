@@ -48,8 +48,8 @@ class Table:
 
     def init_type(self, main_type=None):
         """Find type. One of 'table', 'list', 'xref', 'view' """
-        if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.type = self.db.attrs.cache.tables[self.name].type
+        if (self.db.cache and not self.db.config):
+            self.type = self.db.cache.tables[self.name].type
             return self.type
 
         if not main_type:
@@ -174,8 +174,8 @@ class Table:
         """Return primary key of table"""
         if hasattr(self, 'pkey'):
             return self.pkey
-        if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.pkey = self.db.attrs.cache.tables[self.name].pkey
+        if (self.db.cache and not self.db.config):
+            self.pkey = self.db.cache.tables[self.name].pkey
             return self.pkey
 
         pkey = self.db.get_pkey(self.name)
@@ -333,8 +333,8 @@ class Table:
     @measure_time
     def init_fkeys(self):
         """Store foreign keys in table object"""
-        if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.fkeys = self.db.attrs.cache.tables[self.name].fkeys
+        if (self.db.cache and not self.db.config):
+            self.fkeys = self.db.cache.tables[self.name].fkeys
             return
         self.fkeys = Dict()
 
@@ -353,8 +353,8 @@ class Table:
     @measure_time
     def init_fields(self):
         """Store Dict of fields in table object"""
-        if (self.db.attrs.get("cache", None) and not self.db.config):
-            self.fields = self.db.attrs.cache.tables[self.name].fields
+        if (self.db.cache and not self.db.config):
+            self.fields = self.db.cache.tables[self.name].fields
             return
 
         fields = Dict()
@@ -364,8 +364,8 @@ class Table:
             indexed_cols.append(index.columns[0])
         pkey = self.get_pkey()
         cols = self.db.refl.get_columns(self.name, self.db.schema)
-        # contents = None if not self.db.attrs.cache \
-        #     else self.db.attrs.cache.contents
+        # contents = None if not self.db.cache \
+        #     else self.db.cache.contents
 
         for col in cols:
             col = Dict(col)
@@ -426,9 +426,8 @@ class Table:
     @measure_time
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
-        if self.db.attrs.get("cache", None) and not self.db.config:
-            self.indexes = \
-                self.db.attrs.cache.tables[self.name].indexes
+        if self.db.cache and not self.db.config:
+            self.indexes = self.db.cache.tables[self.name].indexes
             return
 
         indexes = Dict()
@@ -452,9 +451,8 @@ class Table:
         if hasattr(self.db, 'relations'):
             self.relations = self.db.relations[self.name]
             return
-        if self.db.attrs.get("cache", None) and not self.db.config:
-            self.relations = \
-                self.db.attrs.cache.tables[self.name].relations
+        if self.db.cache and not self.db.config:
+            self.relations = self.db.cache.tables[self.name].relations
             return
 
         relations = Dict()

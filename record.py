@@ -82,7 +82,11 @@ class Record:
                 db = self.db
             else:
                 db = Database(self.db.engine, base_name)
+
             tbl_rel = Table(db, rel.table)
+            columns = db.refl.get_columns(rel.table)
+            tbl_rel.cols = {col['name']: col for col in columns}
+
             if rel.table not in self.db.user_tables:
                 continue
 
@@ -91,7 +95,6 @@ class Record:
             if not rel.index:
                 continue
 
-            tbl_rel.fields = tbl_rel.get_fields()
             grid = Grid(tbl_rel)
             grid2 = Grid(tbl_rel)  # Used to count inherited records
 
@@ -106,7 +109,7 @@ class Record:
                 mark = tbl_rel.view + '_' + col
                 expr = f'"{tbl_rel.view}"."{col}" = :{mark}'
                 if (
-                    tbl_rel.fields[col].nullable and
+                    tbl_rel.cols[col]['nullable'] and
                     col != rel.constrained_columns[0] and
                     rel.referred_columns == list(self.pk.keys()) and
                     rel.index.unique is True

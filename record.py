@@ -63,8 +63,8 @@ class Record:
         from database import Database
         from table import Table, Grid
 
-        indexes = self.tbl.get_indexes()
-        class_idx = indexes.get(self.tbl.name + "_classification_idx", None)
+        class_idx_name = self.tbl.name + '_classification_idx'
+        class_idx = self.tbl.indexes.get(class_idx_name, None)
         class_field = Dict({'options': []})
         if class_idx:
             class_field_name = class_idx.columns[0]
@@ -169,8 +169,7 @@ class Record:
     def get_relation_idx(self, tbl_rel, rel):
         rel_idx = None
         slice_obj = slice(0, len(rel.constrained_columns))
-        rel_indexes = tbl_rel.get_indexes()
-        for index in rel_indexes.values():
+        for index in tbl_rel.indexes.values():
             if index.columns[slice_obj] == rel.constrained_columns:
                 rel_idx = index
                 if index.unique:
@@ -313,8 +312,8 @@ class Record:
         return relation['records']
 
     def get_file_path(self):
-        indexes = self.tbl.get_indexes()
-        filepath_idx = indexes.get(self.tbl.name + "_filepath_idx", None)
+        filepath_idx_name = self.tbl.name + '_filepath_idx'
+        filepath_idx = self.tbl.indexes.get(filepath_idx_name, None)
         select = " || '/' || ".join(filepath_idx.columns)
         conds = [f"{key} = :key" for key in self.pk]
         cond = " and ".join(conds)

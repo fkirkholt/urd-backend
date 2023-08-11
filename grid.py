@@ -115,7 +115,7 @@ class Grid:
             'hidden': self.tbl.is_hidden(),
             'pkey': pkey.columns,
             'fkeys': self.tbl.fkeys,
-            'indexes': self.tbl.get_indexes(),
+            'indexes': self.tbl.indexes,
             'label': self.db.get_label(self.tbl.name),
             'actions': actions,
             'limit': self.tbl.limit,
@@ -223,7 +223,7 @@ class Grid:
             return None
 
         ident_cols = None
-        for idx in self.tbl.get_indexes().values():
+        for idx in self.tbl.indexes.values():
             if idx.columns != self.tbl.get_pkey() and idx.unique:
                 ident_cols = idx.columns
                 if idx.name.endswith("_sort_idx"):
@@ -243,8 +243,8 @@ class Grid:
 
     def get_actions(self):
         # Make action for displaying files
-        indexes = self.tbl.get_indexes()
-        filepath_idx = indexes.get(self.tbl.name + "_filepath_idx", None)
+        filepath_idx_name = self.tbl.name + '_filepath_idx'
+        filepath_idx = self.tbl.indexes.get(filepath_idx_name, None)
         actions = Dict()
         if filepath_idx:
             last_col = filepath_idx.columns[-1]
@@ -263,8 +263,7 @@ class Grid:
 
     def get_grid_columns(self):
         """Return columns belonging to grid"""
-        indexes = self.tbl.get_indexes()
-        grid_idx = indexes.get(self.tbl.name + "_grid_idx", None)
+        grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
         type_ = self.tbl.get_type()
         if grid_idx:
             columns = grid_idx.columns
@@ -469,9 +468,8 @@ class Grid:
 
     def get_sort_columns(self):
         """Return columns for default sorting of grid"""
-        indexes = self.tbl.get_indexes()
-        sort_idx = indexes.get(self.tbl.name + "_sort_idx", None)
-        grid_idx = indexes.get(self.tbl.name + "_grid_idx", None)
+        sort_idx = self.tbl.indexes.get(self.tbl.name + "_sort_idx", None)
+        grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
         if sort_idx:
             columns = sort_idx.columns
         elif grid_idx:
@@ -483,8 +481,7 @@ class Grid:
 
     def get_summation_columns(self):
         """Return columns that should be summed"""
-        indexes = self.tbl.get_indexes()
-        sum_idx = indexes.get(self.tbl.name + "_summation_idx", None)
+        sum_idx = self.tbl.indexes.get(self.tbl.name + "_summation_idx", None)
 
         return [] if not sum_idx else sum_idx.columns
 
@@ -657,8 +654,7 @@ class Grid:
             # Find indexes that can be used to get relation
             index_exist = False
             slice_obj = slice(0, len(rel.constrained_columns))
-            rel_indexes = rel_table.get_indexes()
-            for index in rel_indexes.values():
+            for index in rel_table.indexes.values():
                 if index.columns[slice_obj] == rel.constrained_columns:
                     index_exist = True
 

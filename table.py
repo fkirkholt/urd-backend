@@ -126,12 +126,13 @@ class Table:
 
         return hidden
 
-    def get_indexes(self):
+    @property
+    def indexes(self):
         """Return all table indexes"""
-        if not hasattr(self, 'indexes'):
+        if not hasattr(self, '_indexes'):
             self.init_indexes()
 
-        return self.indexes
+        return self._indexes
 
     @property
     def fkeys(self):
@@ -361,9 +362,8 @@ class Table:
             return
 
         fields = Dict()
-        indexes = self.get_indexes()
         indexed_cols = []
-        for key, index in indexes.items():
+        for key, index in self.indexes.items():
             indexed_cols.append(index.columns[0])
         pkey = self.get_pkey()
         cols = self.db.refl.get_columns(self.name, self.db.schema)
@@ -407,7 +407,7 @@ class Table:
 
             fields[col.name] = field
 
-        updated_idx = indexes.get(self.name + "_updated_idx", None)
+        updated_idx = self.indexes.get(self.name + "_updated_idx", None)
         if updated_idx:
             for col in updated_idx.columns:
                 fields[col].extra = "auto_update"
@@ -415,7 +415,7 @@ class Table:
             if len(updated_idx.columns) == 2:
                 col = updated_idx.columns[1]
                 fields[col].default = self.db.user
-        created_idx = indexes.get(self.name + "_created_idx", None)
+        created_idx = self.indexes.get(self.name + "_created_idx", None)
         if created_idx:
             for col in created_idx.columns:
                 fields[col].extra = "auto"
@@ -430,7 +430,7 @@ class Table:
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
         if self.db.cache and not self.db.config:
-            self.indexes = self.db.cache.tables[self.name].indexes
+            self._indexes = self.db.cache.tables[self.name].indexes
             return
 
         indexes = Dict()
@@ -447,7 +447,7 @@ class Table:
         if self.get_pkey():
             indexes[self.pkey.name] = self.pkey
 
-        self.indexes = indexes
+        self._indexes = indexes
 
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
@@ -546,7 +546,7 @@ class Table:
             ddl += ", ".join(fkey.referred_columns) + ")"
         ddl += ");\n\n"
 
-        for idx in self.get_indexes().values():
+        for idx in self.indexes.values():
             if idx.columns == pkey.columns:
                 continue
             ddl += "create "

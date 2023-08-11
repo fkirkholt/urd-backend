@@ -150,8 +150,8 @@ class Field:
         # Find possible field defining class
         fkey = self.tbl.get_fkey(self.name)
         ref_tbl = Table(self.db, fkey.referred_table)
-        indexes = ref_tbl.get_indexes()
-        class_idx = indexes.get(ref_tbl.name + "_classification_idx", None)
+        class_idx_name = ref_tbl.name + '_classification_idx'
+        class_idx = ref_tbl.indexes.get(class_idx_name, None)
         class_field = Dict({'options': []})
         if class_idx:
             class_field_name = class_idx.columns[0]
@@ -228,7 +228,7 @@ class Field:
             if ref_tbl.is_hidden() is False:
                 self.expandable = True
 
-            for index in ref_tbl.get_indexes().values():
+            for index in ref_tbl.indexes.values():
                 if index.columns != ref_pk.columns and index.unique:
                     # Only last pk column is used in display value,
                     # other pk columns are usually foreign keys

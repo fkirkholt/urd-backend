@@ -215,11 +215,13 @@ class Field:
 
     def get_view(self, fkey):
         """ Decide what should be shown in options """
+        if hasattr(self, 'view'):
+            return self.view
         from table import Table
 
         ref_tbl = Table(self.db, fkey.referred_table)
         ref_pk = ref_tbl.get_pkey()
-        view = self.name + '.' + ref_pk.columns[-1]
+        self.view = self.name + '.' + ref_pk.columns[-1]
 
         if fkey.referred_table in self.db.user_tables:
 
@@ -232,8 +234,8 @@ class Field:
                     # other pk columns are usually foreign keys
                     cols = [f'"{self.name}".{col}' for col in index.columns
                             if col not in ref_pk.columns[0:-1]]
-                    view = " || ', ' || ".join(cols)
+                    self.view = " || ', ' || ".join(cols)
                     if index.name.endswith("_sort_idx"):
                         break
 
-        return view
+        return self.view

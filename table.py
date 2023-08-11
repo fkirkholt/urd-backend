@@ -133,23 +133,27 @@ class Table:
 
         return self.indexes
 
-    def get_fkeys(self):
-        """Return all foreign keys of table"""
-        if not hasattr(self, 'fkeys'):
+    @property
+    def fkeys(self):
+        if not hasattr(self, '_fkeys'):
             self.init_fkeys()
 
-        return self.fkeys
+        return self._fkeys
+
+    @fkeys.setter
+    def fkeys(self, value):
+        self._fkeys = value
 
     def get_fkey(self, name):
         """Return single foreign key based on key name or last column"""
-        if not hasattr(self, 'fkeys'):
+        if not hasattr(self, '_fkeys'):
             self.init_fkeys()
 
-        if name in self.fkeys:
-            return self.fkeys[name]
+        if name in self._fkeys:
+            return self._fkeys[name]
         else:
             col_fkey = None
-            for fkey in self.fkeys.values():
+            for fkey in self._fkeys.values():
                 if (fkey.constrained_columns[-1] == name):
                     if (
                         not col_fkey or
@@ -207,10 +211,9 @@ class Table:
         if hasattr(self, 'join'):
             return self.join
         joins = []
-        fkeys = self.get_fkeys()
         aliases = []
 
-        for key, fkey in fkeys.items():
+        for key, fkey in self.fkeys.items():
             if fkey.referred_table not in self.db.user_tables:
                 continue
 
@@ -334,9 +337,9 @@ class Table:
     def init_fkeys(self):
         """Store foreign keys in table object"""
         if (self.db.cache and not self.db.config):
-            self.fkeys = self.db.cache.tables[self.name].fkeys
+            self._fkeys = self.db.cache.tables[self.name].fkeys
             return
-        self.fkeys = Dict()
+        self._fkeys = Dict()
 
         for fkey in self.db.refl.get_foreign_keys(self.name, self.db.schema):
             fkey = Dict(fkey)
@@ -348,7 +351,7 @@ class Table:
                 fkey.name = self.name + '_'
                 fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
 
-            self.fkeys[fkey.name] = Dict(fkey)
+            self._fkeys[fkey.name] = Dict(fkey)
 
     @measure_time
     def init_fields(self):
@@ -536,7 +539,7 @@ class Table:
         if (pkey and pkey.columns != ['rowid']):
             ddl += ",\n" + "    primary key (" + ", ".join(pkey.columns) + ")"
 
-        for fkey in self.get_fkeys().values():
+        for fkey in self.fkeys.values():
             ddl += ",\n    foreign key ("
             ddl += ", ".join(fkey.constrained_columns) + ") "
             ddl += f"references {fkey.referred_table}("

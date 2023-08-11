@@ -114,7 +114,7 @@ class Grid:
             'privilege': self.tbl.user_privileges(),
             'hidden': self.tbl.is_hidden(),
             'pkey': pkey.columns,
-            'fkeys': self.tbl.get_fkeys(),
+            'fkeys': self.tbl.fkeys,
             'indexes': self.tbl.get_indexes(),
             'label': self.db.get_label(self.tbl.name),
             'actions': actions,
@@ -270,7 +270,7 @@ class Grid:
             columns = grid_idx.columns
         else:
             pkey = self.tbl.get_pkey()
-            fkeys = self.tbl.get_fkeys()
+            fkeys = self.tbl.fkeys
             hidden = self.tbl.is_hidden()
             columns = []
             for key, field in self.tbl.get_fields().items():

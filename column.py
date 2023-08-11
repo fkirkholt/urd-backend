@@ -37,20 +37,6 @@ class Column:
         if self.datatype == 'int' and getattr(self, 'size', 0) == 1:
             self.datatype = 'bool'
 
-    def get_fkey(self):
-        """Get foreign key for primary key column"""
-        col_fkey = None
-        fkeys = self.tbl.get_fkeys()
-        for fkey in fkeys.values():
-            if (fkey.constrained_columns[-1] == self.name):
-                if (
-                    not col_fkey or len(fkey.constrained_columns) <
-                    len(col_fkey.constrained_columns)
-                ):
-                    col_fkey = fkey
-
-        return col_fkey
-
     def get_size(self):
         sql = f"""
         select max(length({self.name}))

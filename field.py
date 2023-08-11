@@ -22,7 +22,6 @@ class Field:
 
     @measure_time
     def get(self, col):
-        fkeys = self.tbl.get_fkeys()
         pkey = self.tbl.get_pkey()
 
         self.element, type_ = self.get_element(col)
@@ -62,7 +61,7 @@ class Field:
                 col.datatype in ['int', 'Decimal'] and
                 len(pkey.columns) and
                 self.name == pkey.columns[-1] and
-                self.name not in fkeys
+                self.name not in self.tbl.fkeys
             )
         ):
             field.extra = "auto_increment"
@@ -119,7 +118,7 @@ class Field:
         # Find all foreign keys that limit the possible values of the field.
         # These represents hierarchy, and usually linked selects.
         fkeys = []
-        for fkey in self.tbl.get_fkeys().values():
+        for fkey in self.tbl.fkeys.values():
             if (
                 self.name in fkey.constrained_columns and
                 fkey.constrained_columns.index(self.name)

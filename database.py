@@ -207,7 +207,6 @@ class Database:
 
             table = Table(self, tbl_name)
 
-            table.pkey = self.get_pkey(tbl_name)
             main_type = 'table' if tbl_name in (tbl_names) else 'view'
             tbl_type = table.get_type(main_type)
 
@@ -247,10 +246,9 @@ class Database:
                 'rowcount': None if not self.config else table.rowcount,
                 'pkey': table.pkey,
                 'description': self.refl.get_table_comment(tbl_name)['text'],
-                'fkeys': self.get_fkeys(tbl_name),
+                'fkeys': table.fkeys,
                 # Get more info about relations for cache, including use
-                'relations': (self.get_relations(tbl_name) if not self.config
-                              else table.relations),
+                'relations': table.relations,
                 'hidden': hidden,
                 # fields are needed only when creating cache
                 'fields': None if not self.config else table.fields,
@@ -544,34 +542,37 @@ class Database:
 
         return contents
 
-    def get_pkey(self, tbl_name):
+    @property
+    def pkeys(self):
         """Get primary key of table"""
-        if not hasattr(self, 'pkeys'):
-            self.pkeys = Dict()
+        if not hasattr(self, '_pkeys'):
+            self._pkeys = Dict()
             pkey_constraints = self.refl.get_multi_pk_constraint(self.schema)
             for (schema, table), pkey in pkey_constraints.items():
-                self.pkeys[table] = Dict({
+                self._pkeys[table] = Dict({
                     'table_name': table,
                     'name': pkey['name'] or 'PRIMARY',
                     'unique': True,
                     'columns': pkey['constrained_columns']
                 })
 
-        return self.pkeys[tbl_name]
+        return self._pkeys
 
-    def get_fkeys(self, tbl_name):
+    @property
+    def fkeys(self):
         """Get all foreign keys of table"""
-        if not hasattr(self, 'fkeys'):
+        if not hasattr(self, '_fkeys'):
             self.init_fkeys()
 
-        return self.fkeys[tbl_name]
+        return self._fkeys
 
-    def get_relations(self, tbl_name):
+    @property
+    def relations(self):
         """Get all has-many relations of table"""
-        if not hasattr(self, 'relations'):
+        if not hasattr(self, '_relations'):
             self.init_relations()
 
-        return self.relations[tbl_name]
+        return self._relations
 
     def query_result(self, sql, limit):
         """Get query result for user defined sql"""
@@ -631,7 +632,7 @@ class Database:
     @measure_time
     def init_fkeys(self):
         """Store all foreign keys in database object"""
-        self.fkeys = Dict()
+        self._fkeys = Dict()
 
         schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
 
@@ -646,13 +647,13 @@ class Database:
                     fkey.name = table_name + '_'
                     fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
 
-                self.fkeys[table_name][fkey.name] = Dict(fkey)
+                self._fkeys[table_name][fkey.name] = Dict(fkey)
 
     @measure_time
     def init_relations(self):
         """Store all has-many relations in database object"""
 
-        self.relations = Dict()
+        self._relations = Dict()
 
         schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
 
@@ -660,7 +661,9 @@ class Database:
 
             for fkey in fkeys:
                 fkey = Dict(fkey)
-                self.relations[fkey.referred_table][fkey.name] = Dict(fkey)
+                fkey.table = key[1]
+                fkey.schema = key[0] or self.db.schema
+                self._relations[fkey.referred_table][fkey.name] = fkey
 
     def export_as_sql(self, dialect: str, include_recs: bool,
                       select_recs: bool):

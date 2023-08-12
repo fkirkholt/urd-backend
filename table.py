@@ -187,7 +187,7 @@ class Table:
             self._pkey = self.db.cache.tables[self.name].pkey
             return self._pkey
 
-        self._pkey = self.db.get_pkey(self.name)
+        self._pkey = self.db.pkeys[self.name]
 
         if (not self._pkey.columns and self.db.engine.name == 'sqlite'):
             self._pkey.columns = ['rowid']
@@ -352,19 +352,7 @@ class Table:
         if (self.db.cache and not self.db.config):
             self._fkeys = self.db.cache.tables[self.name].fkeys
             return
-        self._fkeys = Dict()
-
-        for fkey in self.db.refl.get_foreign_keys(self.name, self.db.schema):
-            fkey = Dict(fkey)
-            if fkey.referred_table not in self.db.user_tables:
-                continue
-
-            # Can't extract constraint names in SQLite
-            if not fkey.name:
-                fkey.name = self.name + '_'
-                fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
-
-            self._fkeys[fkey.name] = Dict(fkey)
+        self._fkeys = self.db.fkeys[self.name]
 
     @measure_time
     def init_fields(self):
@@ -469,8 +457,6 @@ class Table:
             self._relations = self.db.cache.tables[self.name].relations
             return
 
-        relations = Dict()
-
         if not hasattr(self, 'type'):
             self.get_type()
 
@@ -492,19 +478,7 @@ class Table:
             table = parse_one(view_def, read=dialect).find(exp.Table)
             table_name = table.name
 
-        for key, fkeys in self.db.refl.get_multi_foreign_keys().items():
-            for fkey in fkeys:
-                fkey = Dict(fkey)
-
-                if (
-                    fkey.referred_schema not in [self.db.schema, None] or
-                    fkey.referred_table != table_name
-                ):
-                    continue
-
-                relations[fkey.name] = Dict(fkey)
-                relations[fkey.name].table = key[1]
-                relations[fkey.name].schema = key[0] or self.db.schema
+        relations = self.db.relations[table_name]
 
         # find how much the relation is used
         if self.db.config.column_use:

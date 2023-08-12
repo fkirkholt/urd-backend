@@ -32,9 +32,7 @@ class Record:
 
         fields = {}
 
-        fields = self.tbl.get_fields()
-
-        for field in fields.values():
+        for field in self.tbl.fields.values():
             fld = Field(self.tbl, field.name)
             field.value = values.get(field.name, None)
             field.text = displays.get(field.name, None)
@@ -68,11 +66,10 @@ class Record:
         class_field = Dict({'options': []})
         if class_idx:
             class_field_name = class_idx.columns[0]
-            fields = self.tbl.get_fields()
-            class_field = fields[class_field_name]
+            class_field = self.tbl.fields[class_field_name]
 
         relations = {}
-        for key, rel in self.tbl.get_relations().items():
+        for key, rel in self.tbl.relations.items():
             if self.db.engine.name == 'postgresql':
                 base_name = rel.schema
             else:
@@ -131,7 +128,6 @@ class Record:
             if count_null_conds:
                 count_inherited = grid2.get_rowcount()
 
-            tbl_rel.pkey = tbl_rel.get_pkey()
             if set(tbl_rel.pkey.columns) <= set(rel.constrained_columns):
                 # if pkey is same as, or a subset of, fkey
                 relationship = "1:1"
@@ -190,8 +186,6 @@ class Record:
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500  # TODO: should have pagination in stead
         tbl_rel.offset = 0
-        tbl_rel.fields = tbl_rel.get_fields()
-        tbl_rel.pkey = tbl_rel.get_pkey()
 
         # Find index used
         rel.index = self.get_relation_idx(tbl_rel, rel)
@@ -230,8 +224,6 @@ class Record:
             relation.fields[col].default = values[idx]
             relation.fields[col].defines_relation = True
 
-        tbl_rel.pkey = tbl_rel.get_pkey()
-
         # If foreign key columns contains primary key
         if set(tbl_rel.pkey.columns) <= set(rel.constrained_columns):
             rec = Record(self.db, tbl_rel, pkey_vals)
@@ -267,9 +259,7 @@ class Record:
     def get_display_values(self):
         displays = {}
 
-        join = self.tbl.get_join()
-
-        for key, field in self.tbl.get_fields().items():
+        for key, field in self.tbl.fields.items():
             if 'view' in field:
                 displays[key] = f"({field.view}) as {key}"
 
@@ -283,7 +273,7 @@ class Record:
 
         sql = "select " + select + "\n"
         sql += f"from {self.db.schema}.{self.tbl.view}\n"
-        sql += join + "\n"
+        sql += self.tbl.joins + "\n"
         sql += " where " + cond
 
         row = self.db.query(sql, self.pk).mappings().fetchone()
@@ -296,8 +286,7 @@ class Record:
         grid.user_filtered = True
         rec = self.get()
 
-        relations = self.tbl.get_relations().values()
-        rel = [rel for rel in relations if rel.table == self.tbl.name][0]
+        rel = [rel for rel in self.tbl.relations if rel.table == self.tbl.name][0]
 
         for idx, colname in enumerate(rel.referred_columns):
             foreign = rel.constrained_columns[idx]
@@ -328,23 +317,20 @@ class Record:
         return os.path.normpath(row.path)
 
     def insert(self, values):
-        fields = self.tbl.get_fields()
-
         # todo: Get values for auto and auto_update fields
 
         # Get autoinc values for primary keys
         # Supports simple and compound primary keys
-        pkey = self.tbl.get_pkey()
-        for colname in pkey.colnames:
+        for colname in self.tbl.pkey.colnames:
             if colname in values:
                 self.pk[colname] = values[colname]
-        inc_col = pkey.columns[-1]
+        inc_col = self.tbl.pkey.columns[-1]
         if (
             inc_col not in values and
-            fields[inc_col].extra == "auto_increment"
+            self.tbl.fields[inc_col].extra == "auto_increment"
         ):
-            s = slice(0, len(pkey.columns) - 1)
-            cols = pkey.columns[s]
+            s = slice(0, len(self.tbl.pkey.columns) - 1)
+            cols = self.tbl.pkey.columns[s]
 
             conditions = []
             params = {}
@@ -395,7 +381,7 @@ class Record:
     def update(self, values):
         set_values = {}
         # todo: get values for auto update fields
-        for field in self.tbl.get_fields().values():
+        for field in self.tbl.fields.values():
             if field.get('extra', None) == "auto_update":
                 set_values[field.name] = \
                     self.db.expr.replace_vars(field.default, self.db)

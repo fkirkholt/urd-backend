@@ -22,8 +22,6 @@ class Field:
 
     @measure_time
     def get(self, col):
-        pkey = self.tbl.get_pkey()
-
         self.element, type_ = self.get_element(col)
 
         attrs = Dict()
@@ -59,8 +57,8 @@ class Field:
         if (
             hasattr(col, 'auto_increment') or (
                 col.datatype in ['int', 'Decimal'] and
-                len(pkey.columns) and
-                self.name == pkey.columns[-1] and
+                len(self.tbl.pkey.columns) and
+                self.name == self.tbl.pkey.columns[-1] and
                 self.name not in self.tbl.fkeys
             )
         ):
@@ -155,8 +153,7 @@ class Field:
         class_field = Dict({'options': []})
         if class_idx:
             class_field_name = class_idx.columns[0]
-            fields = ref_tbl.get_fields()
-            class_field = fields[class_field_name]
+            class_field = ref_tbl.fields[class_field_name]
 
         # Tables with suffixes that's part of types
         # should just be shown when the specific type is chosen
@@ -220,8 +217,7 @@ class Field:
         from table import Table
 
         ref_tbl = Table(self.db, fkey.referred_table)
-        ref_pk = ref_tbl.get_pkey()
-        self.view = self.name + '.' + ref_pk.columns[-1]
+        self.view = self.name + '.' + ref_tbl.pkey.columns[-1]
 
         if fkey.referred_table in self.db.user_tables:
 
@@ -229,11 +225,11 @@ class Field:
                 self.expandable = True
 
             for index in ref_tbl.indexes.values():
-                if index.columns != ref_pk.columns and index.unique:
+                if index.columns != ref_tbl.pkey.columns and index.unique:
                     # Only last pk column is used in display value,
                     # other pk columns are usually foreign keys
                     cols = [f'"{self.name}".{col}' for col in index.columns
-                            if col not in ref_pk.columns[0:-1]]
+                            if col not in ref_tbl.pkey.columns[0:-1]]
                     self.view = " || ', ' || ".join(cols)
                     if index.name.endswith("_sort_idx"):
                         break

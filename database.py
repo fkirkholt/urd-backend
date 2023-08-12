@@ -233,8 +233,6 @@ class Database:
                 table.rowcount = table.count_rows()
                 space = ' ' * (30 - len(tbl_name))
                 print('Table: ', f"{tbl_name}{space}({table.rowcount})")
-                table.fields = table.get_fields()
-                table.relations = table.get_relations()
 
             view = tbl_name
             if tbl_name + '_view' in view_names:

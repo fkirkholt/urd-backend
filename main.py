@@ -376,7 +376,6 @@ def convert(base: str, table: str, from_format: str, to_format: str,
     engine = get_engine(cfg, base)
     dbo = Database(engine, base)
     tbl = Table(dbo, table)
-    tbl.pkey = tbl.get_pkey()
     for field_name in fields:
         result = tbl.convert(field_name, from_format, to_format)
 

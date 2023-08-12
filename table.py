@@ -56,13 +56,12 @@ class Table:
             tbl_names = self.db.refl.get_table_names(self.db.schema)
             main_type = 'table' if self.name in tbl_names else 'view'
 
-        pkey = self.get_pkey()
         # Data type of primary key column
         type_ = None
 
         # Find data type for first pkey column
-        if pkey and len(pkey.columns) and pkey.columns != ['rowid']:
-            colname = pkey.columns[0]
+        if self.pkey and len(self.pkey.columns) and self.pkey.columns != ['rowid']:
+            colname = self.pkey.columns[0]
             cols = self.db.refl.get_columns(self.name, self.db.schema)
             for col in cols:
                 if col['name'] == colname:
@@ -167,50 +166,58 @@ class Table:
 
             return col_fkey
 
-    def get_fields(self):
+    @property
+    def fields(self):
         """Return all fields of table"""
-        if not hasattr(self, 'fields'):
+        if not hasattr(self, '_fields'):
             self.init_fields()
 
-        return self.fields
+        return self._fields
 
-    @measure_time
-    def get_pkey(self):
+    @fields.setter
+    def fields(self, value):
+        self._fields = value
+
+    @property
+    def pkey(self):
         """Return primary key of table"""
-        if hasattr(self, 'pkey'):
-            return self.pkey
+        if hasattr(self, '_pkey'):
+            return self._pkey
         if (self.db.cache and not self.db.config):
-            self.pkey = self.db.cache.tables[self.name].pkey
-            return self.pkey
+            self._pkey = self.db.cache.tables[self.name].pkey
+            return self._pkey
 
-        pkey = self.db.get_pkey(self.name)
+        self._pkey = self.db.get_pkey(self.name)
 
-        if (not pkey.columns and self.db.engine.name == 'sqlite'):
-            pkey.columns = ['rowid']
+        if (not self._pkey.columns and self.db.engine.name == 'sqlite'):
+            self._pkey.columns = ['rowid']
 
-        if (not pkey.columns):
+        if (not self._pkey.columns):
             attrs = self.db.html_attrs
             selector = f'table[data-name="{self.name}"]'
             if attrs[selector]['data-pkey']:
-                pkey.name = self.name + '_pkey'
-                pkey.columns = attrs[selector]['data-pkey']
+                self._pkey.name = self.name + '_pkey'
+                self._pkey.columns = attrs[selector]['data-pkey']
 
-        self.pkey = pkey
-        return pkey
+        return self._pkey
+
+    @pkey.setter
+    def pkey(self, value):
+        self._pkey = value
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
         # Find relation to child records
-        relations = self.get_relations()
-        rel = [rel for rel in relations.values() if rel.table == self.name][0]
+        rel = [rel for rel in self.relations.values() if rel.table == self.name][0]
         fkey = self.get_fkey(rel.name)
 
         return fkey
 
-    def get_join(self):
+    @property
+    def joins(self):
         """Return all joins to table as single string"""
-        if hasattr(self, 'join'):
-            return self.join
+        if hasattr(self, '_joins'):
+            return self._joins
         joins = []
         aliases = []
 
@@ -236,9 +243,9 @@ class Table:
             joins.append(f'left join {self.db.schema}."{fkey.referred_table}" '
                          f'"{alias}" on {on_list}')
 
-        self.join = "\n".join(joins)
+        self._joins = "\n".join(joins)
 
-        return self.join
+        return self._joins
 
     def get_relation(self, alias):
         """Return single relation"""
@@ -247,12 +254,17 @@ class Table:
 
         return self.relations[alias]
 
-    def get_relations(self):
+    @property
+    def relations(self):
         """Return all 'has many' relations of table"""
-        if not hasattr(self, 'relations'):
+        if not hasattr(self, '_relations'):
             self.init_relations()
 
-        return self.relations
+        return self._relations
+
+    @relations.setter
+    def relations(self, value):
+        self._relations = value
 
     def get_rel_tbl_names(self):
         tbl_names = []
@@ -358,14 +370,13 @@ class Table:
     def init_fields(self):
         """Store Dict of fields in table object"""
         if (self.db.cache and not self.db.config):
-            self.fields = self.db.cache.tables[self.name].fields
+            self._fields = self.db.cache.tables[self.name].fields
             return
 
         fields = Dict()
         indexed_cols = []
         for key, index in self.indexes.items():
             indexed_cols.append(index.columns[0])
-        pkey = self.get_pkey()
         cols = self.db.refl.get_columns(self.name, self.db.schema)
         # contents = None if not self.db.cache \
         #     else self.db.cache.contents
@@ -383,7 +394,7 @@ class Table:
             # Get info about column use if user has chosen this option
             if (
                 self.db.config and self.db.config.column_use and
-                col.name not in pkey.columns and
+                col.name not in self.pkey.columns and
                 not self.name.startswith('meta_')
                 # table not in group named '...'
                 # and (
@@ -424,7 +435,7 @@ class Table:
                 col = created_idx.columns[1]
                 fields[col].default = self.db.user
 
-        self.fields = fields
+        self._fields = fields
 
     @measure_time
     def init_indexes(self):
@@ -444,7 +455,7 @@ class Table:
                 'columns': index.column_names
             })
 
-        if self.get_pkey():
+        if self.pkey:
             indexes[self.pkey.name] = self.pkey
 
         self._indexes = indexes
@@ -452,10 +463,10 @@ class Table:
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
         if hasattr(self.db, 'relations'):
-            self.relations = self.db.relations[self.name]
+            self._relations = self.db.relations[self.name]
             return
         if self.db.cache and not self.db.config:
-            self.relations = self.db.cache.tables[self.name].relations
+            self._relations = self.db.cache.tables[self.name].relations
             return
 
         relations = Dict()
@@ -508,14 +519,13 @@ class Table:
 
                 relations[name].use = count/self.rowcount
 
-        self.relations = relations
+        self._relations = relations
 
     def export_ddl(self, system):
         """Return ddl for table"""
-        pkey = self.get_pkey()
         ddl = f"create table {self.name} (\n"
         coldefs = []
-        for col in self.get_fields().values():
+        for col in self.fields.values():
             expr = Expression(system)
             size = col.size
             if 'scale' in col:
@@ -536,8 +546,8 @@ class Table:
                     coldef += " DEFAULT " + default
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
-        if (pkey and pkey.columns != ['rowid']):
-            ddl += ",\n" + "    primary key (" + ", ".join(pkey.columns) + ")"
+        if (self.pkey and self.pkey.columns != ['rowid']):
+            ddl += f",\n    primary key ({', '.join(self.pkey.columns)})"
 
         for fkey in self.fkeys.values():
             ddl += ",\n    foreign key ("
@@ -547,7 +557,7 @@ class Table:
         ddl += ");\n\n"
 
         for idx in self.indexes.values():
-            if idx.columns == pkey.columns:
+            if idx.columns == self.pkey.columns:
                 continue
             ddl += "create "
             if idx.unique:
@@ -598,7 +608,6 @@ class Table:
             sql = f"select * from {self.name}"
 
         rows = self.db.query(sql).mappings()
-        cols = self.get_fields()
 
         if select_recs:
             db_name = self.db.name.split('.')[0]
@@ -609,7 +618,7 @@ class Table:
             for row in rows:
                 insert += f'insert into {self.name} values ('
                 for colname, val in row.items():
-                    col = cols[colname]
+                    col = self.fields[colname]
                     if (self.name == 'meta_data' and colname == 'cache'):
                         val = ''
                     if type(val) is str:

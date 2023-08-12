@@ -35,9 +35,6 @@ class Table:
         self.grid_view = self.view
         if tbl_name + '_grid' in db.user_tables:
             self.grid_view = tbl_name + '_grid'
-        if hasattr(db, 'tables'):
-            for key, val in db.tables[tbl_name].items():
-                setattr(self, key, val)
 
     def get_type(self, main_type=None):
         """Return type of table"""
@@ -140,10 +137,6 @@ class Table:
 
         return self._fkeys
 
-    @fkeys.setter
-    def fkeys(self, value):
-        self._fkeys = value
-
     def get_fkey(self, name):
         """Return single foreign key based on key name or last column"""
         if not hasattr(self, '_fkeys'):
@@ -174,10 +167,6 @@ class Table:
 
         return self._fields
 
-    @fields.setter
-    def fields(self, value):
-        self._fields = value
-
     @property
     def pkey(self):
         """Return primary key of table"""
@@ -200,10 +189,6 @@ class Table:
                 self._pkey.columns = attrs[selector]['data-pkey']
 
         return self._pkey
-
-    @pkey.setter
-    def pkey(self, value):
-        self._pkey = value
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
@@ -261,10 +246,6 @@ class Table:
             self.init_relations()
 
         return self._relations
-
-    @relations.setter
-    def relations(self, value):
-        self._relations = value
 
     def get_rel_tbl_names(self):
         tbl_names = []

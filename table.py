@@ -431,13 +431,6 @@ class Table:
 
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
-        if hasattr(self.db, 'relations'):
-            self._relations = self.db.relations[self.name]
-            return
-        if self.db.cache and not self.db.config:
-            self._relations = self.db.cache.tables[self.name].relations
-            return
-
         if not hasattr(self, 'type'):
             self.get_type()
 
@@ -458,6 +451,12 @@ class Table:
 
             table = parse_one(view_def, read=dialect).find(exp.Table)
             table_name = table.name
+        if hasattr(self.db, 'relations'):
+            self._relations = self.db.relations[table_name]
+            return
+        if self.db.cache and not self.db.config:
+            self._relations = self.db.cache.tables[table_name].relations
+            return
 
         relations = self.db.relations[table_name]
 

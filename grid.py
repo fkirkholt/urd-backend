@@ -313,12 +313,12 @@ class Grid:
             return ""
 
         for sort in sort_fields.values():
-            if self.db.engine.name == 'mysql':
+            if self.db.engine.name in ['mysql', 'mariadb']:
                 order += f"isnull({sort.field}), {sort.field} {sort.order}, "
-            elif self.db.engine.name in ['oracle', 'postgresql']:
-                order += f"{sort.field} {sort.order}, "
             elif self.db.engine.name == 'sqlite':
                 order += f"{sort.field} is null, {sort.field} {sort.order}, "
+            else:
+                order += f"{sort.field} {sort.order}, "
 
         for field in self.tbl.pkey.columns:
             order += f'"{self.tbl.view}"."{field}", '

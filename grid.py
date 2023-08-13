@@ -302,7 +302,7 @@ class Grid:
             parts = sort.split(' ')
             key = parts[0]
             direction = 'asc' if len(parts) == 1 else parts[1]
-            if key in self.tbl.fields:
+            if key in self.tbl.fields and not self.tbl.fields[key].virtual:
                 tbl_name = self.tbl.view
             else:
                 tbl_name = self.tbl.name + '_grid'
@@ -321,7 +321,7 @@ class Grid:
                 order += f"{sort.field} {sort.order}, "
 
         for field in self.tbl.pkey.columns:
-            order += f'"{self.tbl.view}"."{field}", '
+            order += f'"{self.tbl.grid_view}"."{field}", '
 
         order = order[0:-2]
 

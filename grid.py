@@ -510,6 +510,14 @@ class Grid:
                     else:
                         tbl_name = self.tbl.name + '_grid'
                     field = tbl_name + "." + field
+                else:
+                    # Use view instead of original table if exists
+                    field_parts = field.split('.')
+                    tbl_name = field_parts[0]
+                    field_name = field_parts[1]
+                    if tbl_name + '_view' in self.db.user_tables:
+                        field = f"{tbl_name}_view.{field_name}"
+
                 mark = field.replace('.', '_')
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")

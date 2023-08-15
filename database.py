@@ -640,14 +640,14 @@ class Database:
 
             for fkey in fkeys:
                 fkey = Dict(fkey)
-                table_name = key[-1]
+                fkey.table = key[-1]
 
                 # Can't extract constraint names in SQLite
                 if not fkey.name:
-                    fkey.name = table_name + '_'
+                    fkey.name = fkey.table + '_'
                     fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
 
-                self._fkeys[table_name][fkey.name] = Dict(fkey)
+                self._fkeys[fkey.table][fkey.name] = Dict(fkey)
 
     @measure_time
     def init_relations(self):

@@ -301,18 +301,6 @@ Når man oppretter en cachet versjon av databasestrukturen, opprettes det en rad
 
 # Views
 
-## Bruke view til å bestemme grid
-
-Istedenfor for definere en grid vha. indeks `<tabellnavn>_grid_idx`, kan
-man bruke et view `<tabellnavn>_grid`. Dette viewet må ha med alle
-primærnøkkel-kolonnene til opprinnelig tabell. Fordelen med å bruke et
-view istedenfor en indeks, er at man kan definere opp kolonner som ikke
-finnes i opprinnelig tabell. Slik kan man få inn f.eks. statistikk,
-antall underliggende, mm.
-
-Alle ekstra kolonner i viewet blir også tilgjengelig i postvisningen, og
-blir søkbare.
-
 ## Bruke view til tilgangsstyring
 
 Hvis man oppretter et view med navn `<tabellnavn>_view`, vil dette viewet

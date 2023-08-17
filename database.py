@@ -65,7 +65,6 @@ class Database:
         else:
             self.config = Dict()
 
-    # @measure_time
     @measure_time
     def init_html_attributes(self):
         """Get data from table html_attributes"""
@@ -322,8 +321,6 @@ class Database:
         # documenting databases
         if (not self.config.update_cache or self.config.urd_structure):
             for tbl_name, table in self.tables.items():
-                if (tbl_name[-5:] == '_grid' and table.type == 'view'):
-                    continue
                 if tbl_name[0:1] == "_":
                     name = tbl_name[1:]
                 else:

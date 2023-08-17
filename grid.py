@@ -32,7 +32,7 @@ class Grid:
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
         select = ''
-        col.ref = f'"{self.tbl.grid_view}"."{col.name}"'
+        col.ref = f'"{self.tbl.view}"."{col.name}"'
 
         if 'view' in col:
             select = col.view
@@ -45,10 +45,8 @@ class Grid:
 
     @measure_time
     def get(self, pkey_vals=None):
-        from table import Table
         """Return all metadata and data to display grid"""
         selects = {}  # dict of select expressions
-        has_view = self.tbl.name + '_grid' in self.db.user_tables
 
         for col in self.tbl.pkey.columns:
             selects[col] = f'"{self.tbl.view}"."{col}"'
@@ -72,21 +70,8 @@ class Grid:
                     continue
                 selects[key] = action.disabled
 
-        if has_view:
-            view_name = self.tbl.name + '_grid'
-            view = Table(self.db, view_name)
-            cols = self.db.refl.get_columns(view_name)
-            grid_columns = [col['name'] for col in cols]
-            for field_name, field in view.fields.items():
-                if field_name not in self.tbl.fields:
-                    field.virtual = True
-                    field.table_name = view_name
-                    self.tbl.fields[field_name] = field
-        else:
-            grid_columns = self.get_grid_columns()
-
         # Uses grid_columns from view if exists
-        for colname in grid_columns:
+        for colname in self.columns:
             col = self.tbl.fields[colname]
             selects[colname] = self.get_select_expression(col)
 
@@ -102,7 +87,7 @@ class Grid:
             'count_records': self.get_rowcount(),
             'fields': self.tbl.fields,
             'grid': {
-                'columns': grid_columns,
+                'columns': self.columns,
                 'sums': self.get_sums(),
                 'sort_columns': self.sort_columns,
                 'actions': ["show_file"] if "show_file" in actions else []
@@ -255,39 +240,53 @@ class Grid:
 
         return actions
 
-    def get_grid_columns(self):
-        """Return columns belonging to grid"""
+    @property
+    def columns(self):
+        """Return columns in grid"""
+        if hasattr(self, '_columns'):
+            return self._columns
+        from table import Table
+        columns = []
+        has_view = self.tbl.name + '_view' in self.db.user_tables
+        if has_view:
+            view_name = self.tbl.name + '_view'
+            view = Table(self.db, view_name)
+            for field_name, field in view.fields.items():
+                if field_name not in self.tbl.fields:
+                    field.virtual = True
+                    field.table_name = view_name
+                    self.tbl.fields[field_name] = field
         grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
-        type_ = self.tbl.get_type()
         if grid_idx:
             columns = grid_idx.columns
-        else:
-            fkeys = self.tbl.fkeys
-            hidden = self.tbl.is_hidden()
-            columns = []
-            for key, field in self.tbl.fields.items():
-                # Don't show hdden columns
-                if (
-                    field.name[0:1] == '_' or
-                    field.name[0:6].lower() == 'const_'
-                ):
-                    continue
-                if field.size and (field.size < 1 or field.size >= 255):
-                    continue
-                if field.datatype == 'json':
-                    continue
-                if (
-                    [field.name] == self.tbl.pkey.columns
-                    and field.datatype == "int"
-                    and type_ != 'list'
-                    and field.name not in fkeys
-                    and hidden is False
-                ):
-                    continue
-                columns.append(key)
-                if len(columns) == 5:
-                    break
 
+        fkeys = self.tbl.fkeys
+        hidden = self.tbl.is_hidden()
+        type_ = self.tbl.get_type()
+        for key, field in self.tbl.fields.items():
+            # Don't show hdden columns
+            if(
+                field.name[0:1] == '_' or
+                field.name[0:6].lower() == 'const_'
+            ):
+                continue
+            if field.size and (field.size < 1 or field.size >= 255):
+                continue
+            if field.datatype == 'json':
+                continue
+            if (
+                [field.name] == self.tbl.pkey.columns
+                and field.datatype == "int"
+                and type_ != 'list'
+                and field.name not in fkeys
+                and hidden is False
+            ):
+                continue
+            if not (field.virtual or (not grid_idx and not len(columns) > 4)):
+                continue
+            columns.append(key)
+
+        self._columns = columns
         return columns
 
     def make_order_by(self):
@@ -305,7 +304,7 @@ class Grid:
             if key in self.tbl.fields and not self.tbl.fields[key].virtual:
                 tbl_name = self.tbl.view
             else:
-                tbl_name = self.tbl.name + '_grid'
+                tbl_name = self.tbl.name + '_view'
             sort_fields[key].field = tbl_name + "." + key
             sort_fields[key].order = direction
 
@@ -321,7 +320,7 @@ class Grid:
                 order += f"{sort.field} {sort.order}, "
 
         for field in self.tbl.pkey.columns:
-            order += f'"{self.tbl.grid_view}"."{field}", '
+            order += f'"{self.tbl.view}"."{field}", '
 
         order = order[0:-2]
 
@@ -339,26 +338,15 @@ class Grid:
                 (key in self.tbl.fields or key == 'rowid') and
                 'source' not in self.tbl.fields[key]
             ):
-                cols.append(f'"{self.tbl.grid_view}"."{key}"')
+                cols.append(f'"{self.tbl.view}"."{key}"')
 
         select = ', '.join(cols)
         cond = self.get_cond_expr()
         order = self.make_order_by()
 
-        if (self.tbl.name + '_grid') in self.db.user_tables:
-            view_alias = self.tbl.name + "_grid"
-            join_view = "join " + self.tbl.name + "_grid on "
-
-            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
-                   for col in self.tbl.pkey.columns]
-            join_view += ' AND '.join(ons) + ' '
-        else:
-            join_view = ""
-
         sql = "select " + select + "\n"
         sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += self.tbl.joins + "\n"
-        sql += join_view
         sql += "" if not cond else "where " + cond + "\n"
         sql += order
 
@@ -373,19 +361,9 @@ class Grid:
         """Return rowcount for grid"""
         conds = self.get_cond_expr()
 
-        if (self.tbl.name + '_grid') in self.db.user_tables:
-            view_alias = self.tbl.name + '_grid'
-            join_view = f"join {view_alias} on "
-            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
-                   for col in self.tbl.pkey.columns]
-            join_view += ' AND '.join(ons) + ' '
-        else:
-            join_view = ""
-
         sql = "select count(*)\n"
         sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += self.tbl.joins + "\n"
-        sql += join_view
         sql += "" if not conds else f"where {conds}\n"
 
         count = self.db.query(sql, self.cond.params).first()[0]
@@ -403,19 +381,8 @@ class Grid:
             alias_selects[key] = f'{value} as "{key}"'
         select = ', '.join(alias_selects.values())
 
-        if (self.tbl.name + '_grid') in self.db.user_tables:
-            view_alias = self.tbl.name + "_grid"
-            join_view = "join " + self.tbl.view + " on "
-
-            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
-                   for col in self.tbl.pkey.columns]
-            join_view += ' AND '.join(ons) + "\n"
-        else:
-            join_view = ""
-
         sql = "select " + select + "\n"
-        sql += f'from {self.db.schema}."{self.tbl.grid_view}"\n'
-        sql += join_view
+        sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order
@@ -505,11 +472,7 @@ class Grid:
             else:
                 field = parts[0]
                 if "." not in field:
-                    if field in self.tbl.fields:
-                        tbl_name = self.tbl.view
-                    else:
-                        tbl_name = self.tbl.name + '_grid'
-                    field = tbl_name + "." + field
+                    field = self.tbl.view + "." + field
                 else:
                     # Use view instead of original table if exists
                     field_parts = field.split('.')
@@ -549,7 +512,7 @@ class Grid:
             # primary key but not shown in grid
             if (
                 field.name in self.tbl.pkey.columns and
-                field.name not in self.get_grid_columns()
+                field.name not in self.columns
             ):
                 field.hidden = True
 

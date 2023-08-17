@@ -32,9 +32,6 @@ class Table:
         self.view = tbl_name
         if tbl_name + '_view' in db.user_tables:
             self.view = tbl_name + '_view'
-        self.grid_view = self.view
-        if tbl_name + '_grid' in db.user_tables:
-            self.grid_view = tbl_name + '_grid'
 
     def get_type(self, main_type=None):
         """Return type of table"""

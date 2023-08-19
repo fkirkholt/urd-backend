@@ -232,6 +232,7 @@ class Database:
                 'fkeys': table.fkeys,
                 # Get more info about relations for cache, including use
                 'relations': table.relations,
+                'indexes': table.indexes,
                 'hidden': hidden,
                 # fields are needed only when creating cache
                 'fields': None if not self.config else table.fields,
@@ -535,6 +536,20 @@ class Database:
                 })
 
         return self._pkeys
+
+    @property
+    def indexes(self):
+        if not hasattr(self, '_indexes'):
+            self._indexes = Dict()
+            schema_indexes = self.ref.get_multi_indexes(self.schema)
+
+            for key, indexes in schema_indexes.items():
+                tbl_name = key[-1]
+
+                for idx in indexes:
+                    self._indexes[tbl_name][idx.name] = Dict(idx)
+
+        return self._indexes
 
     @property
     def fkeys(self):

@@ -4,17 +4,6 @@ import time
 from addict import Dict
 
 
-def measure_time(func):
-    def wrapper(*arg):
-        t = time.time()
-        res = func(*arg)
-        if (time.time()-t) > 1:
-            print("Time in", func.__name__,  str(time.time()-t), "seconds")
-        return res
-
-    return wrapper
-
-
 class Grid:
     """Contains methods for returning metadata and data for grid"""
 
@@ -43,7 +32,6 @@ class Grid:
 
         return select
 
-    @measure_time
     def get(self, pkey_vals=None):
         """Return all metadata and data to display grid"""
         selects = {}  # dict of select expressions
@@ -329,7 +317,6 @@ class Grid:
 
         return order
 
-    @measure_time
     def get_values(self, selects):
         """Return values for columns in grid"""
         cols = []

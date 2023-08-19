@@ -11,17 +11,6 @@ from grid import Grid
 from sqlglot import parse_one, exp
 
 
-def measure_time(func):
-    def wrapper(*arg):
-        t = time.time()
-        res = func(*arg)
-        if (time.time()-t) > 1:
-            print("Time in", func.__name__,  str(time.time()-t), "seconds")
-        return res
-
-    return wrapper
-
-
 class Table:
     """Contains methods for getting metadata for table"""
 
@@ -102,7 +91,6 @@ class Table:
 
         return privileges
 
-    @measure_time
     def count_rows(self):
         sql = f'select count(*) from "{self.name}"'
         return self.db.query(sql).first()[0]
@@ -324,7 +312,6 @@ class Table:
 
         return result
 
-    @measure_time
     def init_fkeys(self):
         """Store foreign keys in table object"""
         if (self.db.cache and not self.db.config):
@@ -332,7 +319,6 @@ class Table:
             return
         self._fkeys = self.db.fkeys[self.name]
 
-    @measure_time
     def init_fields(self):
         """Store Dict of fields in table object"""
         if (self.db.cache and not self.db.config):
@@ -403,7 +389,6 @@ class Table:
 
         self._fields = fields
 
-    @measure_time
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
         if self.db.cache and not self.db.config:

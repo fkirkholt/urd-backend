@@ -12,17 +12,6 @@ from ruamel.yaml.compat import StringIO
 from table import Table
 
 
-def measure_time(func):
-    def wrapper(*arg):
-        t = time.time()
-        res = func(*arg)
-        if (time.time()-t) > 1:
-            print("Time in", func.__name__,  str(time.time()-t), "seconds")
-        return res
-
-    return wrapper
-
-
 class MyYAML(YAML):
     def dump(self, data, stream=None, **kw):
         inefficient = False
@@ -65,7 +54,6 @@ class Database:
         else:
             self.config = Dict()
 
-    @measure_time
     def init_html_attributes(self):
         """Get data from table html_attributes"""
         attrs = Dict()
@@ -97,7 +85,6 @@ class Database:
 
         return True
 
-    @measure_time
     def get_info(self):
         """Get info about database"""
 
@@ -134,7 +121,6 @@ class Database:
 
         return self.query(sql, {'db_name': self.name}).first().db_comment
 
-    @measure_time
     def get_privileges(self):
         """Get user privileges"""
         privilege = Dict()
@@ -182,7 +168,6 @@ class Database:
         attrs = Dict(self.html_attrs.pop('base', None))
         self.cache = attrs.pop('data-cache', None)
 
-    @measure_time
     def get_tables(self):
         """Return metadata for every table"""
         # Return metadata from cache if set
@@ -294,7 +279,6 @@ class Database:
 
         return modules
 
-    @measure_time
     def get_relation_tables(self, table_name, relation_tables):
         """Get all relation tables in hierarchy recursively"""
         table = self.tables[table_name]
@@ -310,7 +294,6 @@ class Database:
 
         return relation_tables
 
-    @measure_time
     def get_tbl_groups(self):
         """Group tables by prefix or relations"""
         tbl_groups = Dict()
@@ -403,7 +386,6 @@ class Database:
         for group_name in delete_groups:
             del tbl_groups[group_name]
 
-    @measure_time
     def get_sub_tables(self):
         """Return Dict of tables with subordinate tables"""
         sub_tables = Dict()
@@ -464,7 +446,6 @@ class Database:
 
         return node
 
-    @measure_time
     def get_contents(self):
         """Get list of contents"""
         if (self.cache and not self.config):
@@ -626,7 +607,6 @@ class Database:
             print('query:', sql)
         return cursor
 
-    @measure_time
     def init_fkeys(self):
         """Store all foreign keys in database object"""
         self._fkeys = Dict()
@@ -646,7 +626,6 @@ class Database:
 
                 self._fkeys[fkey.table][fkey.name] = Dict(fkey)
 
-    @measure_time
     def init_relations(self):
         """Store all has-many relations in database object"""
 

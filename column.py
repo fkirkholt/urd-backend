@@ -1,17 +1,6 @@
 import time
 
 
-def measure_time(func):
-    def wrapper(*arg):
-        t = time.time()
-        res = func(*arg)
-        if (time.time()-t) > 1:
-            print("Time in", func.__name__,  str(time.time()-t), "seconds")
-        return res
-
-    return wrapper
-
-
 class Column:
     def __init__(self, tbl, col):
         self.db = tbl.db
@@ -62,7 +51,6 @@ class Column:
 
             self.db.query(sql).commit()
 
-    @measure_time
     def check_use(self):
         """Check ratio of columns that's not null"""
         if not self.tbl.rowcount:
@@ -80,7 +68,6 @@ class Column:
 
         return use
 
-    @measure_time
     def check_frequency(self):
         """Check if one value is used much more than others"""
         if not self.tbl.rowcount:

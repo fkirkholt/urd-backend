@@ -2,17 +2,6 @@ import time
 from addict import Dict
 
 
-def measure_time(func):
-    def wrapper(*arg):
-        t = time.time()
-        res = func(*arg)
-        if (time.time()-t) > 1:
-            print("Time in", func.__name__,  str(time.time()-t), "seconds")
-        return res
-
-    return wrapper
-
-
 class Field:
 
     def __init__(self, tbl, name):
@@ -20,7 +9,6 @@ class Field:
         self.db = tbl.db
         self.name = name
 
-    @measure_time
     def get(self, col):
         self.element, type_ = self.get_element(col)
 
@@ -170,7 +158,6 @@ class Field:
 
         return condition, params
 
-    @measure_time
     def get_options(self, condition, params):
 
         fkey = self.tbl.get_fkey(self.name)

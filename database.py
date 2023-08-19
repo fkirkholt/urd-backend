@@ -555,7 +555,20 @@ class Database:
     def fkeys(self):
         """Get all foreign keys of table"""
         if not hasattr(self, '_fkeys'):
-            self.init_fkeys()
+            self._fkeys = Dict()
+            schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+
+            for key, fkeys in schema_fkeys.items():
+                for fkey in fkeys:
+                    fkey = Dict(fkey)
+                    fkey.table = key[-1]
+
+                    # Can't extract constraint names in SQLite
+                    if not fkey.name:
+                        fkey.name = fkey.table + '_'
+                        fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
+
+                    self._fkeys[fkey.table][fkey.name] = Dict(fkey)
 
         return self._fkeys
 
@@ -563,7 +576,15 @@ class Database:
     def relations(self):
         """Get all has-many relations of table"""
         if not hasattr(self, '_relations'):
-            self.init_relations()
+            self._relations = Dict()
+            schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+
+            for key, fkeys in schema_fkeys.items():
+                for fkey in fkeys:
+                    fkey = Dict(fkey)
+                    fkey.table = key[1]
+                    fkey.schema = key[0] or self.db.schema
+                    self._relations[fkey.referred_table][fkey.name] = fkey
 
         return self._relations
 
@@ -621,40 +642,6 @@ class Database:
             print("Query took " + str(time.time()-t) + " seconds")
             print('query:', sql)
         return cursor
-
-    def init_fkeys(self):
-        """Store all foreign keys in database object"""
-        self._fkeys = Dict()
-
-        schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
-
-        for key, fkeys in schema_fkeys.items():
-
-            for fkey in fkeys:
-                fkey = Dict(fkey)
-                fkey.table = key[-1]
-
-                # Can't extract constraint names in SQLite
-                if not fkey.name:
-                    fkey.name = fkey.table + '_'
-                    fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
-
-                self._fkeys[fkey.table][fkey.name] = Dict(fkey)
-
-    def init_relations(self):
-        """Store all has-many relations in database object"""
-
-        self._relations = Dict()
-
-        schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
-
-        for key, fkeys in schema_fkeys.items():
-
-            for fkey in fkeys:
-                fkey = Dict(fkey)
-                fkey.table = key[1]
-                fkey.schema = key[0] or self.db.schema
-                self._relations[fkey.referred_table][fkey.name] = fkey
 
     def export_as_sql(self, dialect: str, include_recs: bool,
                       select_recs: bool):

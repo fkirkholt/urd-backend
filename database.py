@@ -494,9 +494,10 @@ class Database:
                 "contents": contents,
                 "config": self.config
             }
-            self.attrs['data-cache'] = cache
-            self.attrs.pop('cache')
-            attrs_txt = json.dumps(self.attrs)
+            attrs = {
+                'data-cache': cache
+            }
+            attrs_txt = json.dumps(attrs)
 
             if count:
                 sql = """

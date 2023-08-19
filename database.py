@@ -7,20 +7,7 @@ import sqlglot
 import simplejson as json
 from addict import Dict
 from expression import Expression
-from ruamel.yaml import YAML
-from ruamel.yaml.compat import StringIO
 from table import Table
-
-
-class MyYAML(YAML):
-    def dump(self, data, stream=None, **kw):
-        inefficient = False
-        if stream is None:
-            inefficient = True
-            stream = StringIO()
-        YAML.dump(self, data, stream, **kw)
-        if inefficient:
-            return stream.getvalue()
 
 
 class Database:

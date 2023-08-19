@@ -22,25 +22,26 @@ class Table:
         if tbl_name + '_view' in db.user_tables:
             self.view = tbl_name + '_view'
 
-    def get_type(self, main_type=None):
+    @property
+    def type(self):
         """Return type of table"""
-        if not hasattr(self, 'type'):
-            self.init_type(main_type)
+        if not hasattr(self, '_type'):
+            self.init_type()
 
-        return self.type
+        return self._type
 
-    def init_type(self, main_type=None):
-        """Find type. One of 'table', 'list', 'xref', 'view' """
+    def init_type(self):
+        """Find type. One of 'table', 'list', 'xref', 'ext', 'view' """
         if (self.db.cache and not self.db.config):
-            self.type = self.db.cache.tables[self.name].type
-            return self.type
+            self._type = self.db.cache.tables[self.name].type
+            return self._type
 
-        if not main_type:
+        if not hasattr(self, 'main_type'):
             tbl_names = self.db.refl.get_table_names(self.db.schema)
-            main_type = 'table' if self.name in tbl_names else 'view'
+            self.main_type = 'table' if self.name in tbl_names else 'view'
 
         # Data type of primary key column
-        type_ = None
+        pkey_type = None
 
         # Find data type for first pkey column
         if self.pkey and len(self.pkey.columns) and self.pkey.columns != ['rowid']:
@@ -50,22 +51,20 @@ class Table:
                 if col['name'] == colname:
                     pkey_col = col
                     break
-            type_ = pkey_col['type'].python_type.__name__
+            pkey_type = pkey_col['type'].python_type.__name__
 
-        tbl_type = main_type
+        self._type = self.main_type
 
         if (self.name[-5:] == "_list" or self.name[-6:] == "_liste"):
-            tbl_type = "list"
+            self._type = "list"
         elif self.name[-5:] in ("_xref", "_link"):
-            tbl_type = "xref"
+            self._type = "xref"
         elif self.name[-4:] == "_ext":
-            tbl_type = "ext"
-        elif type_ == 'str':
-            tbl_type = "list"
+            self._type = "ext"
+        elif pkey_type == 'str':
+            self._type = "list"
 
-        self.type = tbl_type
-
-        return tbl_type
+        return self._type
 
     def user_privileges(self):
         """Return privileges of database user"""
@@ -413,9 +412,6 @@ class Table:
 
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
-        if not hasattr(self, 'type'):
-            self.get_type()
-
         table_name = self.name
         if self.type == 'view':
             sql = self.db.expr.view_definition()

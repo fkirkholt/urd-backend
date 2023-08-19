@@ -70,7 +70,7 @@ class Grid:
 
         data = Dict({
             'name': self.tbl.name,
-            'type': self.tbl.get_type(),
+            'type': self.tbl.type,
             'records': recs,
             'count_records': self.get_rowcount(),
             'fields': self.tbl.fields,
@@ -250,7 +250,6 @@ class Grid:
 
         fkeys = self.tbl.fkeys
         hidden = self.tbl.is_hidden()
-        type_ = self.tbl.get_type()
         for key, field in self.tbl.fields.items():
             # Don't show hdden columns
             if(
@@ -265,7 +264,7 @@ class Grid:
             if (
                 [field.name] == self.tbl.pkey.columns
                 and field.datatype == "int"
-                and type_ != 'list'
+                and self.tbl.type != 'list'
                 and field.name not in fkeys
                 and hidden is False
             ):

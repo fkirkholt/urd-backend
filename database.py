@@ -191,8 +191,7 @@ class Database:
 
             table = Table(self, tbl_name)
 
-            main_type = 'table' if tbl_name in (tbl_names) else 'view'
-            tbl_type = table.get_type(main_type)
+            table.main_type = 'table' if tbl_name in (tbl_names) else 'view'
 
             # Hides table if user has marked the table to be hidden
             if 'hidden' in self.config.tables[tbl_name]:
@@ -205,8 +204,8 @@ class Database:
 
             # Change table type if set in config
             if 'type' in self.config.tables[tbl_name]:
-                if tbl_type != self.config.tables[tbl_name].type:
-                    tbl_type = self.config.tables[tbl_name].type
+                if table.type != self.config.tables[tbl_name].type:
+                    table.type = self.config.tables[tbl_name].type
                 else:
                     del self.config.tables[tbl_name].type
                     if not self.config.tables[tbl_name]:
@@ -223,7 +222,7 @@ class Database:
 
             self.tables[tbl_name] = Dict({
                 'name': tbl_name,
-                'type': tbl_type,
+                'type': table.type,
                 'view': view,
                 'icon': None,
                 'label': self.get_label(tbl_name),

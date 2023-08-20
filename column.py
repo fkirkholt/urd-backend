@@ -16,7 +16,7 @@ class Column:
             self.precision = col.type.precision
         if 'auto_increment' in col:
             self.auto_increment = col.auto_increment
-        self.default = col.column_def
+        self.default = col.default
         try:
             self.datatype = col.type.python_type.__name__
         except Exception as e:

@@ -33,10 +33,8 @@ class Grid:
         return select
 
     def get(self, pkey_vals=None):
-        from table import Table
         """Return all metadata and data to display grid"""
         selects = {}  # dict of select expressions
-        has_view = self.tbl.name + '_grid' in self.db.user_tables
 
         for col in self.tbl.pkey.columns:
             selects[col] = f'"{self.tbl.view}"."{col}"'
@@ -60,21 +58,8 @@ class Grid:
                     continue
                 selects[key] = action.disabled
 
-        if has_view:
-            view_name = self.tbl.name + '_grid'
-            view = Table(self.db, view_name)
-            cols = self.db.refl.get_columns(view_name)
-            grid_columns = [col['name'] for col in cols]
-            for field_name, field in view.fields.items():
-                if field_name not in self.tbl.fields:
-                    field.virtual = True
-                    field.table_name = view_name
-                    self.tbl.fields[field_name] = field
-        else:
-            grid_columns = self.get_grid_columns()
-
         # Uses grid_columns from view if exists
-        for colname in grid_columns:
+        for colname in self.columns:
             col = self.tbl.fields[colname]
             selects[colname] = self.get_select_expression(col)
 
@@ -90,7 +75,7 @@ class Grid:
             'count_records': self.get_rowcount(),
             'fields': self.tbl.fields,
             'grid': {
-                'columns': grid_columns,
+                'columns': self.columns,
                 'sums': self.get_sums(),
                 'sort_columns': self.sort_columns,
                 'actions': ["show_file"] if "show_file" in actions else []
@@ -243,15 +228,31 @@ class Grid:
 
         return actions
 
-    def get_grid_columns(self):
+    @property
+    def columns(self):
         """Return columns belonging to grid"""
+        from table import Table
+        has_view = self.tbl.name + '_grid' in self.db.user_tables
+        if has_view:
+            view_name = self.tbl.name + '_grid'
+            view = Table(self.db, view_name)
+            cols = self.db.refl.get_columns(view_name)
+            self._columns = [col['name'] for col in cols]
+            for field_name, field in view.fields.items():
+                if field_name not in self.tbl.fields:
+                    field.virtual = True
+                    field.table_name = view_name
+                    self.tbl.fields[field_name] = field
+
+            return self._columns
+
         grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
         if grid_idx:
-            columns = grid_idx.columns
+            self._columns = grid_idx.columns
         else:
             fkeys = self.tbl.fkeys
             hidden = self.tbl.is_hidden()
-            columns = []
+            self._columns = []
             for key, field in self.tbl.fields.items():
                 # Don't show hdden columns
                 if (
@@ -271,11 +272,11 @@ class Grid:
                     and hidden is False
                 ):
                     continue
-                columns.append(key)
-                if len(columns) == 5:
+                self._columns.append(key)
+                if len(self._columns) == 5:
                     break
 
-        return columns
+        return self._columns
 
     def make_order_by(self):
         """Return 'order by'-clause"""
@@ -535,7 +536,7 @@ class Grid:
             # primary key but not shown in grid
             if (
                 field.name in self.tbl.pkey.columns and
-                field.name not in self.get_grid_columns()
+                field.name not in self.columns
             ):
                 field.hidden = True
 

@@ -104,6 +104,9 @@ class Database:
 
     def get_comment(self):
         """Get database comment"""
+        if self.engine.name == 'sqlite':
+            return None
+
         sql = self.expr.databases(self.name)
 
         return self.query(sql, {'db_name': self.name}).first().db_comment
@@ -207,6 +210,11 @@ class Database:
             if tbl_name + '_view' in view_names:
                 view = tbl_name + '_view'
 
+            try:
+                comment = self.refl.get_table_comment(tbl_name)['text']
+            except Exception:
+                comment = None
+
             self.tables[tbl_name] = Dict({
                 'name': tbl_name,
                 'type': table.type,
@@ -215,7 +223,7 @@ class Database:
                 'label': self.get_label(tbl_name),
                 'rowcount': None if not self.config else table.rowcount,
                 'pkey': table.pkey,
-                'description': self.refl.get_table_comment(tbl_name)['text'],
+                'description': comment,
                 'fkeys': table.fkeys,
                 # Get more info about relations for cache, including use
                 'relations': table.relations,

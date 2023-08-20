@@ -309,7 +309,7 @@ class Grid:
                 order += f"{sort.field} {sort.order}, "
 
         for field in self.tbl.pkey.columns:
-            order += f'"{self.tbl.grid_view}"."{field}", '
+            order += f'"{self.tbl.view}"."{field}", '
 
         order = order[0:-2]
 
@@ -332,20 +332,9 @@ class Grid:
         cond = self.get_cond_expr()
         order = self.make_order_by()
 
-        if (self.tbl.name + '_grid') in self.db.user_tables:
-            view_alias = self.tbl.name + "_grid"
-            join_view = "join " + self.tbl.name + "_grid on "
-
-            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
-                   for col in self.tbl.pkey.columns]
-            join_view += ' AND '.join(ons) + ' '
-        else:
-            join_view = ""
-
         sql = "select " + select + "\n"
         sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += self.tbl.joins + "\n"
-        sql += join_view
         sql += "" if not cond else "where " + cond + "\n"
         sql += order
 
@@ -360,19 +349,9 @@ class Grid:
         """Return rowcount for grid"""
         conds = self.get_cond_expr()
 
-        if (self.tbl.name + '_grid') in self.db.user_tables:
-            view_alias = self.tbl.name + '_grid'
-            join_view = f"join {view_alias} on "
-            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
-                   for col in self.tbl.pkey.columns]
-            join_view += ' AND '.join(ons) + ' '
-        else:
-            join_view = ""
-
         sql = "select count(*)\n"
         sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += self.tbl.joins + "\n"
-        sql += join_view
         sql += "" if not conds else f"where {conds}\n"
 
         count = self.db.query(sql, self.cond.params).first()[0]
@@ -390,19 +369,8 @@ class Grid:
             alias_selects[key] = f'{value} as "{key}"'
         select = ', '.join(alias_selects.values())
 
-        if (self.tbl.name + '_grid') in self.db.user_tables:
-            view_alias = self.tbl.name + "_grid"
-            join_view = "join " + self.tbl.view + " on "
-
-            ons = [f'"{view_alias}"."{col}" = "{self.tbl.view}"."{col}"'
-                   for col in self.tbl.pkey.columns]
-            join_view += ' AND '.join(ons) + "\n"
-        else:
-            join_view = ""
-
         sql = "select " + select + "\n"
-        sql += f'from {self.db.schema}."{self.tbl.grid_view}"\n'
-        sql += join_view
+        sql += f'from {self.db.schema}."{self.tbl.view}"\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order

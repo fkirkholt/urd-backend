@@ -217,6 +217,16 @@ class Table:
 
         self._joins = "\n".join(joins)
 
+        if (self.name + '_grid') in self.db.user_tables:
+            join_view = "join " + self.grid_view + " on "
+            ons = [f'"{self.grid_view}"."{col}" = "{self.view}"."{col}"'
+                   for col in self.pkey.columns]
+            join_view += ' AND '.join(ons) + "\n"
+        else:
+            join_view = ""
+
+        self._joins += "\n" + join_view
+
         return self._joins
 
     def get_relation(self, alias):

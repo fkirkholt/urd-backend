@@ -231,6 +231,8 @@ class Grid:
     @property
     def columns(self):
         """Return columns belonging to grid"""
+        if self.db.cache:
+            return self.db.cache.tables[self.tbl.name].grid.columns
         from table import Table
         has_view = self.tbl.name + '_grid' in self.db.user_tables
         if has_view:

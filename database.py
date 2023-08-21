@@ -8,6 +8,7 @@ import simplejson as json
 from addict import Dict
 from expression import Expression
 from table import Table
+from grid import Grid
 
 
 class Database:
@@ -180,6 +181,7 @@ class Database:
             hidden = tbl_name[0:1] == "_"
 
             table = Table(self, tbl_name)
+            grid = Grid(table)
 
             table.main_type = 'table' if tbl_name in (tbl_names) else 'view'
 
@@ -231,6 +233,9 @@ class Database:
                 'hidden': hidden,
                 # fields are needed only when creating cache
                 'fields': None if not self.config else table.fields,
+                'grid': None if not self.config else {
+                    'columns': grid.columns 
+                }
             })
 
         return self.tables

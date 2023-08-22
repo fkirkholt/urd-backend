@@ -231,9 +231,12 @@ class Grid:
     @property
     def columns(self):
         """Return columns belonging to grid"""
-        if self.db.cache:
+        if hasattr(self, '_columns'):
+            return self._columns
+        elif self.db.cache:
             return self.db.cache.tables[self.tbl.name].grid.columns
         from table import Table
+        self._columns = []
         has_view = self.tbl.name + '_grid' in self.db.user_tables
         if has_view:
             view_name = self.tbl.name + '_grid'
@@ -248,35 +251,44 @@ class Grid:
 
             return self._columns
 
+        has_view = self.tbl.name + '_view' in self.db.user_tables
+        if has_view:
+            view_name = self.tbl.name + '_view'
+            view = Table(self.db, view_name)
+            for field_name, field in view.fields.items():
+                if field_name not in self.tbl.fields:
+                    field.virtual = True
+                    field.table_name = view_name
+                    self.tbl.fields[field_name] = field
+
         grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
         if grid_idx:
             self._columns = grid_idx.columns
-        else:
-            fkeys = self.tbl.fkeys
-            hidden = self.tbl.is_hidden()
-            self._columns = []
-            for key, field in self.tbl.fields.items():
-                # Don't show hdden columns
-                if (
-                    field.name[0:1] == '_' or
-                    field.name[0:6].lower() == 'const_'
-                ):
-                    continue
-                if field.size and (field.size < 1 or field.size >= 255):
-                    continue
-                if field.datatype == 'json':
-                    continue
-                if (
-                    [field.name] == self.tbl.pkey.columns
-                    and field.datatype == "int"
-                    and self.tbl.type != 'list'
-                    and field.name not in fkeys
-                    and hidden is False
-                ):
-                    continue
-                self._columns.append(key)
-                if len(self._columns) == 5:
-                    break
+
+        fkeys = self.tbl.fkeys
+        hidden = self.tbl.is_hidden()
+        for key, field in self.tbl.fields.items():
+            # Don't show hdden columns
+            if (
+                field.name[0:1] == '_' or
+                field.name[0:6].lower() == 'const_'
+            ):
+                continue
+            if field.size and (field.size < 1 or field.size >= 255):
+                continue
+            if field.datatype == 'json':
+                continue
+            if (
+                [field.name] == self.tbl.pkey.columns
+                and field.datatype == "int"
+                and self.tbl.type != 'list'
+                and field.name not in fkeys
+                and hidden is False
+            ):
+                continue
+            if not (field.virtual or (not grid_idx and not len(self._columns) > 4)):
+                continue
+            self._columns.append(key)
 
         return self._columns
 

@@ -122,7 +122,7 @@ class Database:
         else:
             with self.engine.connect() as cnxn:
                 param = {'schema': self.schema}
-                priv = cnxn.execute(text(sql), param).fetchone()
+                priv = cnxn.execute(text(sql), param).first()
             privilege.create = int(priv.create)
             privilege.usage = 0
 

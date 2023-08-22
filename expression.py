@@ -181,6 +181,15 @@ class Expression:
             where nspname = :schema
             """
             return sql
+        elif self.platform in ['mysql', 'mariadb']:
+            # https://bugs.mysql.com/bug.php?id=75423
+            return """
+            select count(*) as "create"
+            from information_schema.schema_privileges
+            where grantee = CONCAT('\\'',REPLACE(CURRENT_USER(),'@','\\'@\\''),'\\'')
+            and table_schema = :schema
+            and privilege_type = 'CREATE'
+            """
         else:
             return None
 

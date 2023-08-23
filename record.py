@@ -304,7 +304,7 @@ class Record:
         filepath_idx_name = self.tbl.name + '_filepath_idx'
         filepath_idx = self.tbl.indexes.get(filepath_idx_name, None)
         select = " || '/' || ".join(filepath_idx.columns)
-        conds = [f"{key} = :key" for key in self.pk]
+        conds = [f"{key} = :{key}" for key in self.pk]
         cond = " and ".join(conds)
         schema = self.db.schema
 

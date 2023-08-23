@@ -79,7 +79,11 @@ class Table:
         })
         sql = self.db.expr.table_privileges()
         if sql:
-            params = {'user': self.db.user, 'table': self.name}
+            privileges.select = 0
+            privileges.insert = 0
+            privileges['update'] = 0
+            privileges.delete = 0
+            params = {'schema': self.db.schema, 'table': self.name}
             rows = self.db.query(sql, params).fetchall()
             for row in rows:
                 if row.privilege_type == 'SELECT':

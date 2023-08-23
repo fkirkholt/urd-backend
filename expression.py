@@ -198,8 +198,17 @@ class Expression:
             return """
             select privilege_type
             from information_schema.table_privileges
-            where grantee = :user
+            where grantee = current_user
+            and table_schema = :schema
             and table_name = :table;
+            """
+        elif self.platform in ['mysql', 'mariadb']:
+            return """
+            select privilege_type
+            from information_schema.table_privileges
+            where grantee = CONCAT('\\'',REPLACE(CURRENT_USER(),'@','\\'@\\''),'\\'')
+            and table_schema = :schema
+            and table_name = :table
             """
         else:
             return None

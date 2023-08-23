@@ -173,10 +173,11 @@ class Expression:
                   and HAS_DBACCESS(name) = 1;
             """
 
-    def privilege(self):
+    def schema_privileges(self):
         if self.platform == 'postgresql':
-            sql = "select pg_catalog.has_schema_privilege"
-            sql += """(current_user, nspname, 'CREATE') "create"
+            return """
+            select pg_catalog.has_schema_privilege(current_user, nspname, 'CREATE') "create",
+                   pg_catalog.has_schema_privilege(current_user, nspname, 'USAGE') "usage"
             from pg_catalog.pg_namespace
             where nspname = :schema
             """
@@ -184,11 +185,10 @@ class Expression:
         elif self.platform in ['mysql', 'mariadb']:
             # https://bugs.mysql.com/bug.php?id=75423
             return """
-            select count(*) as "create"
+            select privilege_type
             from information_schema.schema_privileges
             where grantee = CONCAT('\\'',REPLACE(CURRENT_USER(),'@','\\'@\\''),'\\'')
             and table_schema = :schema
-            and privilege_type = 'CREATE'
             """
         else:
             return None

@@ -78,6 +78,7 @@ class Database:
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
+        privilege = self.get_privileges()
 
         info = {
             "branch": branch,
@@ -93,10 +94,11 @@ class Database:
                 "contents": self.get_contents(),
                 "description": self.get_comment(),
                 "html_attrs": self.html_attrs,
+                "privilege": privilege
             },
             "user": {
                 "name": self.user,
-                "admin": self.get_privileges().create
+                "admin": privilege.create,
             },
             "config": self.config
         }
@@ -115,16 +117,35 @@ class Database:
     def get_privileges(self):
         """Get user privileges"""
         privilege = Dict()
-        sql = self.expr.privilege()
+        sql = self.expr.schema_privileges()
 
         if not sql:
+            privilege.select = 1
+            privilege.insert = 1
+            privilege['update'] = 1
+            privilege.delete = 1
             privilege.create = 1
         else:
             with self.engine.connect() as cnxn:
                 param = {'schema': self.schema}
-                priv = cnxn.execute(text(sql), param).first()
-            privilege.create = int(priv.create)
-            privilege.usage = 0
+                if self.engine.name == 'postgresql':
+                    priv = cnxn.execute(text(sql), param).first()
+                    privilege.create = priv.create
+                    privilege.usage = priv.usage
+                    return privilege
+
+                rows = cnxn.execute(text(sql), param).fetchall()
+                for row in rows:
+                    if row.privilege_type == 'SELECT':
+                        privilege.select = 1
+                    elif row.privilege_type == 'INSERT':
+                        privilege.insert = 1
+                    elif row.privilege_type == 'UPDATE':
+                        privilege['update'] = 1
+                    elif row.privilege_type == 'DELETE':
+                        privilege.delete = 1
+                    elif row.privilege_type == 'CREATE':
+                        privilege.create = 1
 
         return privilege
 

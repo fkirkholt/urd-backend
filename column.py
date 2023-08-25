@@ -14,8 +14,8 @@ class Column:
         if hasattr(col.type, 'scale'):
             self.scale = col.type.scale
             self.precision = col.type.precision
-        if 'auto_increment' in col:
-            self.auto_increment = col.auto_increment
+        if 'autoincrement' in col:
+            self.auto_increment = col.autoincrement
         self.default = col.default
         try:
             self.datatype = col.type.python_type.__name__

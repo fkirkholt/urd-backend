@@ -432,6 +432,9 @@ class Table:
         table_name = self.name
         if self.type == 'view':
             sql = self.db.expr.view_definition()
+            if sql is None:
+                self._relations = []
+                return
             params = {'schema': self.db.schema, 'table': self.name}
             view_def = self.db.query(sql, params).first()[0]
 

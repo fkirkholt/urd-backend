@@ -222,6 +222,9 @@ filbanen.
 Hvis man bruker SQLite, kan man angi stien relativt til stien til
 SQLite-filen.
 
+Hvis man vil generere filnavn fra en sti og en kolonne i tabellen,
+kan man opprette en generert kolonne.
+
 ## Vise har-mange-relasjoner
 
 Fremmednøkler bør være knytta til indekser når man man skal gå andre
@@ -293,11 +296,22 @@ Man kan gi attributter til følgende elementer:
 - feltsett
 - felt
 
-Et tabellsett kan representeres av et tabellprefiks, som altså brukes til å gruppere tabeller. Feltsett representeres av et kolonneprefiks som grupperer kolonner. F.eks. vil kolonnene `periode_fra` og `periode_til` ha felles prefiks `periode_`, som man kan gi html-attributter ved å registrere en rad med `element` lik "fieldset" og `identifier` lik "periode_".
+Et tabellsett kan representeres av et tabellprefiks, som altså brukes
+til å gruppere tabeller. Feltsett representeres av et kolonneprefiks som
+grupperer kolonner. F.eks. vil kolonnene `periode_fra` og `periode_til` ha
+felles prefiks `periode_`, som man kan gi html-attributter ved å registrere
+en rad med `element` lik "fieldset" og `identifier` lik "periode_".
 
-Kolonner i databasen som har samme navn, kan gis samme attributter ved å angi kolonneanvnet som `identifier`. Dersom man ønsker å gi spesielle attributter for et felt i en spesifikk tabell, kan man angi `identifier` som `tabellnavn.kolonnenavn`, dvs. på samme måte man bruker tabellnavnet sammen med kolonnenavnet i en sql-spørring.
+Kolonner i databasen som har samme navn, kan gis samme attributter ved å
+angi kolonneanvnet som `identifier`. Dersom man ønsker å gi spesielle
+attributter for et felt i en spesifikk tabell, kan man angi `identifier`
+som `tabellnavn.kolonnenavn`, dvs. på samme måte man bruker tabellnavnet
+sammen med kolonnenavnet i en sql-spørring.
 
-Når man oppretter en cachet versjon av databasestrukturen, opprettes det en rad med `element` lik "database" og `identifier` lik databasenavnet, og det opprettes `data-cache` i `attributes`. Hvis ikke html-tabellene finnes fra før, opprettes disse også når man genererer cache.
+Når man oppretter en cachet versjon av databasestrukturen, opprettes det
+en rad med `element` lik "database" og `identifier` lik databasenavnet, og
+det opprettes `data-cache` i `attributes`. Hvis ikke html-tabellene finnes
+fra før, opprettes disse også når man genererer cache.
 
 # Views
 

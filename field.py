@@ -185,7 +185,7 @@ class Field:
         self.view = self.get_view(fkey) if fkey else self.name
 
         sql = f"""
-        select {value_field} as value, {self.view or value_field} as label
+        select distinct {value_field} as value, {self.view or value_field} as label
         from   {self.db.schema}."{from_table}" "{self.name}"
         where  {condition}
         order by {self.view or value_field}

@@ -259,59 +259,62 @@ brukernavn skal ha default-verdi `current_user`.
 
 # HTML-attributter
 
-Det er mulig å definere html-attributter for å tilpasse spesielle
-html-elementer i grensesnittet. Her kan man f.eks. angi en beskrivelse av et
-felt med "title"-attributtet, så blir beskrivelsen til feltet vist når man
-holder muspekeren over ledeteksten eller feltet. Man kan også angi
-Tachyons-klasser for å tune utseendet, jf <https://tachyons.io/docs/>
+Man kan definere html-attributter i tabellen `html_attributes`. Denne
+kan enten opprettes manuelt, eller man kan opprette en cachet versjon av
+databasestrukten, som da vil generere denne tabellene. Cachen legges i denne
+tabellen under selector `base`.
 
-Bare noen få attributter støttes foreløpig:
+Tabellen har kun to kolonner: `selector` og `attributes`. Førstnevnte er
+css-selector. Her kan angis css selector for DOM-elementer. De ulike feltene
+og feltsettene har fått navn slik at det skal være enkelt å velge dem
+med en css-selector.
 
-- class
+I kolonnen `attributes` kan man angi alle mulige html-attributter for
+valgte elementer. Disse vil så tilordnes elementene når siden tegnes
+opp. Attributtene legges inn som yaml.
 
-  Brukes på input-felter i postskjemaet og celler i tabellen
+Ettersom Urdr støtter [Tachyons](https://tachyons.io/), kan man
+angi Tachyons-klasser her. De fleste elementene er fra før stylet med
+Tachyons-klasser, så de klassene som angis her, vil erstatte dem som er i
+koden. Man kan inspisere et element på siden for å se hvilke klasser som
+er brukt fra før, så kan man evt. kopiere disse, og erstatte dem man vil.
 
-- style
+Hvert felt i postvisningen er omslutta av en `label`-tagg; dette betegnes som
+indirekte label. Det er gjort slik for å kunne koble label til input. Vi
+kan ikke bruke `for`-attributtet for å knytte label til riktig input, for
+dette krever unik id, og med den fleksibiliteten som er i Urdr kan man lett
+få samme id to ganger.
 
-  Brukes på input-felter i postskjemaet
+For å kunne style selve ledeteksten, er denne lagt inn i en `b`-tagg.
+Denne brukes i moderne html bl.a. for å framheve nøkkelord. Og den uthevede
+delen av en ledetekst er å rekne som nøkkelord.
 
-- title
+Det er lagt inn mulighet for å legge til tekst før eller etter nøkkelordet
+til en label. Dette gjøres ved å legge til attributt `data-before` eller
+`data-after` med ønsket tekst i `b`-elementet under `label`. Dette gjør
+det mulig å legge til kolon etter label, eller stjerne for å markere at
+et felt er obligatorisk. Sistnevnte kan oppnås med selector `label b:has(+
+[required])` sammen med attributt `data-after: '＊'`.
 
-  Brukes til feltbeskrivelse i postvisning/postskjema. Brukes også til å
-  beskrive selve databasen, og denne teksten vil da vises når man åpner en
-  database.
+Man kan også legge til f.eks. en måleenhet etter et felt, ved å legge inn
+måleenheten i `data-after`-attributt til label. Label består da både av
+selve nøkkelordet, og måleenheten som kommer etter verdien.
 
-- pattern
+Man kan lage dynamiske lenker ved å bruke `onclick`-attributt, sammen med
+`this.dataset.value`. Det er nemlig lagt inn `data-value` som attributt
+til elementet som viser verdi av et felt, for å kunne brukes til dette.
 
-  Brukes på input-felter av typen 'text' i postskjemaet
+Det er også mulig å bytte ut `this.dataset.value` med `this.nodeValue`.
 
-Man kan også legge inn attributtet "data-label" for å angi ledetekst for et
-felt, samt "data-format" med verdi "markdown" eller "json" for å angi at et
-felt skal vises som markdown/json.
+Eks:
+~~~ yml
+href: '/url/to/whatever'
+onclick: "location.href=this.href+'?key='+this.dataset.value;return false;"
+~~~
 
-Man kan gi attributter til følgende elementer:
-- database
-- tabellsett
-- tabell
-- feltsett
-- felt
-
-Et tabellsett kan representeres av et tabellprefiks, som altså brukes
-til å gruppere tabeller. Feltsett representeres av et kolonneprefiks som
-grupperer kolonner. F.eks. vil kolonnene `periode_fra` og `periode_til` ha
-felles prefiks `periode_`, som man kan gi html-attributter ved å registrere
-en rad med `element` lik "fieldset" og `identifier` lik "periode_".
-
-Kolonner i databasen som har samme navn, kan gis samme attributter ved å
-angi kolonneanvnet som `identifier`. Dersom man ønsker å gi spesielle
-attributter for et felt i en spesifikk tabell, kan man angi `identifier`
-som `tabellnavn.kolonnenavn`, dvs. på samme måte man bruker tabellnavnet
-sammen med kolonnenavnet i en sql-spørring.
-
-Når man oppretter en cachet versjon av databasestrukturen, opprettes det
-en rad med `element` lik "database" og `identifier` lik databasenavnet, og
-det opprettes `data-cache` i `attributes`. Hvis ikke html-tabellene finnes
-fra før, opprettes disse også når man genererer cache.
+Kan også style grid, f.eks. med bakgrunnsfarge på raden basert på verdier
+i en kolonne. Merk at man da må legge til en default style, ellers vil ikke
+fargene oppdateres riktig ved sortering av tabellen i etterkant.
 
 # Views
 

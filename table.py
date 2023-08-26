@@ -433,10 +433,10 @@ class Table:
         if self.type == 'view':
             sql = self.db.expr.view_definition()
             if sql is None:
-                self._relations = []
-                return
-            params = {'schema': self.db.schema, 'table': self.name}
-            view_def = self.db.query(sql, params).first()[0]
+                view_def = self.db.refl.get_view_definition(self.name, self.db.schema)
+            else:
+                params = {'schema': self.db.schema, 'table': self.name}
+                view_def = self.db.query(sql, params).first()[0]
 
             # get dialect for SQLGlot
             dialect = self.db.engine.name

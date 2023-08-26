@@ -286,7 +286,8 @@ class Record:
         grid.user_filtered = True
         rec = self.get()
 
-        rel = [rel for rel in self.tbl.relations if rel.table == self.tbl.name][0]
+        rel = [rel for rel in self.tbl.relations.values()
+               if rel.table == self.tbl.name][0]
 
         for idx, colname in enumerate(rel.referred_columns):
             foreign = rel.constrained_columns[idx]

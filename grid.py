@@ -1,6 +1,5 @@
 import re
 import math
-import time
 from addict import Dict
 
 
@@ -109,7 +108,6 @@ class Grid:
                     'count_children': row['count_children'],
                     'columns': cols
                 })
-                del row['count_children']
             else:
                 recs.append({'columns': cols})
 

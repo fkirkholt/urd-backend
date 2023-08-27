@@ -241,11 +241,6 @@ relasjonen, sikres også at disse indeksene opprettes. Dette er altså
 helt i tråd med Urdr sin filosofi - å effektivisere spørringer samtidig
 som de definerer hvordan basen vises fram.
 
-Man kan også definere opp en indeks `<tabellnavn>_classification_idx` som gjør
-det mulig å ha en kolonne som definerer hvilken type eller klasse en post har,
-og så ha en utvidelsestabell som definerer spesifikk metadata for denne typen.
-Jf. [Relasjoner](#Relasjoner).
-
 ## Registrere opprettet og oppdatert
 
 For å registrere når en post ble opprettet/endret og av hvem, kan man
@@ -379,16 +374,3 @@ vises under `dokument`.
 Man kan også velge å vise forenklet hierarki. Når man krysser av for dette,
 vises kun de nærmeste relasjonene, og relasjoner til lavere nivåer i hierarkiet
 vises ikke.
-
-Hvis man vil vise noen relasjoner kun for visse typer poster, må man ha en
-klassifisering av posten. Dette gjøres ved å ha en kolonne som brukes til
-klassifisering, og sette en indeks `<tabellnavn>_classification_idx` på denne
-kolonnen. Når man da har en 1:1-relasjon med navn som er lik tabellnavnet pluss
-suffix som samsvarer med en klassifikasjonsverdi, vises denne relasjonen kun
-når denne klassifikasjonen er satt. 
-
-Hvis man f.eks. har en tabell `dokument` og vil angi egne metadata av
-dokumenter av typen "bilde", kan man ha kolonne `type` i dokumenttabellen, med
-indeks `dokument_classification_idx`. Så lager man en tabell `dokument_bilde` med
-primærnøkkel `id` som refererer til `dokument.id`. Når man legger inn "bilde" som
-type, vises relasjonen `dokument_bilde`.

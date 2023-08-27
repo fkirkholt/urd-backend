@@ -14,9 +14,14 @@ class Column:
         if hasattr(col.type, 'scale'):
             self.scale = col.type.scale
             self.precision = col.type.precision
-        if 'autoincrement' in col:
+        if col.autoincrement:
             self.auto_increment = col.autoincrement
-        self.default = col.default
+        if col.default and not col.autoincrement:
+            def_vals = col.default.split('::')
+            default = def_vals[0]
+            self.default = default.replace("'", "")
+        else:
+            self.default = col.default
         try:
             self.datatype = col.type.python_type.__name__
         except Exception as e:

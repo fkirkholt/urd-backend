@@ -3,6 +3,7 @@ from field import Field
 from addict import Dict
 from datetime import datetime
 from sqlalchemy import text
+from column import Column
 
 
 class Record:
@@ -30,7 +31,7 @@ class Record:
         if new:
             values = self.pk
 
-        fields = {}
+        fields = Dict()
 
         for field in self.tbl.fields.values():
             fld = Field(self.tbl, field.name)
@@ -61,12 +62,7 @@ class Record:
         from database import Database
         from table import Table, Grid
 
-        class_idx_name = self.tbl.name + '_classification_idx'
-        class_idx = self.tbl.indexes.get(class_idx_name, None)
-        class_field = Dict({'options': []})
-        if class_idx:
-            class_field_name = class_idx.columns[0]
-            class_field = self.tbl.fields[class_field_name]
+        values = None if len(self.pk) == 0 else self.get_values()
 
         relations = {}
         for key, rel in self.tbl.relations.items():
@@ -82,7 +78,7 @@ class Record:
 
             tbl_rel = Table(db, rel.table)
             columns = db.refl.get_columns(rel.table)
-            tbl_rel.cols = {col['name']: col for col in columns}
+            tbl_rel.cols = {col['name']: Dict(col) for col in columns}
 
             if rel.table not in self.db.user_tables:
                 continue
@@ -100,18 +96,21 @@ class Record:
             # Add condition to fetch only rows that link to record
             conds = Dict()
             count_null_conds = 0
+            show_if = None
 
-            for i, col in enumerate(rel.constrained_columns):
-                val = None if len(self.pk) == 0 else list(self.pk.values())[i]
-                mark = tbl_rel.view + '_' + col
-                expr = f'"{tbl_rel.view}"."{col}" = :{mark}'
+            for i, colname in enumerate(rel.constrained_columns):
+                val = None if len(self.pk) == 0 else values[rel.referred_columns[i]]
+                col = Column(self.tbl, tbl_rel.cols[colname])
+
+                mark = tbl_rel.view + '_' + colname
+                expr = f'"{tbl_rel.view}"."{colname}" = :{mark}'
                 if (
-                    tbl_rel.cols[col]['nullable'] and
-                    col != rel.constrained_columns[0] and
+                    col.nullable and
+                    colname != rel.constrained_columns[0] and
                     rel.referred_columns == list(self.pk.keys()) and
                     rel.index.unique is True
                 ):
-                    expr = f'"{tbl_rel.view}"."{col}" IS NULL'
+                    expr = f'"{tbl_rel.view}"."{colname}" IS NULL'
                     grid2.cond.prep_stmnts.append(expr)
                     count_null_conds += 1
                 else:
@@ -120,7 +119,10 @@ class Record:
 
                 grid.cond.prep_stmnts.append(expr)
                 grid.cond.params[mark] = val
-                conds[col] = val
+                conds[colname] = val
+
+                if (colname[0] == '_' or colname[0:6] == 'const_') and col.default:
+                    show_if = {rel.referred_columns[i]: col.default}
 
             count_records = grid.get_rowcount() if len(self.pk) else 0
 
@@ -145,16 +147,6 @@ class Record:
                 'relationship': relationship,
                 'delete_rule': rel.delete_rule
             })
-
-            # Tables with suffixes that's part of types
-            # should just be shown when the specific type is chosen
-            parts = tbl_rel.name.split("_")
-            suff_1 = parts[-1]
-            suff_2 = '' if len(parts) == 1 else parts[-2]
-            show_if = None
-            for class_ in [opt['value'] for opt in class_field.options]:
-                if (suff_1.startswith(class_) or suff_2.startswith(class_)):
-                    show_if = {class_field_name: class_}
 
             relation.show_if = show_if
 
@@ -195,8 +187,9 @@ class Record:
         # Add condition to fetch only rows that link to record
         conds = Dict()
         pkey_vals = {}
+        values = self.get_values()
         for idx, col in enumerate(rel.constrained_columns):
-            val = None if len(self.pk) == 0 else list(self.pk.values())[idx]
+            val = None if len(self.pk) == 0 else values[rel.referred_columns[idx]]
             mark = tbl_rel.view + '_' + col
             grid.cond.params[mark] = val
             if (
@@ -217,11 +210,8 @@ class Record:
         relation = grid.get()
         relation.conds = conds
 
-        values = [None if len(self.pk) == 0 else list(self.pk.values())[i]
-                  for i in range(len(rel.referred_columns))]
-
         for idx, col in enumerate(rel.constrained_columns):
-            relation.fields[col].default = values[idx]
+            relation.fields[col].default = values[rel.referred_columns[idx]]
             relation.fields[col].defines_relation = True
 
         # If foreign key columns contains primary key

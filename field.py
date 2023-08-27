@@ -1,4 +1,3 @@
-import time
 from addict import Dict
 
 
@@ -52,17 +51,10 @@ class Field:
         ):
             field.extra = "auto_increment"
 
-        if (
-            col.default and not hasattr(col, 'auto_increment') and
-            col.default != 'NULL'
-        ):
-            def_vals = col.default.split('::')
-            default = def_vals[0]
-            default = default.replace("'", "")
-
-            field.default = self.db.expr.replace_vars(default, self.db)
-            if (field.default != default):
-                field.default_expr = default
+        if col.default:
+            field.default = self.db.expr.replace_vars(col.default, self.db)
+            if (field.default != col.default):
+                field.default_expr = col.default
 
         return field
 
@@ -99,7 +91,6 @@ class Field:
         return attributes
 
     def get_condition(self, fields=None):
-        from table import Table
 
         # Find all foreign keys that limit the possible values of the field.
         # These represents hierarchy, and usually linked selects.
@@ -132,27 +123,6 @@ class Field:
                         cond = f"{colname} = :{colname}"
                         conditions.append(cond)
                         params[colname] = fields[col].value
-
-        # Find possible field defining class
-        fkey = self.tbl.get_fkey(self.name)
-        ref_tbl = Table(self.db, fkey.referred_table)
-        class_idx_name = ref_tbl.name + '_classification_idx'
-        class_idx = ref_tbl.indexes.get(class_idx_name, None)
-        class_field = Dict({'options': []})
-        if class_idx:
-            class_field_name = class_idx.columns[0]
-            class_field = ref_tbl.fields[class_field_name]
-
-        # Tables with suffixes that's part of types
-        # should just be shown when the specific type is chosen
-        parts = self.tbl.name.split("_")
-        suff_1 = parts[-1]
-        suff_2 = '' if len(parts) == 1 else parts[-2]
-        condition = None
-        for class_ in [opt['value'] for opt in class_field.options]:
-            if (suff_1.startswith(class_) or suff_2.startswith(class_)):
-                conditions.append(f"{class_field_name} = :{class_field_name}")
-                params[class_field_name] = class_
 
         condition = " AND ".join(conditions) if len(conditions) else ''
 

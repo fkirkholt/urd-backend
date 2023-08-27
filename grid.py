@@ -187,24 +187,8 @@ class Grid:
 
         if not self_relation:
             return None
-
-        ident_cols = None
-        for idx in self.tbl.indexes.values():
-            if idx.columns != self.tbl.pkey and idx.unique:
-                ident_cols = idx.columns
-                if idx.name.endswith("_sort_idx"):
-                    break
-
-        if not ident_cols:
-            return None
-
-        ident_col = None
-        for colname in ident_cols:
-            col = self.tbl.fields[colname]
-            if col.datatype == 'str':
-                ident_col = colname
-
-        return ident_col
+        else:
+            return self.columns[0]
 
     def get_actions(self):
         # Make action for displaying files

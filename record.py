@@ -187,7 +187,11 @@ class Record:
         # Add condition to fetch only rows that link to record
         conds = Dict()
         pkey_vals = {}
-        values = self.get_values()
+
+        if not self.pk:
+            values = {col: None for col in rel.referred_columns}
+        else:
+            values = self.get_values()
         for idx, col in enumerate(rel.constrained_columns):
             val = None if len(self.pk) == 0 else values[rel.referred_columns[idx]]
             mark = tbl_rel.view + '_' + col

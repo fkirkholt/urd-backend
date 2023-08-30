@@ -79,10 +79,10 @@ class Table:
         })
         sql = self.db.expr.table_privileges()
         if sql:
-            privileges.select = 0
-            privileges.insert = 0
-            privileges['update'] = 0
-            privileges.delete = 0
+            privileges.select = self.db.privilege.select or 0
+            privileges.insert = self.db.privilege.insert or 0
+            privileges['update'] = self.db.privilege['update'] or 0
+            privileges.delete = self.db.privilege.delete or 0
             params = {'schema': self.db.schema, 'table': self.name}
             rows = self.db.query(sql, params).fetchall()
             for row in rows:

@@ -78,7 +78,6 @@ class Database:
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
-        privilege = self.get_privileges()
 
         info = {
             "branch": branch,
@@ -94,11 +93,11 @@ class Database:
                 "contents": self.get_contents(),
                 "description": self.get_comment(),
                 "html_attrs": self.html_attrs,
-                "privilege": privilege
+                "privilege": self.privilege
             },
             "user": {
                 "name": self.user,
-                "admin": privilege.create,
+                "admin": self.privilege.create,
             },
             "config": self.config
         }
@@ -114,7 +113,8 @@ class Database:
 
         return self.query(sql, {'db_name': self.name}).first().db_comment
 
-    def get_privileges(self):
+    @property
+    def privilege(self):
         """Get user privileges"""
         privilege = Dict()
         sql = self.expr.schema_privileges()
@@ -147,6 +147,7 @@ class Database:
                     elif row.privilege_type == 'CREATE':
                         privilege.create = 1
 
+        self._privilege = privilege
         return privilege
 
     def create_html_attributes(self):

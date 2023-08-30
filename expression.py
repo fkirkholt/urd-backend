@@ -223,3 +223,11 @@ class Expression:
             """
         else:
             return None
+
+    def table_comments(self):
+        if self.platform in ['mysql', 'mariadb']:
+            return """
+            select table_name, table_comment
+            from   information_schema.tables
+            where table_schema = :schema
+            """

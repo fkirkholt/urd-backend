@@ -233,10 +233,10 @@ class Database:
             if tbl_name + '_view' in view_names:
                 view = tbl_name + '_view'
 
-            try:
-                comment = self.refl.get_table_comment(tbl_name)['text']
-            except Exception:
+            if self.engine.name == 'sqlite' or tbl_name not in self.comments:
                 comment = None
+            else:
+                comment = self.comments[tbl_name]
 
             self.tables[tbl_name] = Dict({
                 'name': tbl_name,
@@ -543,6 +543,22 @@ class Database:
                 cnxn.commit()
 
         return contents
+
+    @property
+    def comments(self):
+        self._comments = {}
+        # SQLAlchemy reflection doesn't work for comments in mysql/mariadb
+        if self.engine.name in ['mysql', 'mariadb']:
+            sql = self.expr.table_comments()
+            rows = self.query(sql, {'schema': self.schema})
+            for row in rows:
+                self._comments[row.table_name] = row.table_comment
+        else:
+            rows = self.refl.get_multi_table_comment(self.schema)
+            for (schema, table), row in rows.items():
+                self._comments[table] = row['text']
+
+        return self._comments
 
     @property
     def pkeys(self):

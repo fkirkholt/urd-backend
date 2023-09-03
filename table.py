@@ -588,44 +588,42 @@ class Table:
 
     def convert(self, colname, from_format, to_format):
 
-        select = ', '.join(self.tbl.pkey.columns)
+        select = ', '.join(self.pkey.columns)
 
         sql = f"""
         select {select}, {colname}
-        from {self.tbl.name}
+        from {self.name}
         """
 
-        cursor = self.db.query(sql)
-        rows = cursor.fetchall()
-        colnames = [col[0] for col in cursor.description]
-        cursor2 = self.db.cnxn.cursor()
+        rows = self.db.query(sql).mappings()
         for row in rows:
-            row = (dict(zip(colnames, row)))
+            if row[colname] is None:
+                continue
             wheres = []
-            params = []
-            for key in self.tbl.pkey.columns:
-                wheres.append(key + '=?')
-                params.append(row[key])
+            params = {}
+            for key in self.pkey.columns:
+                wheres.append(key + '= :' + key)
+                params[key] = row[key]
 
             where = ', '.join(wheres)
 
             try:
-                text = pypandoc.convert_text(row[colname], to_format,
+                value = pypandoc.convert_text(row[colname], to_format,
                                              format=from_format)
             except Exception as e:
                 print('kunne ikke konvertere ' + params[-1])
                 print(e.message)
 
-            params.insert(0, text)
+            params[colname] = value
 
             sql = f"""
-            update {self.tbl.name}
-            set {self.name} = ?
+            update {self.name}
+            set {colname} = :{colname}
             where {where}
             """
 
-            cursor2.execute(sql, params)
-
-        cursor2.commit()
+            with self.db.engine.connect() as conn:
+                conn.execute(text(sql), params)
+                conn.commit()
 
         return 'success'

@@ -43,6 +43,10 @@ class Table:
             tbl_names = self.db.refl.get_table_names(self.db.schema)
             self.main_type = 'table' if self.name in tbl_names else 'view'
 
+        if self.main_type == 'view':
+            self._type = 'view'
+            return 'view'
+
         # Data type of primary key column
         pkey_type = None
 

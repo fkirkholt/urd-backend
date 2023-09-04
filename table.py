@@ -53,7 +53,7 @@ class Table:
         # Find data type for first pkey column
         if self.pkey and len(self.pkey.columns) and self.pkey.columns != ['rowid']:
             colname = self.pkey.columns[0]
-            cols = self.db.refl.get_columns(self.name, self.db.schema)
+            cols = self.db.columns[self.name]
             for col in cols:
                 if col['name'] == colname:
                     pkey_col = col

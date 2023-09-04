@@ -262,6 +262,17 @@ class Database:
 
         return self.tables
 
+    @property
+    def columns(self):
+        if not hasattr(self, '_columns'):
+            self._columns = Dict()
+            columns = self.refl.get_multi_columns(self.schema)
+            for (schema, table), cols in columns.items():
+                self._columns[table] = cols
+
+        return self._columns
+
+
     def is_top_level(self, table):
         """Check if table is top level, i.e. not subordinate to other tables"""
         if (table.type == 'list'):

@@ -19,6 +19,7 @@ from addict import Dict
 from jose import jwt
 import time
 from expression import Expression
+import xattr
 
 
 class Settings(BaseSettings):
@@ -155,12 +156,17 @@ def dblist():
     if cfg.system == 'sqlite':
         file_list = os.listdir(cfg.host)
         for filename in file_list:
+            attrs = xattr.xattr(cfg.host + '/' + filename)
+            comment = None
+            for attr in attrs:
+                if attr == 'user.comment':
+                    comment = attrs.get(attr)
             if os.path.splitext(filename)[1] not in ('.db', '.sqlite3'):
                 continue
             base = Dict()
             base.columns.name = filename
             base.columns.label = filename.capitalize()
-            base.columns.description = None
+            base.columns.description = comment
             result.append(base)
     else:
         expr = Expression(cfg.system)

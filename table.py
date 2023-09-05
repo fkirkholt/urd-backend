@@ -175,6 +175,7 @@ class Table:
 
         if (not self._pkey.columns and self.db.engine.name == 'sqlite'):
             self._pkey.columns = ['rowid']
+            self._pkey.name = self.name + '_rowid'
 
         if (not self._pkey.columns):
             attrs = self.db.html_attrs

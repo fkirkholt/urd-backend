@@ -40,7 +40,7 @@ class Field:
             field.fkey = fkey
             field.element = 'select'
             field.view = self.get_view(fkey)
-            field.expandable = self.expandable or False
+            field.expandable = getattr(self, 'expandable', False)
         if (
             hasattr(col, 'auto_increment') or (
                 col.datatype in ['int', 'Decimal'] and

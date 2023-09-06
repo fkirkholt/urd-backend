@@ -6,6 +6,7 @@ from sqlalchemy import text, inspect, bindparam, exc
 import sqlglot
 import simplejson as json
 from addict import Dict
+from settings import Settings
 from expression import Expression
 from table import Table
 from grid import Grid
@@ -40,7 +41,7 @@ class Database:
         if attrs.get('cache.config', None):
             self.config = self.cache.config
         else:
-            self.config = Dict()
+            self.config = Dict(Settings())
 
     def init_html_attributes(self):
         """Get data from table html_attributes"""
@@ -184,7 +185,7 @@ class Database:
     def get_tables(self):
         """Return metadata for every table"""
         # Return metadata from cache if set
-        if (self.cache and not self.config):
+        if (self.cache and not self.config.tables):
             self.tables = self.cache.tables
             return self.tables
 

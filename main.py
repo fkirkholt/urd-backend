@@ -5,10 +5,10 @@ from fastapi.responses import (HTMLResponse, JSONResponse, StreamingResponse,
                                FileResponse)
 from fastapi.staticfiles import StaticFiles
 from starlette import status
-from pydantic import BaseSettings
 import io
 import urllib.parse
 from sqlalchemy import create_engine, text
+from settings import Settings
 from database import Database
 from table import Table, Grid
 from record import Record
@@ -21,24 +21,6 @@ import time
 from expression import Expression
 import xattr
 
-
-class Settings(BaseSettings):
-    secret_key: str = "some_secret_key"
-    timeout: int = 30 * 60  # 30 minutes
-    system: str = None
-    host: str = None
-    database: str = None
-    uid: str = None
-    pwd: str = None
-    mysql_driver: str = 'mysqlconnector'
-    mariadb_driver: str = 'mysqlconnector'
-    postgresql_driver: str = 'psycopg2'
-    sqlite_driver: str = 'pysqlite'
-    oracle_driver: str = 'cx_oracle'
-    mssql_driver: str = 'pyodbc'
-
-    class Config:
-        env_prefix = 'urdr_'
 
 
 cfg = Settings()

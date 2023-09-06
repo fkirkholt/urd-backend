@@ -35,7 +35,7 @@ class Table:
 
     def init_type(self):
         """Find type. One of 'table', 'list', 'xref', 'ext', 'view' """
-        if (self.db.cache and not self.db.config):
+        if (self.db.cache and not self.db.config.update_cache):
             self._type = self.db.cache.tables[self.name].type
             return self._type
 
@@ -167,7 +167,7 @@ class Table:
         """Return primary key of table"""
         if hasattr(self, '_pkey'):
             return self._pkey
-        if (self.db.cache and not self.db.config):
+        if (self.db.cache and not self.db.config.update_cache):
             self._pkey = self.db.cache.tables[self.name].pkey
             return self._pkey
 
@@ -335,14 +335,14 @@ class Table:
 
     def init_fkeys(self):
         """Store foreign keys in table object"""
-        if (self.db.cache and not self.db.config):
+        if (self.db.cache and not self.db.config.update_cache):
             self._fkeys = self.db.cache.tables[self.name].fkeys
             return
         self._fkeys = self.db.fkeys[self.name]
 
     def init_fields(self):
         """Store Dict of fields in table object"""
-        if (self.db.cache and not self.db.config):
+        if (self.db.cache and not self.db.config.update_cache):
             self._fields = self.db.cache.tables[self.name].fields
             return
 
@@ -412,7 +412,7 @@ class Table:
 
     def init_indexes(self):
         """Store Dict of indexes as attribute of table object"""
-        if self.db.cache and not self.db.config:
+        if self.db.cache and not self.db.config.update_cache:
             self._indexes = self.db.cache.tables[self.name].indexes
             return
 
@@ -457,7 +457,7 @@ class Table:
         if hasattr(self.db, 'relations'):
             self._relations = self.db.relations[table_name]
             return
-        if self.db.cache and not self.db.config:
+        if self.db.cache and not self.db.config.update_cache:
             self._relations = self.db.cache.tables[table_name].relations
             return
 

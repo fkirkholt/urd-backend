@@ -636,6 +636,10 @@ class Database:
                     fkey = Dict(fkey)
                     fkey.table = key[1]
                     fkey.schema = key[0] or self.db.schema
+                    # Can't extract constraint names in SQLite
+                    if not fkey.name:
+                        fkey.name = fkey.table + '_'
+                        fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
                     self._relations[fkey.referred_table][fkey.name] = fkey
 
         return self._relations

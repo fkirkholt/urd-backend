@@ -518,7 +518,7 @@ class Database:
                     contents[label].subitems[tbl_label] = \
                         self.get_content_node(tbl_name)
 
-        if self.config:
+        if self.config.update_cache:
             sql = """
             select count(*) from html_attributes
             where selector = :selector

@@ -36,7 +36,7 @@ class Record:
         for field in self.tbl.fields.values():
             fld = Field(self.tbl, field.name)
             field.value = values.get(field.name, None)
-            field.text = displays.get(field.name, None)
+            field.text = None if not displays else displays.get(field.name, None)
             if 'editable' not in field:
                 field.editable = True
 

@@ -41,6 +41,9 @@ class Field:
             field.element = 'select'
             field.view = self.get_view(fkey)
             field.expandable = getattr(self, 'expandable', False)
+            if self.name in [fkey.referred_table + '_' + fkey.referred_columns[-1],
+                             fkey.referred_columns[-1]]:
+                field.label = self.db.get_label(fkey.referred_table)
         if (
             hasattr(col, 'auto_increment') or (
                 col.datatype in ['int', 'Decimal'] and

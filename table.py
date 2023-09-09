@@ -439,7 +439,9 @@ class Table:
                 dialect = 'mysql'
 
             table = parse_one(view_def, read=dialect).find(exp.Table)
-            table_name = table.name
+            table.pkey = self.db.pkeys[table.name]
+            if table.pkey and self.pkey and table.pkey.columns == self.pkey.columns:
+                table_name = table.name
         if hasattr(self.db, 'relations'):
             self._relations = self.db.relations[table_name]
             return

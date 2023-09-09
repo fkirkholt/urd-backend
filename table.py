@@ -416,21 +416,7 @@ class Table:
             self._indexes = self.db.cache.tables[self.name].indexes
             return
 
-        indexes = Dict()
-
-        refl_indexes = self.db.refl.get_indexes(self.name, self.db.schema)
-        for index in refl_indexes:
-            index = Dict(index)
-            indexes[index.name] = Dict({
-                'name': index.name,
-                'unique': index.unique,
-                'columns': index.column_names
-            })
-
-        if self.pkey:
-            indexes[self.pkey.name] = self.pkey
-
-        self._indexes = indexes
+        self._indexes = self.db.indexes[self.name]
 
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""

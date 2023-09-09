@@ -593,13 +593,17 @@ class Database:
     def indexes(self):
         if not hasattr(self, '_indexes'):
             self._indexes = Dict()
-            schema_indexes = self.ref.get_multi_indexes(self.schema)
+            schema_indexes = self.refl.get_multi_indexes(self.schema)
 
-            for key, indexes in schema_indexes.items():
-                tbl_name = key[-1]
+            for (schema, table), indexes in schema_indexes.items():
 
                 for idx in indexes:
-                    self._indexes[tbl_name][idx.name] = Dict(idx)
+                    idx = Dict(idx)
+                    idx.columns = idx.pop('column_names')
+
+                    self._indexes[table][idx.name] = idx
+                    pkey = self.pkeys[table]
+                    self._indexes[table][pkey.name] = pkey
 
         return self._indexes
 

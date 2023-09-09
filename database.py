@@ -226,7 +226,7 @@ class Database:
                     if not self.config.tables[tbl_name]:
                         del self.config.tables[tbl_name]
 
-            if self.config:
+            if self.config.update_cache:
                 table.rowcount = table.count_rows()
                 space = ' ' * (30 - len(tbl_name))
                 print('Table: ', f"{tbl_name}{space}({table.rowcount})")
@@ -246,7 +246,7 @@ class Database:
                 'view': view,
                 'icon': None,
                 'label': self.get_label(tbl_name),
-                'rowcount': None if not self.config else table.rowcount,
+                'rowcount': None if not self.config.update_cache else table.rowcount,
                 'pkey': table.pkey,
                 'description': comment,
                 'fkeys': table.fkeys,

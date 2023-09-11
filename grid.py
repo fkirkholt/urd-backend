@@ -407,12 +407,20 @@ class Grid:
         grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
         if sort_idx:
             columns = sort_idx.columns
+            direction = sort_idx.column_sorting or {}
         elif grid_idx:
             columns = grid_idx.columns[0:3]
+            direction = grid_idx.column_sorting or {}
         else:
             columns = []
+            direction = {}
 
-        return columns
+        sort_columns = []
+        for col in columns:
+            dir = '' if col not in direction else ' ' + direction[col][0]
+            sort_columns.append(col + dir)
+
+        return sort_columns
 
     def get_summation_columns(self):
         """Return columns that should be summed"""

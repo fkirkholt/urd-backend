@@ -168,13 +168,12 @@ class Database:
         self.user_tables.append('html_attributes')
         attributes = {
             'data-type': 'json',
-            'data-format': 'yaml',
-            'class': 'w7 bg-near-white'
+            'data-format': 'yaml'
         }
 
         sql = f"""
             insert into html_attributes (selector, attributes)
-            values ('input[name=attributes]', '{json.dumps(attributes)}')
+            values ('[data-field="html_attributes.attributes"]', '{json.dumps(attributes)}')
         """
         self.query(sql)
         # Refresh attributes

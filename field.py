@@ -81,15 +81,16 @@ class Field:
 
         return element, type_
 
-    def get_attributes(self, table_name, identifier):
+    def get_attributes(self, table_name, colname):
         """Get description based on term"""
         attrs = self.db.html_attrs
-        ref = f'{self.element}[data-table="{table_name}"][name="{identifier}"]'
+        selector_1 = f'[data-field="{table_name}.{colname}"]'
+        selector_2 = f'label[data-field="{table_name}.{colname}"]'
         attributes = {}
-        if ref in attrs:
-            attributes = attrs[ref]
-        elif f'input[name="{identifier}"]' in attrs:
-            attributes = attrs[f'input[name="{identifier}"]']
+        if selector_1 in attrs:
+            attributes = attrs[selector_1]
+        elif selector_2 in attrs:
+            attributes = attrs[selector_2]
 
         return attributes
 

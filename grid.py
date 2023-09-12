@@ -256,7 +256,7 @@ class Grid:
                 field.name[0:6].lower() == 'const_'
             ):
                 continue
-            if field.size and (field.size < 1 or field.size >= 255):
+            if field.datatype == 'str' and (not field.size or field.size >= 255):
                 continue
             if field.datatype == 'json':
                 continue

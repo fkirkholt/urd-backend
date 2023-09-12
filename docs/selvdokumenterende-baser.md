@@ -12,9 +12,10 @@ relasjoner til en post.
 
 ## Gruppering
 
-Man kan gruppere tabeller sammen ved å gi dem samme prefix. En slik
+Man kan gruppere tabeller sammen ved å gi dem samme prefiks. En slik
 gruppering gjenspeiler måten man ofte vil gjøre det på når man designer
-databaser.
+databaser. Tabeller med samme prefix vil legge seg i innholdsfortegnelsen
+til venstre med prefikset som overskrift.
 
 Ellers kan man definere underordnede tabeller ved at fremmednøkler
 inngår i primærnøkkelen. Slike underordnede tabeller vil legge seg under
@@ -39,9 +40,8 @@ koden og ikke betegnelsen til posten.
 
 ## Kryssreferanse-tabeller
 
-Disse angis med postfix `_xref` eller `_link`. Disse vises aldri i
-tabellisten. Ikke uvanlig å bruke `xref` for å angi kryssreferanse, jf.
-[Wikipedia](<https://en.wikipedia.org/wiki/Cross-reference>).
+Kryssreferanse-tabeller angis med postfix `_xref` eller `_link`. De vises
+aldri i tabellisten.
 
 Ledetekst for slike tabeller når de vises som har-mange-relasjoner,
 utledes fra navnet. Hvis navn til refererende tabell forekommer i
@@ -55,7 +55,7 @@ Hvis man f.eks. har tabeller `gruppe`, `bruker` og kryssreferansetabell
 
 Hvis man har en kryssreferansetabell som man likevel vil vise i innhold,
 kan man gi den det navn man ønsker, og sløyfe postfix. Tabellen legger
-seg da i innhold under den tabellen som er referert først i
+seg da i innholdslisten under den tabellen som er referert først i
 primærnøkkelen.
 
 F.eks. hvis man har en tabell "Arkivskaper" med primærnøkkel
@@ -131,7 +131,7 @@ ved postfix `_xref` eller `_link`, skjules alltid i tabllisten.
 
 - M:M-relasjoner får tabellnavnet, minus evt. prefix/postfix for aktiv tabell 
 
-  F.eks. får `aktoer_naeringskategori` ledetekst `næringskategori` Da fjernes
+  F.eks. får `aktoer_naeringskategori` ledetekst `næringskategori`. Da fjernes
   også postfix som `_xref`, `_list`, `_liste` eller `_link`
 
 # Kolonner
@@ -141,27 +141,20 @@ ved postfix `_xref` eller `_link`, skjules alltid i tabllisten.
 Man markerer at en kolonne ikke skal vises ved å sette en underscore
 foran, eks. `_connection_string`.
 
-Men merk at dette ikke fungerer i Oracle, da identifikatorer her må
-begynne med bokstav. Dette er den eneste basen av de store som ikke
-støtter dette. I Oracle kan man derimot skjule kolonner ved å definere
-dem som `invisible`.
-
-## Lengde
-
-Biblioteket "pyodbc" som brukes i Urdr, setter alle tekstfelter som ikke
-har definert lengde til `size: 255`. F.eks. gjelder det `varchar` uten
-definert lengde, og `jsonb` i Postgres. Derfor vises ikke felter med
-lengde 255 eller over som standard i grid.
+Men merk at dette ikke fungerer i Oracle, da identifikatorer her må begynne
+med bokstav. I Oracle kan man derimot skjule kolonner ved å definere dem som
+`invisible`.
 
 # Fremmednøkler
 
-Fremmednøkler brukes av Urdr for å vise fram relasjoner. Ingen regler for
-navngivning av fremmednøkler.
+Fremmednøkler brukes av Urdr for å vise fram relasjoner.
 
 For å vise har-mange-relasjoner, må man ha en indeks for å finne
 relasjonene.
 
 # Indekser
+
+Urdr bruker i stor grad indekser for å vite hvordan data skal vises fram.
 
 ## Grid
 
@@ -173,10 +166,8 @@ unntak av tekst-kolonner med 255 tegn eller over, skjulte kolonner, og
 eventuell autoinc-kolonne. Denne siste defineres liksom i SQLite med at
 den er integer og primary key.
 
-Grensen på 255 tegn skyldes for det første at MySQL begrenser antall
-tegn i indekser til dette antallet, samt at pyodbc setter lengde til 255
-for tekst-kolonner som ikke har angitt lengde (f.eks. `varchar` i
-Postgres og `json`).
+Grensen på 255 tegn skyldes at MySQL begrenser antall
+tegn i indekser til dette antallet.
 
 For referansetabeller vises uansett autoinc-kolonnen også.
 
@@ -187,9 +178,8 @@ den finnes. Hvis den ikke finnes, og hvis `<tabellnavn>_grid_idx`
 finnes, brukes de første tre kolonnene av denne som sortering. Hvis
 heller ikke denne finnes, sorteres kun på primærnøkkel.
 
-Det støttes ikke fallende sortering ennå, men det er planer om å få
-det til å virke også. Noen databasemotorer støtter jo å angi asc og desc
-for indeks-kolonner.
+Man kan angi sorteringsretning i indeksene for de databasene som støtter
+dette.
 
 ## Summering
 
@@ -199,14 +189,13 @@ summert i footer til grid-en.
 ## Identifikasjon
 
 Man bruker en unik indeks forskjellig fra primærnøkkel til å bestemme hva
-som skal vises fra en record i en annen tabell for et fremmednøkkel-felt.
+som skal vises fra posten i et fremmednøkkelfelt i en refererende tabell.
 
 Hvis man også vil at postene skal sorteres på denne indeksen, kan man
 bruke `<tabellnavn>_sort_idx` og sette denne til unik.
 
 Hvis man har flere unike indekser, så brukes den med navn `...sort_idx`
-til identifikasjon. Den andre kan da være en alternativ indeks for
-fremmednøkler.
+til identifikasjon.
 
 ## Lenke til fil
 
@@ -234,12 +223,12 @@ relasjoner med mindre det finnes en indeks som kan brukes for å finne
 dem. Hvis det ikke eksisterer en indeks på samme kolonner som
 fremmednøkkelen, vises relasjonen kun fra refererende tabell.
 
-MySQL oppretter indekser automatisk når man genererer fremmednøkkel. Men
-det er også den eneste databasen som Urdr støtter som gjør dette
-automatisk. Så når Urdr krever at indeks må være på plass for å vise
-relasjonen, sikres også at disse indeksene opprettes. Dette er altså
-helt i tråd med Urdr sin filosofi - å effektivisere spørringer samtidig
-som de definerer hvordan basen vises fram.
+MySQL og MariaDB oppretter indekser automatisk når man genererer
+fremmednøkkel. Men det er også de eneste databasene som Urdr støtter som
+gjør dette automatisk. Så når Urdr krever at indeks må være på plass
+for å vise relasjonen, sikres også at disse indeksene opprettes. Dette
+er altså helt i tråd med Urdr sin filosofi - å effektivisere spørringer
+samtidig som de definerer hvordan basen vises fram.
 
 ## Registrere opprettet og oppdatert
 
@@ -248,7 +237,7 @@ sette indeksen `<tabellnavn>_created_idx` og `<tabellnavn>_updated_idx`.
 Første kolonne i indeksen skal være dato eller tidsstempel, og andre
 kolonne skal være brukernavn til brukeren.
 
-Kolonnen som betegner dato eller tid, skal ha defualt-verdi satt til
+Kolonnen som betegner dato eller tid, skal ha default-verdi satt til
 `current_date` eller `current_timestamp`. Kolonnen som betegner
 brukernavn skal ha default-verdi `current_user`.
 
@@ -293,29 +282,61 @@ et felt er obligatorisk. Sistnevnte kan oppnås med selector `label b:has(+
 
 Man kan også legge til f.eks. en måleenhet etter et felt, ved å legge inn
 måleenheten i `data-after`-attributt til label. Label består da både av
-selve nøkkelordet, og måleenheten som kommer etter verdien.
+selve nøkkelordet, og måleenheten som kommer etter feltverdien.
 
-Man kan lage dynamiske lenker ved å bruke `onclick`-attributt, sammen med
-`this.dataset.value`. Det er nemlig lagt inn `data-value` som attributt
-til elementet som viser verdi av et felt, for å kunne brukes til dette.
+Man kan tilpasse hvordan et felt vises ved å angi `data-type` og/eller
+`data-format`. Dette forutsetter at  man bruker selector på formen
+`label[data-field="tabellnavn.feltnavn"]`. Denne selectoren tilhører label-
+taggen, som omslutter feltet. Man kan evt. sløyfe `label` og kun bruke
+`[data-field="tabellnavn.feltnavn"]`. Da velges html-element for feltet
+basert på verdiene til `data-type` og `data-format`.
 
-Det er også mulig å bytte ut `this.dataset.value` med `this.nodeValue`.
+Det støttes følgende verdier for `data-type`:
+- json
+- date
 
-Eks:
+Det støttes følgende verdier for `data-format`:
+- link
+- json
+- yaml
+- markdown
+
+Hvis man angir `data-type` som "json" og `data-format` som "yaml", vil
+data lagres som `json` i databasen, men man vil se dataene som `yaml`.
+Dette gjelder som standard html-attributtene selv.
+
+Man kan angi `data-type: date` dersom man har en tekst-kolonne i databasen som
+bruker til å angi dato. En html `<time>`-tagg tillater nemlig å registrere
+datoer på flere måter enn mange databaser, f.eks. "2012-05" som står for
+mai 2012. Disse kan da registreres som tekst i basen.
+
+Hvis man ønsker å lage en url av et felt, kan man registrere det med
+`data-format: link`. Da får man en `<a>`-tagg rundt feltverdien i
+visningsmodus.
+
+Så kan man lage dynamiske lenker til denne `<a>`-taggen ved å bruke
+`onclick`-attributt, sammen med `this.dataset.value`. Det er nemlig lagt inn
+`data-value` som attributt til elementet som viser verdi av et felt, for å
+kunne brukes til dette. Det er også mulig å bytte ut `this.dataset.value`
+med `this.innerHTML`.
+
+Selector blir da på formen `label[data-field="tabellnavn.feltnavn"] > a`,
+og attributtene kan være noe som dette:
+
 ~~~ yml
 href: '/url/to/whatever'
 onclick: "location.href=this.href+'?key='+this.dataset.value;return false;"
 ~~~
 
-Kan også style grid, f.eks. med bakgrunnsfarge på raden basert på verdier
-i en kolonne. Merk at man da må legge til en default style, ellers vil ikke
-fargene oppdateres riktig ved sortering av tabellen i etterkant.
+Man kan også style grid, f.eks. med bakgrunnsfarge på raden basert på
+verdier i en kolonne. Merk at man da må legge til en default style, ellers
+vil ikke fargene oppdateres riktig ved sortering av tabellen i etterkant.
 
 # Views
 
 ## Bruke view til å bestemme grid
 
-Istedenfor for definere en grid vha. indeks `<tabellnavn>_grid_idx`, kan
+Istedenfor for definere en grid vha. indeks `<tabellnavn>n_grid_idx`, kan
 man bruke et view `<tabellnavn>_grid`. Dette viewet må ha med alle
 primærnøkkel-kolonnene til opprinnelig tabell. Fordelen med å bruke et
 view istedenfor en indeks, er at man kan definere opp kolonner som ikke
@@ -343,34 +364,12 @@ where brukernavn = current_user()
 );
 ~~~
 
-Man skal altså velge alt fra opprinnelig tabell, da denne rett og slett skal
-erstattes av viewet. Metadata for viewet hentes fra opprinnelig tabell.
+Man skal altså velge alt fra opprinnelig tabell, da denne rett og slett
+skal erstattes av viewet. Metadata for viewet hentes fra opprinnelig tabell.
 
 Man gir da brukeren tilgang til viewet, men ikke til opprinnelig tabell. Dette
 forutsetter at man lager en cachet versjon av databasestrukturen først.
 
-Man kan ha view for tilgangsstyring og view for grid samtidig. Men da bør view
-for grid også ha tilgangsstyring.
+Man kan ha view for tilgangsstyring og view for grid samtidig. Men da bør
+view for grid også ha tilgangsstyring.
 
-# Relasjoner
-
-For at relasjoner skal vises, må det være en indeks på de kolonnene som
-definerer relasjonen. Dette er alltid tilfelle i MySQL, for der må man
-ha en indeks for fremmednøkler. Dette er ikke tilfelle i PostgreSQL, så
-der må man opprette indeks eksplisitt for å få visning av relasjon.
-
-I hierarkiske strukturer hvor tabell på laveste nivå har primærnøkkel
-som inneholder alle tabeller på overordnet nivå (eks. et dokument har
-saksnr som del av primærnøkkelen), vil da alle relasjoner til det
-laveste nivået (dokument) også vises på øverste nivå (sak). Dette fordi
-indeksen som brukes for å knytte relasjonen til dokumentet også
-nødvendigvis vil fungere som indeks for å hente disse relasjonene fra
-øverste nivå (sak), fordi saksnr inngår i primærnøkkelen. Man kan unngå
-å vise relasjoner på øverste nivå ved å legge inn prefix på relasjonen
-tilsvarende tabellen relasjonen hører til (dokument). Hvis man f.eks.
-har `dokument_adressat` som navn på en slik relasjonstabell, vil den kun
-vises under `dokument`.
-
-Man kan også velge å vise forenklet hierarki. Når man krysser av for dette,
-vises kun de nærmeste relasjonene, og relasjoner til lavere nivåer i hierarkiet
-vises ikke.

@@ -21,12 +21,16 @@ class Database:
         path = db_name.split('.')
         if engine.name == 'postgresql':
             self.schema = 'public' if len(path) == 1 else path[1]
+            self.cat = path[0]
         elif engine.name == 'mssql':
             self.schema = 'dbo' if len(path) == 1 else path[1]
+            self.cat = path[0]
         elif engine.name == 'sqlite':
             self.schema = 'main'
+            self.cat = None
         else:
             self.schema = db_name
+            self.cat = None
 
         self.refl = inspect(engine)
 
@@ -84,6 +88,7 @@ class Database:
             "branch": branch,
             "base": {
                 "name": self.name,
+                "cat": self.cat,
                 "system": self.engine.name,
                 "server": self.engine.url.host,
                 "schema": self.schema,

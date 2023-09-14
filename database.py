@@ -157,13 +157,16 @@ class Database:
         string_datatype = self.expr.to_native_type('str')
 
         sql = f"""
-        create table html_attributes(
+        create table {self.schema}.html_attributes(
             selector varchar(100) not null,
             attributes {string_datatype} not null,
             primary key (selector)
         )
         """
-        self.query(sql)
+
+        with self.engine.connect() as cnxn:
+            cnxn.execute(text(sql))
+            cnxn.commit()
 
         self.user_tables.append('html_attributes')
         attributes = {
@@ -172,10 +175,14 @@ class Database:
         }
 
         sql = f"""
-            insert into html_attributes (selector, attributes)
+            insert into {self.schema}.html_attributes (selector, attributes)
             values ('[data-field="html_attributes.attributes"]', '{json.dumps(attributes)}')
         """
-        self.query(sql)
+
+        with self.engine.connect() as cnxn:
+            cnxn.execute(text(sql))
+            cnxn.commit()
+
         # Refresh attributes
         self.html_attrs = self.init_html_attributes()
         attrs = Dict(self.html_attrs.pop('base', None))
@@ -183,13 +190,15 @@ class Database:
 
     def get_tables(self):
         """Return metadata for every table"""
+
         # Return metadata from cache if set
         if (self.cache and not self.config.tables):
             self.tables = self.cache.tables
             return self.tables
 
         self.tables = Dict()
-        if (self.config and 'html_attributes' not in self.user_tables):
+
+        if (self.config.update_cache and 'html_attributes' not in self.user_tables):
             self.create_html_attributes()
 
         tbl_names = self.refl.get_table_names(self.schema)

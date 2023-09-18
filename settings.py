@@ -1,14 +1,14 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     secret_key: str = "some_secret_key"
     timeout: int = 30 * 60  # 30 minutes
-    system: str = None
-    host: str = None
-    database: str = None
-    uid: str = None
-    pwd: str = None
+    system: str | None = None
+    host: str | None = None
+    database: str | None = None
+    uid: str | None = None
+    pwd: str | None = None
     mysql_driver: str = 'mysqlconnector'
     mariadb_driver: str = 'mysqlconnector'
     postgresql_driver: str = 'psycopg2'

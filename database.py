@@ -756,7 +756,7 @@ class Database:
         for tbl_name in reversed(ordered_tables):
             ddl += f"drop table if exists {tbl_name};\n"
 
-        for i, (tbl_name, fkeys) in ordered_tables:
+        for tbl_name in ordered_tables:
             if tbl_name is None:
                 continue
             if tbl_name == 'sqlite_sequence':

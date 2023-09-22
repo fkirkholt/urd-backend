@@ -76,7 +76,7 @@ class Expression:
             return "varchar(" + str(size) + ")"
         elif type_ == "str":
             return "text"
-        elif (type_ == "int" and size > 11):
+        elif (type_ == "int" and size and size > 11):
             return "bigint"
         elif type_ == "int":
             return "integer"

@@ -133,7 +133,7 @@ def logout(response: Response):
 
 
 @app.get("/dblist")
-def dblist():
+def dblist(role: str = None):
     result = []
     if cfg.system == 'sqlite':
         file_list = os.listdir(cfg.host)
@@ -151,10 +151,28 @@ def dblist():
             base.columns.description = comment
             result.append(base)
     else:
-        expr = Expression(cfg.system)
-        sql = expr.databases()
         engine = get_engine(cfg)
+        if role:
+            sql = 'set default role ' + role
+            with engine.connect() as conn:
+                conn.execute(text(sql))
+        elif cfg.system in ['mysql', 'mariadb']:
+            sql = 'select current_role()'
+            with engine.connect() as conn:
+                rows = conn.execute(text(sql)).fetchall()
+                if len(rows) == 0:
+                    role = None
+                elif len(rows) == 1:
+                    role = rows[0][0]
+                else:
+                    role = 'ALL'
+
+        expr = Expression(cfg.system)
         with engine.connect() as conn:
+            if role:
+                sql = 'set role ' + role
+                conn.execute(text(sql))
+            sql = expr.databases()
             rows = conn.execute(text(sql), {'db_name': None}).fetchall()
 
         for row in rows:
@@ -163,7 +181,18 @@ def dblist():
             base.columns.label = row.db_name.capitalize()
             base.columns.description = row.db_comment
             result.append(base)
-    return {'data': {'records': result}}
+
+        # Find all roles
+        roles = []
+        sql = expr.user_roles()
+        if sql:
+            with engine.connect() as conn:
+                rows = conn.execute(text(sql)).fetchall()
+
+            for row in rows:
+                roles.append(row[0])
+
+    return {'data': {'records': result, 'roles': roles, 'role': role}}
 
 
 @app.get("/database")

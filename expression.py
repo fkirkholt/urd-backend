@@ -173,6 +173,16 @@ class Expression:
                   and HAS_DBACCESS(name) = 1;
             """
 
+    def user_roles(self):
+        if self.platform in ['mysql', 'mariadb']:
+            return """
+            select role_name
+            from information_schema.applicable_roles
+            where grantee = current_user();
+            """
+        else:
+            return None
+
     def schema_privileges(self):
         if self.platform == 'postgresql':
             return """
@@ -187,7 +197,8 @@ class Expression:
             return """
             select privilege_type
             from information_schema.schema_privileges
-            where grantee = CONCAT('\\'',REPLACE(CURRENT_USER(),'@','\\'@\\''),'\\'')
+            where (grantee = CONCAT('\\'',REPLACE(CURRENT_USER(),'@','\\'@\\''),'\\'')
+                   or grantee in (select '''' || current_role() ||'''@''%'''))
             and table_schema = :schema
             """
         else:

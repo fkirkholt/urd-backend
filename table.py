@@ -1,6 +1,7 @@
 """Module for handling tables"""
 import time
 import datetime
+import re
 import pypandoc
 from addict import Dict
 from record import Record
@@ -73,33 +74,46 @@ class Table:
 
         return self._type
 
-    def user_privileges(self):
+    @property
+    def privilege(self):
         """Return privileges of database user"""
-        privileges = Dict({
-            'select': 1,
-            'insert': 1,
-            'update': 1,
-            'delete': 1
+
+        privilege = Dict({
+            'select': self.db.privilege.select or 0,
+            'insert': self.db.privilege.insert or 0,
+            'update': self.db.privilege.update or 0,
+            'delete': self.db.privilege.delete or 0
         })
-        sql = self.db.expr.table_privileges()
-        if sql:
-            privileges.select = self.db.privilege.select or 0
-            privileges.insert = self.db.privilege.insert or 0
-            privileges['update'] = self.db.privilege['update'] or 0
-            privileges.delete = self.db.privilege.delete or 0
+        if self.db.engine.name in ['mysql', 'mariadb']:
+            rows = self.db.query('show grants').fetchall()
+            for row in rows:
+                stmt = row[0]
+                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
+                if not matched:
+                    continue
+                privs = matched.group(1).strip().lower() + ','
+                privs =  [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
+                obj = matched.group(2).replace('"', '').strip()
+                if obj == self.db.schema + '.' + self.name:
+                    for priv in privilege:
+                        if priv in privs:
+                            privilege[priv] = 1
+        elif self.db.engine.name == 'postgresql':
+            sql = self.db.expr.table_privileges()
             params = {'schema': self.db.schema, 'table': self.name}
             rows = self.db.query(sql, params).fetchall()
             for row in rows:
                 if row.privilege_type == 'SELECT':
-                    privileges.select = 1
+                    privilege.select = 1
                 elif row.privilege_type == 'INSERT':
-                    privileges.insert = 1
+                    privilege.insert = 1
                 elif row.privilege_type == 'UPDATE':
-                    privileges['update'] = 1
+                    privilege['update'] = 1
                 elif row.privilege_type == 'DELETE':
-                    privileges.delete = 1
+                    privilege.delete = 1
 
-        return privileges
+        self._privilege = privilege
+        return privilege
 
     def count_rows(self):
         sql = f'select count(*) from "{self.name}"'

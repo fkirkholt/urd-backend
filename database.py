@@ -1,5 +1,6 @@
 """Module for handling databases and connections"""
 import os
+import re
 import time
 from graphlib import TopologicalSorter
 from sqlalchemy import text, inspect, bindparam, exc
@@ -127,35 +128,41 @@ class Database:
     def privilege(self):
         """Get user privileges"""
         privilege = Dict()
-        sql = self.expr.schema_privileges()
 
-        if not sql:
-            privilege.select = 1
-            privilege.insert = 1
-            privilege['update'] = 1
-            privilege.delete = 1
-            privilege.create = 1
-        else:
+        if self.engine.name in ['mysql', 'mariadb']:
+            privilege.select = 0
+            privilege.insert = 0
+            privilege['update'] = 0
+            privilege.delete = 0
+            privilege.create = 0
+            with self.engine.connect() as cnxn:
+                rows = cnxn.execute(text('show grants')).fetchall()
+                for row in rows:
+                    stmt = row[0]
+                    matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
+                    if not matched:
+                        continue
+                    privs = matched.group(1).strip().lower() + ','
+                    privs =  [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
+                    obj = matched.group(2).replace('"', '').strip()
+                    if obj == self.schema + '.*':
+                        for priv in privilege:
+                            if priv in privs:
+                                privilege[priv] = 1
+        elif self.engine.name == 'postgresql':
+            sql = self.expr.schema_privileges()
             with self.engine.connect() as cnxn:
                 param = {'schema': self.schema}
                 if self.engine.name == 'postgresql':
                     priv = cnxn.execute(text(sql), param).first()
                     privilege.create = priv.create
-                    privilege.usage = priv.usage
-                    return privilege
-
-                rows = cnxn.execute(text(sql), param).fetchall()
-                for row in rows:
-                    if row.privilege_type == 'SELECT':
-                        privilege.select = 1
-                    elif row.privilege_type == 'INSERT':
-                        privilege.insert = 1
-                    elif row.privilege_type == 'UPDATE':
-                        privilege['update'] = 1
-                    elif row.privilege_type == 'DELETE':
-                        privilege.delete = 1
-                    elif row.privilege_type == 'CREATE':
-                        privilege.create = 1
+        else:
+            # Privilege not implemented for oracle or mssql yet
+            privilege.select = 1
+            privilege.insert = 1
+            privilege['update'] = 1
+            privilege.delete = 1
+            privilege.create = 1
 
         self._privilege = privilege
         return privilege

@@ -50,7 +50,9 @@ def get_engine(cfg, db_name=None):
 
     engine = create_engine(url)
     try:
-        engine.connect()
+        with engine.connect() as conn:
+            if cfg.system in ['mysql', 'mariadb2']:
+                conn.execute(text("SET sql_mode = 'ANSI'"))
     except Exception as ex:
         print(ex)
         raise HTTPException(
@@ -59,7 +61,6 @@ def get_engine(cfg, db_name=None):
         )
 
     return engine
-
 
 def token():
     return jwt.encode({
@@ -302,7 +303,8 @@ async def get_options(request: Request):
     fkey = tbl.get_fkey(req.column)
     if search:
         search = search.lower()
-        view = fld.get_view(fkey) if fkey else req.column
+        view = None if not fkey else fld.get_view(fkey)
+        view = view if view else req.column
         conds.append(f"lower(cast({view} as char)) like '%{search}%'")
     cond = " and ".join(conds)
     # Get condition defining classification relations

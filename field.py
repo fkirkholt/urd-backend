@@ -39,7 +39,7 @@ class Field:
         if fkey:
             field.fkey = fkey
             field.element = 'select'
-            field.view = self.get_view(fkey)
+            field.view = self.get_view(fkey) or self.name
             field.expandable = getattr(self, 'expandable', False)
             if self.name in [fkey.referred_table + '_' + fkey.referred_columns[-1],
                              fkey.referred_columns[-1]]:
@@ -136,7 +136,11 @@ class Field:
 
         fkey = self.tbl.get_fkey(self.name)
         pkey_col = fkey.referred_columns[-1] if fkey else self.name
-        from_table = fkey.referred_table if fkey else self.tbl.name
+
+        if fkey and fkey.referred_table in self.db.user_tables:
+            from_table = fkey.referred_table
+        else:
+            from_table = self.tbl.name
 
         # Field that holds the value of the options
         value_field = f'"{self.name}".' + pkey_col
@@ -156,7 +160,8 @@ class Field:
         if (count > 200):
             return False
 
-        self.view = self.get_view(fkey) if fkey else self.name
+        view = None if not fkey else self.get_view(fkey)
+        self.view = view if view else self.name
 
         sql = f"""
         select distinct {value_field} as value, {self.view or value_field} as label
@@ -177,10 +182,12 @@ class Field:
             return self.view
         from table import Table
 
-        ref_tbl = Table(self.db, fkey.referred_table)
-        self.view = self.name + '.' + ref_tbl.pkey.columns[-1]
+        self.view = None 
 
         if fkey.referred_table in self.db.user_tables:
+
+            ref_tbl = Table(self.db, fkey.referred_table)
+            self.view = self.name + '.' + ref_tbl.pkey.columns[-1]
 
             if ref_tbl.is_hidden() is False:
                 self.expandable = True

@@ -80,7 +80,7 @@ class Grid:
                 'actions': ["show_file"] if "show_file" in actions else []
             },
             'form': self.get_form(),
-            'privilege': self.tbl.user_privileges(),
+            'privilege': self.tbl.privilege,
             'hidden': self.tbl.is_hidden(),
             'pkey': self.tbl.pkey.columns,
             'fkeys': self.tbl.fkeys,

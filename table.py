@@ -441,21 +441,23 @@ class Table:
                 view_def = self.db.refl.get_view_definition(self.name, self.db.schema)
             else:
                 params = {'schema': self.db.schema, 'table': self.name}
-                view_def = self.db.query(sql, params).first()[0]
+                row = self.db.query(sql, params).first()
+                view_def = None if not row else row[0]
 
-            # get dialect for SQLGlot
-            dialect = self.db.engine.name
-            if dialect == 'mssql':
-                dialect = 'tsql'
-            elif dialect == 'postgresql':
-                dialect = 'postgres'
-            elif dialect == 'mariadb':
-                dialect = 'mysql'
+            if view_def:
+                # get dialect for SQLGlot
+                dialect = self.db.engine.name
+                if dialect == 'mssql':
+                    dialect = 'tsql'
+                elif dialect == 'postgresql':
+                    dialect = 'postgres'
+                elif dialect == 'mariadb':
+                    dialect = 'mysql'
 
-            table = parse_one(view_def, read=dialect).find(exp.Table)
-            table.pkey = self.db.pkeys[table.name]
-            if table.pkey and self.pkey and table.pkey.columns == self.pkey.columns:
-                table_name = table.name
+                table = parse_one(view_def, read=dialect).find(exp.Table)
+                table.pkey = self.db.pkeys[table.name]
+                if table.pkey and self.pkey and table.pkey.columns == self.pkey.columns:
+                    table_name = table.name
         if hasattr(self.db, 'relations'):
             self._relations = self.db.relations[table_name]
             return

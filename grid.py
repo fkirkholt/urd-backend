@@ -82,7 +82,7 @@ class Grid:
             'form': self.get_form(),
             'privilege': self.tbl.privilege,
             'hidden': self.tbl.is_hidden(),
-            'pkey': self.tbl.pkey.columns,
+            'pkey': self.tbl.pkey.columns or None,
             'fkeys': self.tbl.fkeys,
             'indexes': self.tbl.indexes,
             'label': self.db.get_label(self.tbl.name),

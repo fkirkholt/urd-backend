@@ -363,7 +363,10 @@ class Table:
         fields = Dict()
         indexed_cols = []
         for key, index in self.indexes.items():
-            indexed_cols.append(index.columns[0])
+            # Bug in SQLAlchemy's get_multi_indexes so that an index
+            # without columns can be returned
+            if len(index.columns):
+                indexed_cols.append(index.columns[0])
         cols = self.db.refl.get_columns(self.name, self.db.schema)
         # contents = None if not self.db.cache \
         #     else self.db.cache.contents

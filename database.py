@@ -145,9 +145,9 @@ class Database:
                     privs = matched.group(1).strip().lower() + ','
                     privs =  [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
                     obj = matched.group(2).replace('"', '').strip()
-                    if obj == self.schema + '.*':
+                    if obj == self.schema + '.*' or obj == '*.*':
                         for priv in privilege:
-                            if priv in privs:
+                            if priv in privs or 'all privileges' in privs:
                                 privilege[priv] = 1
         elif self.engine.name == 'postgresql':
             sql = self.expr.schema_privileges()

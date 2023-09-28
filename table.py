@@ -81,7 +81,7 @@ class Table:
         privilege = Dict({
             'select': self.db.privilege.select or 0,
             'insert': self.db.privilege.insert or 0,
-            'update': self.db.privilege.update or 0,
+            'update': self.db.privilege['update'] or 0,
             'delete': self.db.privilege.delete or 0
         })
         if self.db.engine.name in ['mysql', 'mariadb']:

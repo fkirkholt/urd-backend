@@ -361,14 +361,16 @@ class Database:
         # treats databases as following the Urdr rules for self
         # documenting databases
         if (not self.config.update_cache or self.config.urd_structure):
+            i = 0
             for tbl_name, table in self.tables.items():
+                i += 1
                 if (tbl_name[-5:] == '_grid' and table.type == 'view'):
                     continue
                 if tbl_name[0:1] == "_":
                     name = tbl_name[1:]
                 else:
                     name = tbl_name
-                group = name.split("_")[0]
+                parts = name.split("_")
 
                 # Don't include tables that are subordinate to other tables
                 # i.e. the primary key also has a foreign key
@@ -381,10 +383,26 @@ class Database:
                         break
 
                 if not subordinate:
-                    if not tbl_groups[group]:
-                        tbl_groups[group] = []
+                    placed = False
+                    for group in tbl_groups:
+                        if name.startswith(group + '_'):
+                            tbl_groups[group].append(tbl_name)
+                            placed = True
 
-                    tbl_groups[group].append(tbl_name)
+                    if not placed:
+                        group = None
+                        for part in parts:
+                            test_group = group + '_' + part if group else part
+                            if len(self.tables) > i and list(self.tables)[i].startswith(test_group + '_'):
+                                group = test_group
+                            elif group is None:
+                                group = part
+
+                        if not tbl_groups[group]:
+                            tbl_groups[group] = []
+
+                        tbl_groups[group].append(tbl_name)
+
         else:
             # Group for tables not belonging to other groups
             tbl_groups['...'] = []
@@ -538,6 +556,8 @@ class Database:
                 for tbl_name in table_names:
                     # Remove group prefix from label
                     tbl_label = self.get_label(tbl_name, prefix=group_name)
+                    if tbl_label == '':
+                        tbl_label = self.get_label(tbl_name)
 
                     contents[label].subitems[tbl_label] = \
                         self.get_content_node(tbl_name)

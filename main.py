@@ -185,7 +185,7 @@ def dblist(role: str = None):
 
         # Find all roles
         roles = []
-        sql = expr.user_roles()
+        sql = expr.current_user_roles()
         if sql:
             with engine.connect() as conn:
                 rows = conn.execute(text(sql)).fetchall()
@@ -195,6 +195,55 @@ def dblist(role: str = None):
 
     return {'data': {'records': result, 'roles': roles, 'role': role}}
 
+@app.get("/userlist")
+def userlist():
+    users = []
+    roles = []
+    expr = Expression(cfg.system)
+    engine = get_engine(cfg)
+    with engine.connect() as cnxn:
+        sql = expr.users()
+        rows = cnxn.execute(text(sql)).fetchall()
+
+    for row in rows:
+        user = Dict()
+        user.name = row.name
+        user.host = row.host
+        users.append(user)
+
+    with engine.connect() as cnxn:
+        sql = expr.roles()
+        rows = cnxn.execute(text(sql)).fetchall()
+
+    for row in rows:
+        roles.append(row.name)
+
+    return {'data': {'users': users, 'roles': roles}}
+
+@app.get("/user_roles")
+def user_roles(user: str, host: str):
+    expr = Expression(cfg.system)
+    engine = get_engine(cfg)
+    with engine.connect() as cnxn:
+        sql = expr.user_roles()
+        rows = cnxn.execute(text(sql), {'user': user}).fetchall()
+
+    user_roles = []
+    for row in rows:
+        user_roles.append(row.role_name)
+
+    return {'data': user_roles}
+
+@app.put("/change_user_role")
+def change_role(user: str, host: str, role: str, grant: bool):
+    engine = get_engine(cfg)
+    if grant:
+        sql = f'grant {role} to {user}@{host}'
+    else:
+        sql = f'revoke {role} from {user}@{host}'
+    with engine.connect() as cnxn:
+        cnxn.execute(text(sql))
+        cnxn.commit()
 
 @app.get("/database")
 def db_info(base: str):

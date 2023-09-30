@@ -173,15 +173,47 @@ class Expression:
                   and HAS_DBACCESS(name) = 1;
             """
 
-    def user_roles(self):
+    def users(self):
+        if self.platform in ['mysql', 'mariadb']:
+            return """
+            select user as name, Host as host
+            from mysql.user
+            where host not in ('%', '')
+              and user not in ('PUBLIC', 'root', 'mariadb.sys', '')
+            order by user
+            """
+        else:
+            return None
+
+    def roles(self):
+        if self.platform in ['mysql', 'mariadb']:
+            return """
+            select user as name
+            from mysql.user
+            where host in ('%', '')
+              and not length(authentication_string)
+              and user != 'PUBLIC'
+            """
+        else:
+            return None
+
+
+    def current_user_roles(self):
         if self.platform in ['mysql', 'mariadb']:
             return """
             select role_name
             from information_schema.applicable_roles
-            where grantee = current_user();
             """
         else:
             return None
+
+    def user_roles(self):
+        if self.platform in ['mysql', 'mariadb']:
+            return """
+            select Role as role_name
+            from mysql.roles_mapping
+            where User = :user
+            """
 
     def schema_privileges(self):
         if self.platform == 'postgresql':

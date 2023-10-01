@@ -245,6 +245,25 @@ def change_role(user: str, host: str, role: str, grant: bool):
         cnxn.execute(text(sql))
         cnxn.commit()
 
+@app.put("/change_password")
+def change_password(old_pwd: str, new_pwd: str):
+    if old_pwd != cfg.pwd:
+        return {'data': 'Feil passord'}
+    elif cfg.system in ['mysql', 'mariadb']:
+        cfg2 = Settings()
+        if None in [cfg2.system, cfg2.host, cfg2.uid, cfg2.pwd]:
+            return {'data': 'Påloggingsdata mangler. Kontakt administrator.'}
+        engine = get_engine(cfg2)
+        with engine.connect() as cnxn:
+            sql = f"alter user {cfg.uid}@{cfg.host} identified by '{new_pwd}'"
+            cnxn.execute(text(sql))
+            cnxn.commit()
+
+        return {'data': 'Passord endret'}
+    else:
+        return {'data': 'Ikke implementert for denne databaseplattformen'}
+
+
 @app.get("/database")
 def db_info(base: str):
     engine = get_engine(cfg, base)

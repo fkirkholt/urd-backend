@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette import status
 import io
 import urllib.parse
+import re
 from sqlalchemy import create_engine, text
 from settings import Settings
 from database import Database

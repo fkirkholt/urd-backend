@@ -279,6 +279,16 @@ def change_password(old_pwd: str, new_pwd: str):
     else:
         return {'data': 'Ikke implementert for denne databaseplattformen'}
 
+@app.put("/create_user")
+def create_user(name: str, pwd: str):
+    engine = get_engine(cfg)
+    if cfg.system in ['mysql', 'mariadb']:
+        sql = f"create user '{name}'@'{cfg.host}' identified by '{pwd}'"
+        with engine.connect() as cnxn:
+            cnxn.execute(text(sql))
+            cnxn.commit()
+
+        return userlist()
 
 @app.get("/database")
 def db_info(base: str):

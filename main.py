@@ -136,6 +136,7 @@ def logout(response: Response):
 @app.get("/dblist")
 def dblist(role: str = None):
     result = []
+    useradmin = False
     if cfg.system == 'sqlite':
         file_list = os.listdir(cfg.host)
         for filename in file_list:
@@ -193,7 +194,22 @@ def dblist(role: str = None):
             for row in rows:
                 roles.append(row[0])
 
-    return {'data': {'records': result, 'roles': roles, 'role': role}}
+        # Find if user has useradmin privileges
+        if cfg.system in ['mysql', 'mariadb']:
+            with engine.connect() as cnxn:
+                rows = cnxn.execute(text('show grants')).fetchall()
+                for row in rows:
+                    stmt = row[0]
+                    matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
+                    if not matched:
+                        continue
+                    privs = matched.group(1).strip().lower() + ','
+                    privs =  [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
+                    if 'all privileges' in privs or 'create user' in privs:
+                        useradmin = True
+
+
+    return {'data': {'records': result, 'roles': roles, 'role': role, 'useradmin': useradmin}}
 
 @app.get("/userlist")
 def userlist():

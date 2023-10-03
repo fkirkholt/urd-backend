@@ -52,8 +52,7 @@ def get_engine(cfg, db_name=None):
     engine = create_engine(url)
     try:
         with engine.connect() as conn:
-            if cfg.system in ['mysql', 'mariadb2']:
-                conn.execute(text("SET sql_mode = 'ANSI'"))
+            pass
     except Exception as ex:
         print(ex)
         raise HTTPException(

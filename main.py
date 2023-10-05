@@ -136,6 +136,7 @@ def logout(response: Response):
 @app.get("/dblist")
 def dblist(role: str = None):
     result = []
+    roles = []
     useradmin = False
     if cfg.system == 'sqlite':
         file_list = os.listdir(cfg.host)
@@ -185,7 +186,6 @@ def dblist(role: str = None):
             result.append(base)
 
         # Find all roles
-        roles = []
         sql = expr.current_user_roles()
         if sql:
             with engine.connect() as conn:

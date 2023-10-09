@@ -148,11 +148,12 @@ class Expression:
                   and :db_name is null or d.datname = :db_name
             """
         elif self.platform == 'oracle':
+            # Oracle doesn't support comments on schemas
             return """
-            SELECT DISTINCT OWNER as db_name, NULL as db_comment
-              FROM ALL_OBJECTS
-             WHERE OBJECT_TYPE = 'TABLE'
-            order by owner;
+            SELECT DISTINCT owner as db_name, NULL as db_comment
+            FROM ALL_OBJECTS
+            WHERE OBJECT_TYPE = 'TABLE'
+            order by owner
             """
         elif self.platform == 'mysql':
             return """

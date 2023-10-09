@@ -41,6 +41,13 @@ def get_engine(cfg, db_name=None):
     if cfg.system == 'sqlite':
         path = os.path.join(cfg.host, db_name)
         url = f"sqlite+{driver}:///{path}"
+    elif cfg.system == 'oracle':
+        parts = cfg.host.split('/')
+        url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{parts[0]}"
+        if db_name:
+            url += '/' + db_name
+        if parts[1]:
+            url += '?service_name=' + parts[1]
     else:
         url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}"
         if db_name:

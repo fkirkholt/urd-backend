@@ -268,7 +268,7 @@ class Grid:
                 and hidden is False
             ):
                 continue
-            if not (field.virtual or (not grid_idx and not len(self._columns) > 4)):
+            if not (hasattr(field, 'virtual') or (not grid_idx and not len(self._columns) > 4)):
                 continue
             self._columns.append(key)
 

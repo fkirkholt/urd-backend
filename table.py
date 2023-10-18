@@ -375,11 +375,11 @@ class Table:
             col = Dict(col)
 
             column = Column(self, col)
-            fld = Field(self, col.name)
-            field = fld.get(column)
-            if field.fkey:
-                condition, params = fld.get_condition()
-                field.options = fld.get_options(condition, params)
+            field = Field(self, col.name)
+            field.set_attrs_from_col(col)
+            if hasattr(field, 'fkey'):
+                condition, params = field.get_condition()
+                field.options = field.get_options(condition, params)
 
             # Get info about column use if user has chosen this option
             if (
@@ -406,7 +406,7 @@ class Table:
                 if col.type_name not in ['blob', 'clob', 'text']:
                     field.frequency = column.check_frequency()
 
-            fields[col.name] = field
+            fields[col.name] = field.get()
 
         updated_idx = self.indexes.get(self.name + "_updated_idx", None)
         if updated_idx:

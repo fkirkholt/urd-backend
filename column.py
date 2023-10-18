@@ -2,35 +2,12 @@ import time
 
 
 class Column:
+
     def __init__(self, tbl, col):
         self.db = tbl.db
-        self.tbl = tbl
-        self.name = col.name
-        self.nullable = col.nullable
-        if hasattr(col.type, 'length'):
-            self.size = col.type.length
-        if hasattr(col.type, 'display_width'):
-            self.size = col.type.display_width
-        if hasattr(col.type, 'scale'):
-            self.scale = col.type.scale
-            self.precision = col.type.precision
-        if col.autoincrement:
-            self.auto_increment = col.autoincrement
-        if col.default and not col.autoincrement:
-            def_vals = col.default.split('::')
-            default = def_vals[0]
-            self.default = default.replace("'", "")
-        else:
-            self.default = col.default
-        try:
-            self.datatype = col.type.python_type.__name__
-        except Exception as e:
-            print(e)
-            print(col.type)
-            self.datatype = 'unknown'
-        if self.datatype == 'int' and getattr(self, 'size', 0) == 1:
-            self.datatype = 'bool'
-
+        for attr in col.keys():
+            setattr(self, attr, col[attr])
+    
     def get_size(self):
         sql = f"""
         select max(length({self.name}))

@@ -8,8 +8,30 @@ class Field:
         self.db = tbl.db
         self.name = name
 
-    def get(self, col):
-        self.element, type_ = self.get_element(col)
+    def get(self):
+        field = {key: val for key, val in vars(self).items()
+                 if not key in ['db', 'tbl']}
+
+        return Dict(field)
+
+    def set_attrs_from_col(self, col):
+        try:
+            self.datatype = col.type.python_type.__name__
+        except Exception as e:
+            self.datatype = 'unknown'
+
+        if hasattr(col.type, 'length'):
+            self.size = col.type.length
+        if hasattr(col.type, 'display_width'):
+            self.size = col.type.display_width
+        if hasattr(col.type, 'scale'):
+            self.scale = col.type.scale
+            self.precision = col.type.precision
+
+        if self.datatype == 'int' and getattr(self, 'size', 0) == 1:
+            self.datatype = 'bool'
+
+        self.element, type_ = self.get_element()
 
         attrs = Dict()
         if type_:
@@ -21,59 +43,51 @@ class Field:
         if 'data-format' in html_attrs:
             attrs['data-format'] = html_attrs['data-format']
 
-        field = Dict({
-            'name': self.name,
-            'datatype': col.datatype,
-            'element': self.element,
-            'nullable': col.nullable == 1,
-            'label': self.db.get_label(self.name),
-            'attrs': attrs
-        })
+        self.nullable = (col.nullable == 1)
+        self.label = self.db.get_label(self.name),
+        self.attrs = attrs
 
         fkey = self.tbl.get_fkey(self.name)
-        if hasattr(col, 'size'):
-            field.size = col.size
-        if hasattr(col, 'scale'):
-            field.scale = col.scale
-            field.precision = col.precision
         if fkey:
-            field.fkey = fkey
-            field.element = 'select'
-            field.view = self.get_view(fkey) or self.name
-            field.expandable = getattr(self, 'expandable', False)
-            if self.name in [fkey.referred_table + '_' + fkey.referred_columns[-1],
+            self.fkey = fkey
+            self.element = 'select'
+            self.view = self.get_view(fkey) or self.name
+            self.expandable = getattr(self, 'expandable', False)
+            if col.name in [fkey.referred_table + '_' + fkey.referred_columns[-1],
                              fkey.referred_columns[-1]]:
-                field.label = self.db.get_label(fkey.referred_table)
-        if (
-            hasattr(col, 'auto_increment') or (
+                self.label = self.db.get_label(fkey.referred_table)
+        if (col.autoincrement or (
                 col.datatype in ['int', 'Decimal'] and
                 len(self.tbl.pkey.columns) and
-                self.name == self.tbl.pkey.columns[-1] and
-                self.name not in self.tbl.fkeys
+                col.name == self.tbl.pkey.columns[-1] and
+                col.name not in self.tbl.fkeys
             )
         ):
-            field.extra = "auto_increment"
+            self.extra = "auto_increment"
 
-        if col.default:
-            field.default = self.db.expr.replace_vars(col.default, self.db)
-            if (field.default != col.default):
-                field.default_expr = col.default
+        if col.default and not col.autoincrement:
+            def_vals = col.default.split('::')
+            default = def_vals[0]
+            self.default = default.replace("'", "")
+            self.default = self.db.expr.replace_vars(col.default, self.db)
+            if (self.default != col.default):
+                self.default_expr = col.default
+        else:
+            self.default = col.default
 
-        return field
-
-    def get_element(self, col):
+    def get_element(self):
         """ Get html element for input field """
 
         type_ = None
         # Decides what sort of input should be used
-        if col.datatype == 'date':
+        if self.datatype == 'date':
             element = 'input'
             type_ = 'date'
-        elif col.datatype == 'bool':
+        elif self.datatype == 'bool':
             element = 'input'
             type_ = 'checkbox'
-        elif col.datatype == 'bytes' or (col.datatype == 'str' and (
-                col.size is None or col.size >= 255)):
+        elif self.datatype == 'bytes' or (self.datatype == 'str' and (
+                self.size is None or self.size >= 255)):
             element = "textarea"
         else:
             element = "input"

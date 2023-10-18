@@ -103,14 +103,14 @@ class Record:
                 col = Column(self.tbl, tbl_rel.cols[colname])
 
                 mark = tbl_rel.view + '_' + colname
-                expr = f'"{tbl_rel.view}"."{colname}" = :{mark}'
+                expr = f'{tbl_rel.view}.{colname} = :{mark}'
                 if (
                     col.nullable and
                     colname != rel.constrained_columns[0] and
                     rel.referred_columns == list(self.pk.keys()) and
                     rel.index.unique is True
                 ):
-                    expr = f'"{tbl_rel.view}"."{colname}" IS NULL'
+                    expr = f'{tbl_rel.view}.{colname} IS NULL'
                     grid2.cond.prep_stmnts.append(expr)
                     count_null_conds += 1
                 else:
@@ -202,11 +202,11 @@ class Record:
                 rel.referred_columns == list(self.pk.keys()) and
                 rel.index.unique is True
             ):
-                expr = (f'("{tbl_rel.view}"."{col}" = :{mark} or '
-                        f'"{tbl_rel.view}"."{col}" is null)')
+                expr = (f'({tbl_rel.view}.{col} = :{mark} or '
+                        f'{tbl_rel.view}.{col} is null)')
                 grid.cond.prep_stmnts.append(expr)
             else:
-                expr = f'"{tbl_rel.view}"."{col}" = :{mark}'
+                expr = f'{tbl_rel.view}.{col} = :{mark}'
                 grid.cond.prep_stmnts.append(expr)
             conds[col] = val
             pkey_vals[col] = val
@@ -242,7 +242,7 @@ class Record:
         params = {key: val for key, val in self.pk.items()}
 
         sql = f"""
-        select * from {self.db.schema}."{self.tbl.view}"\n
+        select * from {self.db.schema}.{self.tbl.view}\n
         where {cond}
         """
         row = self.db.query(sql, params).mappings().fetchone()

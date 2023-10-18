@@ -230,19 +230,19 @@ class Table:
             aliases.append(alias)
 
             # Get the ON statement in the join
-            ons = [f'"{alias}"."{fkey.referred_columns[idx]}" = '
-                   f'"{self.view}"."{col}"'
+            ons = [f'{alias}.{fkey.referred_columns[idx]} = '
+                   f'{self.view}.{col}'
                    for idx, col in enumerate(fkey.constrained_columns)]
             on_list = ' AND '.join(ons)
 
-            joins.append(f'left join {self.db.schema}."{fkey.referred_table}" '
-                         f'"{alias}" on {on_list}')
+            joins.append(f'left join {self.db.schema}.{fkey.referred_table} '
+                         f'{alias} on {on_list}')
 
         self._joins = "\n".join(joins)
 
         if (self.name + '_grid') in self.db.user_tables:
             join_view = "join " + self.grid_view + " on "
-            ons = [f'"{self.grid_view}"."{col}" = "{self.view}"."{col}"'
+            ons = [f'{self.grid_view}.{col} = {self.view}.{col}'
                    for col in self.pkey.columns]
             join_view += ' AND '.join(ons) + "\n"
         else:

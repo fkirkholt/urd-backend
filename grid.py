@@ -20,7 +20,7 @@ class Grid:
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
         select = ''
-        col.ref = f'"{self.tbl.grid_view}"."{col.name}"'
+        col.ref = f'{self.tbl.grid_view}.{col.name}'
 
         if 'view' in col:
             select = col.view
@@ -36,7 +36,7 @@ class Grid:
         selects = {}  # dict of select expressions
 
         for col in self.tbl.pkey.columns:
-            selects[col] = f'"{self.tbl.view}"."{col}"'
+            selects[col] = f'{self.tbl.view}.{col}'
 
         expansion_column = self.get_expansion_column()
         if expansion_column:
@@ -305,7 +305,7 @@ class Grid:
                 order += f"{sort.field} {sort.order}, "
 
         for field in self.tbl.pkey.columns:
-            order += f'"{self.tbl.view}"."{field}", '
+            order += f'{self.tbl.view}.{field}, '
 
         order = order[0:-2]
 
@@ -322,14 +322,14 @@ class Grid:
                 (key in self.tbl.fields or key == 'rowid') and
                 'source' not in self.tbl.fields[key]
             ):
-                cols.append(f'"{self.tbl.grid_view}"."{key}"')
+                cols.append(f'{self.tbl.grid_view}.{key}')
 
         select = ', '.join(cols)
         cond = self.get_cond_expr()
         order = self.make_order_by()
 
         sql = "select " + select + "\n"
-        sql += f'from {self.db.schema}."{self.tbl.view}"\n'
+        sql += f'from {self.db.schema}.{self.tbl.view}\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not cond else "where " + cond + "\n"
         sql += order
@@ -346,7 +346,7 @@ class Grid:
         conds = self.get_cond_expr()
 
         sql = "select count(*)\n"
-        sql += f'from {self.db.schema}."{self.tbl.view}"\n'
+        sql += f'from {self.db.schema}.{self.tbl.view}\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else f"where {conds}\n"
 
@@ -362,11 +362,11 @@ class Grid:
 
         alias_selects = {}
         for key, value in selects.items():
-            alias_selects[key] = f'{value} as "{key}"'
+            alias_selects[key] = f'{value} as {key}'
         select = ', '.join(alias_selects.values())
 
         sql = "select " + select + "\n"
-        sql += f'from {self.db.schema}."{self.tbl.view}"\n'
+        sql += f'from {self.db.schema}.{self.tbl.view}\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else "where " + conds + "\n"
         sql += order

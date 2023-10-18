@@ -157,7 +157,7 @@ class Field:
             from_table = self.tbl.name
 
         # Field that holds the value of the options
-        value_field = f'"{self.name}".' + pkey_col
+        value_field = f'{self.name}.' + pkey_col
 
         condition = condition or '1=1'
 
@@ -165,7 +165,7 @@ class Field:
 
         sql = f"""
         select count(*)
-        from {self.db.schema}."{from_table}" "{self.name}"
+        from {self.db.schema}.{from_table} {self.name}
         where {condition}
         """
 
@@ -179,7 +179,7 @@ class Field:
 
         sql = f"""
         select distinct {value_field} as value, {self.view or value_field} as label
-        from   {self.db.schema}."{from_table}" "{self.name}"
+        from   {self.db.schema}.{from_table} {self.name}
         where  {condition}
         order by {self.view or value_field}
         """
@@ -210,7 +210,7 @@ class Field:
                 if index.columns != ref_tbl.pkey.columns and index.unique:
                     # Only last pk column is used in display value,
                     # other pk columns are usually foreign keys
-                    cols = [f'"{self.name}".{col}' for col in index.columns
+                    cols = [f'{self.name}.{col}' for col in index.columns
                             if col not in ref_tbl.pkey.columns[0:-1]]
                     self.view = " || ', ' || ".join(cols)
                     if index.name.endswith("_sort_idx"):

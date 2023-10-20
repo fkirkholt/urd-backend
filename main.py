@@ -44,7 +44,7 @@ def get_engine(cfg, db_name=None):
     elif cfg.system == 'oracle':
         parts = cfg.host.split('/')
         url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{parts[0]}"
-        if parts[1]:
+        if len(parts) > 1:
             url += '?service_name=' + parts[1]
     else:
         url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}"

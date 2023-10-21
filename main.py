@@ -214,7 +214,13 @@ def dblist(role: str = None):
                         useradmin = True
 
 
-    return {'data': {'records': result, 'roles': roles, 'role': role, 'useradmin': useradmin}}
+    return {'data': {
+        'records': result,
+        'roles': roles,
+        'role': role,
+        'useradmin': useradmin,
+        'system': cfg.system
+    }}
 
 @app.get("/userlist")
 def userlist():

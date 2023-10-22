@@ -24,9 +24,13 @@ class Expression:
         elif type_ == "Decimal":
             return "decimal(" + str(size) + ") "
         elif type_ == "float":
-            return "float(" + str(size) + ")"
-        elif type_ == "date":
-            return "date"
+            if size:
+                precision = size.split(',')[0]
+                return "float(" + precision + ")"
+            else:
+                return "float"
+        elif type_ in ["date", "datetime", "time"]:
+            return type_
         elif type_ == "bool":
             return "tinyint(1)"
         elif type_ == "bytes":
@@ -44,8 +48,8 @@ class Expression:
             return 'decimal(' + str(size) + ')'
         elif type_ == 'float':
             return 'float(' + str(size) + ')'
-        elif type_ == 'date':
-            return 'date'
+        elif type_ in ['date', 'datetime', 'time']:
+            return type_
         elif type_ == 'bool':
             return 'bit'
         elif type_ == 'bytes':
@@ -56,8 +60,8 @@ class Expression:
     def get_sqlite_type(self, type_, size):
         if type_ in ["str"]:
             return "varchar(" + str(size) + ")" if size else "text"
-        elif type_ == "date":
-            return "date"
+        elif type_ in ["date", "datetime", "time"]:
+            return type_
         elif type_ in ["int", "bool"]:
             return "integer"
         elif type_ == "Decimal":
@@ -83,9 +87,17 @@ class Expression:
         elif type_ == "Decimal":
             return "decimal(" + str(size) + ")"
         elif type_ == "float":
-            return "float(" + str(size) + ")"
+            if size:
+                precision = size.split(',')[0]
+                return "float(" + precision + ")"
+            else:
+                return "float"
         elif type_ == "date":
             return "date"
+        elif type_ == "datetime":
+            return "timestamp"
+        elif type_ == "time":
+            return "time"
         elif type_ == "bool":
             return "boolean"
         elif type_ == "bytes":
@@ -103,13 +115,22 @@ class Expression:
         elif type_ == "int":
             return "integer"
         elif type_ == "float":
-            return "float(" + str(size) + ")"
+            if ',' in size:
+                return f"number({size})"
+            elif size:
+                return "float(" + str(size) + ")"
+            else:
+                return "float"
         elif type_ == "date":
             return "date"
+        elif type_ in ["datetime", "time"]:
+            return "timestamp"
         elif type_ == "bool":
             return "number(1)"
         elif type_ == "bytes":
             return "blob"
+        elif type_ == "Decimal":
+            return f"number({size})"
 
     def to_native_type(self, type_, size=None):
         if self.platform in ['mysql', 'mariadb']:

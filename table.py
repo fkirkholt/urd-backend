@@ -493,8 +493,10 @@ class Table:
         for col in self.fields.values():
             expr = Expression(system)
             size = col.size
-            if 'scale' in col:
-                size = str(col.precision) + "," + str(col.scale)
+            if 'precision' in col and col.precision is not None:
+                size = str(col.precision)
+                if col.scale and col.scale is not None:
+                    size += "," + str(col.scale)
             datatype = expr.to_native_type(col.datatype, size)
             coldef = f"    {col.name} {datatype}"
             if not col.nullable:

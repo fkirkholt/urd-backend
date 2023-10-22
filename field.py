@@ -18,7 +18,11 @@ class Field:
         try:
             self.datatype = col.type.python_type.__name__
         except Exception as e:
-            self.datatype = 'unknown'
+            if str(col.type).startswith('YEAR'):
+                self.datatype = 'int'
+            else:
+                ic(col.type)
+                self.datatype = 'unknown'
 
         if hasattr(col.type, 'length'):
             self.size = col.type.length

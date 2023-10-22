@@ -778,10 +778,16 @@ class Database:
         ordered_tables = tuple(sorter.static_order())
 
         for view_name in self.refl.get_view_names(self.schema):
-            ddl += f"drop view if exists {view_name};\n"
+            if self.engine.name == 'oracle':
+                ddl += f"drop view {tbl_name};\n"
+            else:
+                ddl += f"drop view if exists {view_name};\n"
 
         for tbl_name in reversed(ordered_tables):
-            ddl += f"drop table if exists {tbl_name};\n"
+            if self.engine.name == 'oracle':
+                ddl += f"drop table {tbl_name};\n"
+            else:
+                ddl += f"drop table if exists {tbl_name};\n"
 
         for tbl_name in ordered_tables:
             if tbl_name is None:

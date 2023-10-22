@@ -504,13 +504,8 @@ class Table:
             if col.default:
                 default = col.default if not col.default_expr \
                     else col.default_expr
-                if (
-                    col.datatype in ['str', 'date'] and
-                    default[0:8] != 'CURRENT_'
-                ):
-                    coldef += " DEFAULT '" + default + "'"
-                else:
-                    coldef += " DEFAULT " + default
+                coldef += " DEFAULT " + default
+
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
         if (self.pkey and self.pkey.columns != ['rowid']):

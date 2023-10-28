@@ -456,7 +456,7 @@ def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool,
         filename = table.name
     else:
         ddl = dbo.export_as_sql(dialect, include_recs, select_recs)
-        filename = base
+        filename = base + '.' + dialect
     response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
     response.headers["Content-Disposition"] = \
         f"attachment; filename={filename}.sql"

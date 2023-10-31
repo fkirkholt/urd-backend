@@ -113,12 +113,10 @@ class Database:
 
     def get_comment(self):
         """Get database comment"""
-        if (
-            self.engine.name in ['mysql', 'mariadb'] or
-            (self.engine.name == 'postgresql' and self.schema == 'public')
-        ):
-            sql = self.expr.databases(self.name)
-            comment =  self.query(sql, {'db_name': self.name}).first().db_comment
+        if self.engine.name in ['mysql', 'mariadb', 'postgresql']:
+            sql = self.expr.databases(self.schema)
+            params = {'schema': self.schema, 'cat': self.cat}
+            comment =  self.query(sql, params).first().db_comment
         else:
             comment = None
 

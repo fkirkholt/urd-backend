@@ -181,7 +181,7 @@ def dblist(role: str = None):
                 sql = 'set role ' + role
                 conn.execute(text(sql))
             sql = expr.databases()
-            rows = conn.execute(text(sql), {'db_name': None}).fetchall()
+            rows = conn.execute(text(sql), {'schema': None, 'cat': None}).fetchall()
 
         for row in rows:
             base = Dict()

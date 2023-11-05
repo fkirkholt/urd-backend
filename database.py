@@ -37,9 +37,6 @@ class Database:
 
         self.user = engine.url.username
         self.expr = Expression(self.engine.name)
-        table_names = self.refl.get_table_names(self.schema)
-        view_names = self.refl.get_view_names(self.schema)
-        self.user_tables = table_names + view_names
         self.html_attrs = self.init_html_attributes()
         attrs = Dict(self.html_attrs.pop('base', None))
         self.cache = attrs.pop('data-cache', None)
@@ -47,6 +44,87 @@ class Database:
             self.config = self.cache.config
         else:
             self.config = Dict(Settings())
+
+    @property
+    def user_schemas(self):
+        if self.engine.name == 'postgresql' and not self.user_is_admin:
+            sql = self.expr.user_schemas()
+            params = {
+                'cat': self.cat,
+                'user': self.user
+            }
+            rows = self.query(sql, params).fetchall()
+            self._user_schemas = [row[0] for row in rows]
+        else:
+            self._user_schemas = list(filter(self.filter_schema,
+                                      self.refl.get_schema_names()))
+
+        return self._user_schemas
+
+    @property
+    def user_tables(self):
+        if hasattr(self, '_user_tables'):
+            return self._user_tables
+        if self.engine.name == 'postgresql' and not self.user_is_admin:
+            sql = self.expr.user_tables()
+            params = {
+                'cat': self.cat,
+                'schema': self.schema,
+                'user': self.user
+            }
+            rows = self.query(sql, params).fetchall()
+            self._user_tables = [row[0] for row in rows]
+        else:
+            table_names = self.refl.get_table_names(self.schema)
+            view_names = self.refl.get_view_names(self.schema)
+            self._user_tables = table_names + view_names
+
+        return self._user_tables
+
+    @property
+    def user_is_admin(self):
+        if hasattr(self, '_user_is_admin'):
+            return self._user_is_admin
+        self._user_is_admin = False
+        if self.engine.name in ['mysql', 'mariadb']:
+            with self.engine.connect() as cnxn:
+                rows = cnxn.execute(text('show grants')).fetchall()
+            for row in rows:
+                stmt = row[0]
+                grant = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
+                if not grant:
+                    continue
+                privs = grant.group(1).strip().lower() + ','
+                expr = r'([^,(]+(?:\([^)]+\))?)\s*,\s*'
+                privs = [priv.strip() for priv in re.findall(expr, privs)]
+                obj = grant.group(2).replace('"', '').strip()
+                if obj == self.schema + '.*' or obj == '*.*':
+                    if 'all privileges' in privs:
+                        self._user_is_admin = True
+        elif self.engine.name == 'postgresql':
+            sql = "select usesuper from pg_user where usename = current_user;"
+            row = self.query(sql).first()
+            super = row[0]
+            if super:
+                self._user_is_admin = True
+
+            # Find if user owns the database
+            sql = """
+            select pg_catalog.pg_get_userbyid(d.datdba) as db_owner
+            from pg_catalog.pg_database d
+            where d.datname = :cat
+            """
+            row = self.query(sql, {'cat': self.cat}).first()
+            if row[0] == self.user:
+                self._user_is_admin = True
+
+        elif self.engine.anme == 'oracle':
+            if self.user == self.schema:
+                self._user_is_admin = True
+        else:
+            self._user_is_admin = True
+
+        return self._user_is_admin
 
     def init_html_attributes(self):
         """Get data from table html_attributes"""
@@ -66,7 +144,7 @@ class Database:
 
         return attrs
 
-    def is_ordinary_schema(self, schema):
+    def filter_schema(self, schema):
         system_schemas = [
             'information_schema',
             'performance_schema',
@@ -93,8 +171,7 @@ class Database:
                 "system": self.engine.name,
                 "server": self.engine.url.host,
                 "schema": self.schema,
-                "schemata": list(filter(self.is_ordinary_schema,
-                                        self.refl.get_schema_names())),
+                "schemata": self.user_schemas,
                 "label": self.get_label(self.name),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
@@ -104,7 +181,7 @@ class Database:
             },
             "user": {
                 "name": self.user,
-                "admin": self.privilege.create,
+                "admin": self.user_is_admin
             },
             "config": self.config
         }
@@ -116,7 +193,7 @@ class Database:
         if self.engine.name in ['mysql', 'mariadb', 'postgresql']:
             sql = self.expr.databases(self.schema)
             params = {'schema': self.schema, 'cat': self.cat}
-            comment =  self.query(sql, params).first().db_comment
+            comment = self.query(sql, params).first().db_comment
         else:
             comment = None
 
@@ -126,34 +203,36 @@ class Database:
     def privilege(self):
         """Get user privileges"""
         privilege = Dict()
+        privilege.select = 0
+        privilege.insert = 0
+        privilege['update'] = 0
+        privilege.delete = 0
+        privilege.create = 0
 
         if self.engine.name in ['mysql', 'mariadb']:
-            privilege.select = 0
-            privilege.insert = 0
-            privilege['update'] = 0
-            privilege.delete = 0
-            privilege.create = 0
             with self.engine.connect() as cnxn:
                 rows = cnxn.execute(text('show grants')).fetchall()
-                for row in rows:
-                    stmt = row[0]
-                    matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
-                    if not matched:
-                        continue
-                    privs = matched.group(1).strip().lower() + ','
-                    privs =  [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
-                    obj = matched.group(2).replace('"', '').strip()
-                    if obj == self.schema + '.*' or obj == '*.*':
-                        for priv in privilege:
-                            if priv in privs or 'all privileges' in privs:
-                                privilege[priv] = 1
+            for row in rows:
+                stmt = row[0]
+                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
+                if not matched:
+                    continue
+                privs = matched.group(1).strip().lower() + ','
+                privs = [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
+                obj = matched.group(2).replace('"', '').strip()
+                if obj == self.schema + '.*' or obj == '*.*':
+                    for priv in privilege:
+                        if priv in privs or 'all privileges' in privs:
+                            privilege[priv] = 1
         elif self.engine.name == 'postgresql':
             sql = self.expr.schema_privileges()
             with self.engine.connect() as cnxn:
                 param = {'schema': self.schema}
-                if self.engine.name == 'postgresql':
-                    priv = cnxn.execute(text(sql), param).first()
-                    privilege.create = priv.create
+                priv = cnxn.execute(text(sql), param).first()
+                privilege.create = priv.create
+            if self.user_is_admin:
+                for priv in privilege:
+                    privilege[priv] = 1
         else:
             # Privilege not implemented for oracle or mssql yet
             privilege.select = 1
@@ -217,7 +296,7 @@ class Database:
 
         tbl_names = self.refl.get_table_names(self.schema)
         view_names = self.refl.get_view_names(self.schema)
-        rows = tbl_names + view_names
+        rows = self.user_tables
 
         for tbl_name in rows:
             if tbl_name[-5:] == '_view' and tbl_name[:-5] in rows:
@@ -277,8 +356,8 @@ class Database:
                 'indexes': table.indexes,
                 'hidden': hidden,
                 # fields are needed only when creating cache
-                'fields': None if not self.config else table.fields,
-                'grid': None if not self.config else {
+                'fields': None if not self.config.update_cache else table.fields,
+                'grid': None if not self.config.update_cache else {
                     'columns': grid.columns 
                 }
             })
@@ -294,7 +373,6 @@ class Database:
                 self._columns[table] = cols
 
         return self._columns
-
 
     def is_top_level(self, table):
         """Check if table is top level, i.e. not subordinate to other tables"""

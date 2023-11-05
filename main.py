@@ -23,7 +23,6 @@ from expression import Expression
 import xattr
 
 
-
 cfg = Settings()
 
 app = FastAPI()
@@ -66,6 +65,7 @@ def get_engine(cfg, db_name=None):
         )
 
     return engine
+
 
 def token():
     return jwt.encode({
@@ -203,16 +203,15 @@ def dblist(role: str = None):
         if cfg.system in ['mysql', 'mariadb']:
             with engine.connect() as cnxn:
                 rows = cnxn.execute(text('show grants')).fetchall()
-                for row in rows:
-                    stmt = row[0]
-                    matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
-                    if not matched:
-                        continue
-                    privs = matched.group(1).strip().lower() + ','
-                    privs =  [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
-                    if 'all privileges' in privs or 'create user' in privs:
-                        useradmin = True
-
+            for row in rows:
+                stmt = row[0]
+                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
+                if not matched:
+                    continue
+                privs = matched.group(1).strip().lower() + ','
+                privs = [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
+                if 'all privileges' in privs or 'create user' in privs:
+                    useradmin = True
 
     return {'data': {
         'records': result,
@@ -221,6 +220,7 @@ def dblist(role: str = None):
         'useradmin': useradmin,
         'system': cfg.system
     }}
+
 
 @app.get("/userlist")
 def userlist():
@@ -247,6 +247,7 @@ def userlist():
 
     return {'data': {'users': users, 'roles': roles}}
 
+
 @app.get("/user_roles")
 def user_roles(user: str, host: str):
     expr = Expression(cfg.system)
@@ -261,6 +262,7 @@ def user_roles(user: str, host: str):
 
     return {'data': user_roles}
 
+
 @app.put("/change_user_role")
 def change_role(user: str, host: str, role: str, grant: bool):
     engine = get_engine(cfg)
@@ -271,6 +273,7 @@ def change_role(user: str, host: str, role: str, grant: bool):
     with engine.connect() as cnxn:
         cnxn.execute(text(sql))
         cnxn.commit()
+
 
 @app.put("/change_password")
 def change_password(old_pwd: str, new_pwd: str):
@@ -290,6 +293,7 @@ def change_password(old_pwd: str, new_pwd: str):
     else:
         return {'data': 'Ikke implementert for denne databaseplattformen'}
 
+
 @app.put("/create_user")
 def create_user(name: str, pwd: str):
     engine = get_engine(cfg)
@@ -300,6 +304,7 @@ def create_user(name: str, pwd: str):
             cnxn.commit()
 
         return userlist()
+
 
 @app.get("/database")
 def db_info(base: str):

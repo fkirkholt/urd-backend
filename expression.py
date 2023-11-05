@@ -224,7 +224,6 @@ class Expression:
         else:
             return None
 
-
     def current_user_roles(self):
         if self.platform in ['mysql', 'mariadb']:
             return """
@@ -268,7 +267,17 @@ class Expression:
             return """
             select privilege_type
             from information_schema.table_privileges
-            where grantee = current_user
+            where grantee in (
+                WITH RECURSIVE cte AS (
+                   SELECT oid FROM pg_roles WHERE rolname = current_user
+
+                   UNION ALL
+                   SELECT m.roleid
+                   FROM   cte
+                   JOIN   pg_auth_members m ON m.member = cte.oid
+                   )
+                SELECT oid::regrole::text AS rolename FROM cte
+            )
             and table_schema = :schema
             and table_name = :table;
             """
@@ -300,4 +309,33 @@ class Expression:
             select table_name, table_comment
             from   information_schema.tables
             where table_schema = :schema
+            """
+
+    def user_tables(self):
+        if self.platform == 'postgresql':
+            return """
+            select table_name
+            from information_schema.role_table_grants
+            where table_catalog = :cat
+              and table_schema = :schema
+              and grantee in (
+                WITH RECURSIVE cte AS (
+                   SELECT oid FROM pg_roles WHERE rolname = current_user
+
+                   UNION ALL
+                   SELECT m.roleid
+                   FROM   cte
+                   JOIN   pg_auth_members m ON m.member = cte.oid
+                   )
+                SELECT oid::regrole::text AS rolename FROM cte
+            )
+            """
+
+    def user_schemas(self):
+        if self.platform == 'postgresql':
+            return """
+            select table_schema
+            from information_schema.role_table_grants
+            where table_catalog = :cat
+                and grantee = :user
             """

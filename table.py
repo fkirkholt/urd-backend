@@ -588,10 +588,9 @@ class Table:
         rows = self.db.query(sql).mappings()
 
         if select_recs:
-            db_name = self.db.name.split('.')[0]
             insert += f'insert into {self.name}\n'
             insert += 'select ' + ', '.join(rows.keys())
-            insert += f' from {db_name}.{self.name};\n\n'
+            insert += f' from {self.db.schema}.{self.name};\n\n'
         else:
             for row in rows:
                 insert += f'insert into {self.name} values ('

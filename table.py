@@ -323,10 +323,10 @@ class Table:
             # Iterates over all the relations to the record
             for key, rel in rec.relations.items():
 
-                if rel.base_name == self.db.name:
+                if rel.schema == self.db.schema:
                     rel_db = self.db
                 else:
-                    rel_db = Database(self.db.engine, rel.base_name)
+                    rel_db = Database(self.db.engine, rel.schema)
 
                 rel_table = Table(rel_db, rel.table_name)
 

@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from addict import Dict
 
 
@@ -10,27 +11,22 @@ class Field:
 
     def get(self):
         field = {key: val for key, val in vars(self).items()
-                 if not key in ['db', 'tbl']}
+                 if key not in ['db', 'tbl']}
 
         return Dict(field)
 
     def set_attrs_from_col(self, col):
         try:
             self.datatype = col.type.python_type.__name__
-        except Exception as e:
-            if str(col.type).startswith('YEAR'):
-                self.datatype = 'int'
-            else:
-                ic(col.type)
-                self.datatype = 'unknown'
+        except Exception:
+            self.datatype = ('int' if str(col.type).startswith('YEAR')
+                             else 'unknown')
 
-        if hasattr(col.type, 'length'):
-            self.size = col.type.length
-        if hasattr(col.type, 'display_width'):
-            self.size = col.type.display_width
-        if hasattr(col.type, 'scale'):
-            self.scale = col.type.scale
-            self.precision = col.type.precision
+        if hasattr(col, 'size'):
+            self.size = col.size
+        if hasattr(col, 'scale'):
+            self.scale = col.scale
+            self.precision = col.precision
 
         if self.datatype == 'int' and getattr(self, 'size', 0) == 1:
             self.datatype = 'bool'
@@ -57,11 +53,12 @@ class Field:
             self.element = 'select'
             self.view = self.get_view(fkey) or self.name
             self.expandable = getattr(self, 'expandable', False)
-            if col.name in [fkey.referred_table + '_' + fkey.referred_columns[-1],
-                             fkey.referred_columns[-1]]:
+            if col.name in [fkey.referred_table+'_'+fkey.referred_columns[-1],
+                            fkey.referred_columns[-1]]:
                 self.label = self.db.get_label(fkey.referred_table)
-        if (col.autoincrement or (
-                col.datatype in ['int', 'Decimal'] and
+        if (
+            hasattr(col, 'autoincrement') or (
+                self.datatype in ['int', 'Decimal'] and
                 len(self.tbl.pkey.columns) and
                 col.name == self.tbl.pkey.columns[-1] and
                 col.name not in self.tbl.fkeys
@@ -69,13 +66,11 @@ class Field:
         ):
             self.extra = "auto_increment"
 
-        if col.default and not col.autoincrement:
+        if col.default and not hasattr(col, 'autoincrement'):
             def_vals = col.default.split('::')
             default = def_vals[0]
             self.default = default.replace("'", "")
-            self.default = self.db.expr.replace_vars(col.default, self.db)
-            if (self.default != col.default):
-                self.default_expr = col.default
+            self.default = self.replace_vars(col.default)
         else:
             self.default = col.default
 
@@ -155,7 +150,7 @@ class Field:
         fkey = self.tbl.get_fkey(self.name)
         pkey_col = fkey.referred_columns[-1] if fkey else self.name
 
-        if fkey and fkey.referred_table in self.db.user_tables:
+        if fkey and fkey.referred_table in self.db.tablenames:
             from_table = fkey.referred_table
         else:
             from_table = self.tbl.name
@@ -182,7 +177,8 @@ class Field:
         self.view = view if view else self.name
 
         sql = f"""
-        select distinct {value_field} as value, {self.view or value_field} as label
+        select distinct {value_field} as value,
+               {self.view or value_field} as label
         from   {self.db.schema}.{from_table} {self.name}
         where  {condition}
         order by {self.view or value_field}
@@ -200,9 +196,9 @@ class Field:
             return self.view
         from table import Table
 
-        self.view = None 
+        self.view = None
 
-        if fkey.referred_table in self.db.user_tables:
+        if fkey.referred_table in self.db.tablenames:
 
             ref_tbl = Table(self.db, fkey.referred_table)
             self.view = self.name + '.' + ref_tbl.pkey.columns[-1]
@@ -221,3 +217,15 @@ class Field:
                         break
 
         return self.view
+
+    def replace_vars(self, expr):
+        if "curdate" in expr.lower():
+            expr = date.today().strftime("%Y-%m-%d")
+        elif "current_date" in expr.lower():
+            expr = date.today().strftime("%Y-%m-%d")
+        elif "current_timestamp" in expr.lower():
+            expr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        elif "current_user" in expr.lower():
+            expr = self.db.user.name
+
+        return expr

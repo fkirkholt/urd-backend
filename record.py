@@ -17,7 +17,7 @@ class Record:
         """Return pkey values where floats are strings. Needed by pyodbc"""
         formatted_pkey = {}
         for key, value in pkey_vals.items():
-            if type(value) == float:
+            if type(value) is float:
                 value = str(value)
             formatted_pkey[key] = value
 
@@ -42,7 +42,7 @@ class Record:
 
             if (
                 'fkey' in field and
-                field.fkey.referred_table in self.db.user_tables
+                field.fkey.referred_table in self.db.tablenames
             ):
                 condition, params = fld.get_condition(fields=fields)
                 field.options = fld.get_options(condition, params)
@@ -50,7 +50,7 @@ class Record:
             fields[field.name] = field
 
         return Dict({
-            'base_name': self.db.name,
+            'base_name': self.db.identifier,
             'table_name': self.tbl.name,
             'pkey': self.pk,
             'fields': fields,
@@ -80,7 +80,7 @@ class Record:
             columns = db.refl.get_columns(rel.table, db.schema)
             tbl_rel.cols = {col['name']: Dict(col) for col in columns}
 
-            if rel.table not in self.db.user_tables:
+            if rel.table not in self.db.tablenames:
                 continue
 
             # Find index used

@@ -1,6 +1,5 @@
 """Module for handling databases and connections"""
 import os
-import re
 import time
 from graphlib import TopologicalSorter
 from sqlalchemy import text, inspect, bindparam, exc
@@ -8,9 +7,10 @@ import sqlglot
 import simplejson as json
 from addict import Dict
 from settings import Settings
-from expression import Expression
 from table import Table
 from grid import Grid
+from user import User
+from datatype import Datatype
 
 
 class Database:
@@ -18,7 +18,7 @@ class Database:
 
     def __init__(self, engine, db_name):
         self.engine = engine
-        self.name = db_name
+        self.identifier = db_name
         path = db_name.split('.')
         if engine.name == 'postgresql':
             self.schema = 'public' if len(path) == 1 else path[1]
@@ -35,8 +35,7 @@ class Database:
 
         self.refl = inspect(engine)
 
-        self.user = engine.url.username
-        self.expr = Expression(self.engine.name)
+        self.user = User(engine)
         self.html_attrs = self.init_html_attributes()
         attrs = Dict(self.html_attrs.pop('base', None))
         self.cache = attrs.pop('data-cache', None)
@@ -45,91 +44,10 @@ class Database:
         else:
             self.config = Dict(Settings())
 
-    @property
-    def user_schemas(self):
-        if self.engine.name == 'postgresql' and not self.user_is_admin:
-            sql = self.expr.user_schemas()
-            params = {
-                'cat': self.cat,
-                'user': self.user
-            }
-            rows = self.query(sql, params).fetchall()
-            self._user_schemas = [row[0] for row in rows]
-        else:
-            self._user_schemas = list(filter(self.filter_schema,
-                                      self.refl.get_schema_names()))
-
-        return self._user_schemas
-
-    @property
-    def user_tables(self):
-        if hasattr(self, '_user_tables'):
-            return self._user_tables
-        if self.engine.name == 'postgresql' and not self.user_is_admin:
-            sql = self.expr.user_tables()
-            params = {
-                'cat': self.cat,
-                'schema': self.schema,
-                'user': self.user
-            }
-            rows = self.query(sql, params).fetchall()
-            self._user_tables = [row[0] for row in rows]
-        else:
-            table_names = self.refl.get_table_names(self.schema)
-            view_names = self.refl.get_view_names(self.schema)
-            self._user_tables = table_names + view_names
-
-        return self._user_tables
-
-    @property
-    def user_is_admin(self):
-        if hasattr(self, '_user_is_admin'):
-            return self._user_is_admin
-        self._user_is_admin = False
-        if self.engine.name in ['mysql', 'mariadb']:
-            with self.engine.connect() as cnxn:
-                rows = cnxn.execute(text('show grants')).fetchall()
-            for row in rows:
-                stmt = row[0]
-                grant = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
-                if not grant:
-                    continue
-                privs = grant.group(1).strip().lower() + ','
-                expr = r'([^,(]+(?:\([^)]+\))?)\s*,\s*'
-                privs = [priv.strip() for priv in re.findall(expr, privs)]
-                obj = grant.group(2).replace('"', '').strip()
-                if obj == self.schema + '.*' or obj == '*.*':
-                    if 'all privileges' in privs:
-                        self._user_is_admin = True
-        elif self.engine.name == 'postgresql':
-            sql = "select usesuper from pg_user where usename = current_user;"
-            row = self.query(sql).first()
-            super = row[0]
-            if super:
-                self._user_is_admin = True
-
-            # Find if user owns the database
-            sql = """
-            select pg_catalog.pg_get_userbyid(d.datdba) as db_owner
-            from pg_catalog.pg_database d
-            where d.datname = :cat
-            """
-            row = self.query(sql, {'cat': self.cat}).first()
-            if row[0] == self.user:
-                self._user_is_admin = True
-
-        elif self.engine.anme == 'oracle':
-            if self.user == self.schema:
-                self._user_is_admin = True
-        else:
-            self._user_is_admin = True
-
-        return self._user_is_admin
-
     def init_html_attributes(self):
         """Get data from table html_attributes"""
         attrs = Dict()
-        if 'html_attributes' in self.user_tables:
+        if 'html_attributes' in self.tablenames:
             sql = f"""
             select selector, attributes as attrs
             from {self.schema}.html_attributes
@@ -166,22 +84,22 @@ class Database:
         info = {
             "branch": branch,
             "base": {
-                "name": self.name,
+                "name": self.identifier,
                 "cat": self.cat,
                 "system": self.engine.name,
                 "server": self.engine.url.host,
                 "schema": self.schema,
-                "schemata": self.user_schemas,
-                "label": self.get_label(self.name),
+                "schemata": self.schemas,
+                "label": self.get_label(self.identifier),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
                 "description": self.get_comment(),
                 "html_attrs": self.html_attrs,
-                "privilege": self.privilege
+                "privilege": self.user.schema_privilege(self.schema)
             },
             "user": {
-                "name": self.user,
-                "admin": self.user_is_admin
+                "name": self.user.name,
+                "admin": self.user.is_admin(self.schema)
             },
             "config": self.config
         }
@@ -191,63 +109,18 @@ class Database:
     def get_comment(self):
         """Get database comment"""
         if self.engine.name in ['mysql', 'mariadb', 'postgresql']:
-            sql = self.expr.databases(self.schema)
-            params = {'schema': self.schema, 'cat': self.cat}
-            comment = self.query(sql, params).first().db_comment
+            user = User(self.engine)
+            comment = user.databases(self.schema, self.cat)[0].db_comment
         else:
             comment = None
 
         return comment
 
-    @property
-    def privilege(self):
-        """Get user privileges"""
-        privilege = Dict()
-        privilege.select = 0
-        privilege.insert = 0
-        privilege['update'] = 0
-        privilege.delete = 0
-        privilege.create = 0
-
-        if self.engine.name in ['mysql', 'mariadb']:
-            with self.engine.connect() as cnxn:
-                rows = cnxn.execute(text('show grants')).fetchall()
-            for row in rows:
-                stmt = row[0]
-                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
-                if not matched:
-                    continue
-                privs = matched.group(1).strip().lower() + ','
-                privs = [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
-                obj = matched.group(2).replace('"', '').strip()
-                if obj == self.schema + '.*' or obj == '*.*':
-                    for priv in privilege:
-                        if priv in privs or 'all privileges' in privs:
-                            privilege[priv] = 1
-        elif self.engine.name == 'postgresql':
-            sql = self.expr.schema_privileges()
-            with self.engine.connect() as cnxn:
-                param = {'schema': self.schema}
-                priv = cnxn.execute(text(sql), param).first()
-                privilege.create = priv.create
-            if self.user_is_admin:
-                for priv in privilege:
-                    privilege[priv] = 1
-        else:
-            # Privilege not implemented for oracle or mssql yet
-            privilege.select = 1
-            privilege.insert = 1
-            privilege['update'] = 1
-            privilege.delete = 1
-            privilege.create = 1
-
-        self._privilege = privilege
-        return privilege
-
     def create_html_attributes(self):
         """Create table holding html_attributes"""
 
-        string_datatype = self.expr.to_native_type('str')
+        datatype = Datatype('str')
+        string_datatype = datatype.to_native_type(self.engine.name)
 
         sql = f"""
         create table {self.schema}.html_attributes(
@@ -261,15 +134,17 @@ class Database:
             cnxn.execute(text(sql))
             cnxn.commit()
 
-        self.user_tables.append('html_attributes')
+        self.tablenames.append('html_attributes')
         attributes = {
             'data-type': 'json',
             'data-format': 'yaml'
         }
 
+        val = json.dumps(attributes)
+
         sql = f"""
             insert into {self.schema}.html_attributes (selector, attributes)
-            values ('[data-field="html_attributes.attributes"]', '{json.dumps(attributes)}')
+            values ('[data-field="html_attributes.attributes"]', '{val}')
         """
 
         with self.engine.connect() as cnxn:
@@ -291,15 +166,17 @@ class Database:
 
         self.tables = Dict()
 
-        if (self.config.update_cache and 'html_attributes' not in self.user_tables):
+        if (
+            self.config.update_cache and
+            'html_attributes' not in self.tablenames
+        ):
             self.create_html_attributes()
 
         tbl_names = self.refl.get_table_names(self.schema)
         view_names = self.refl.get_view_names(self.schema)
-        rows = self.user_tables
 
-        for tbl_name in rows:
-            if tbl_name[-5:] == '_view' and tbl_name[:-5] in rows:
+        for tbl_name in self.tablenames:
+            if tbl_name[-5:] == '_view' and tbl_name[:-5] in self.tablenames:
                 continue
 
             hidden = tbl_name[0:1] == "_"
@@ -347,7 +224,8 @@ class Database:
                 'view': view,
                 'icon': None,
                 'label': self.get_label(tbl_name),
-                'rowcount': None if not self.config.update_cache else table.rowcount,
+                'rowcount': (None if not self.config.update_cache
+                             else table.rowcount),
                 'pkey': table.pkey,
                 'description': comment,
                 'fkeys': table.fkeys,
@@ -356,13 +234,70 @@ class Database:
                 'indexes': table.indexes,
                 'hidden': hidden,
                 # fields are needed only when creating cache
-                'fields': None if not self.config.update_cache else table.fields,
+                'fields': (None if not self.config.update_cache
+                           else table.fields),
                 'grid': None if not self.config.update_cache else {
-                    'columns': grid.columns 
+                    'columns': grid.columns
                 }
             })
 
         return self.tables
+
+    @property
+    def schemas(self):
+        if self.engine.name == 'postgresql' and not self.user.is_admin(self.schema):
+            sql = """
+            select table_schema
+            from information_schema.role_table_grants
+            where table_catalog = :cat
+                and grantee = :user
+            """
+
+            params = {
+                'cat': self.cat,
+                'user': self.user.name
+            }
+            with self.engine.connect() as cnxn:
+                rows = cnxn.execute(text(sql), params).fetchall()
+            self._schemas = [row[0] for row in rows]
+        else:
+            self._schemas = list(filter(self.filter_schema,
+                                 self.refl.get_schema_names()))
+
+        return self._schemas
+
+    @property
+    def tablenames(self):
+        if hasattr(self, '_tablenames'):
+            return self._tablenames
+        if self.engine.name == 'postgresql' and not self.user.is_admin(self.schema):
+            sql = """
+            select table_name
+            from information_schema.role_table_grants
+            where table_catalog = :cat
+              and table_schema = :schema
+              and grantee in (
+                WITH RECURSIVE cte AS (
+                   SELECT oid FROM pg_roles WHERE rolname = current_user
+
+                   UNION ALL
+                   SELECT m.roleid
+                   FROM   cte
+                   JOIN   pg_auth_members m ON m.member = cte.oid
+                   )
+                SELECT oid::regrole::text AS rolename FROM cte
+            )
+            """
+            with self.engine.connect() as cnxn:
+                params = {'cat': self.cat, 'schema': self.schema}
+                rows = cnxn.execute(text(sql), params).fetchall()
+            self._tablenames = [row[0] for row in rows]
+        else:
+            table_names = self.refl.get_table_names(self.schema)
+            view_names = self.refl.get_view_names(self.schema)
+            self._tablenames = table_names + view_names
+
+        return self._tablenames
 
     @property
     def columns(self):
@@ -380,7 +315,7 @@ class Database:
             return False
 
         for fkey in table.fkeys.values():
-            if fkey.referred_table not in self.tables:
+            if fkey.referred_table not in self.tablenames:
                 continue
 
             # Not top level if has foreign keys to other table
@@ -428,80 +363,83 @@ class Database:
 
         return relation_tables
 
-    def get_tbl_groups(self):
-        """Group tables by prefix or relations"""
+    def get_tbl_groups_urdr(self):
+        """Group tables by prefix or relations
+
+        If not generating cache or generating cache for databases
+        with Urdr structure. This is the default behaviour, which
+        treats databases as following the Urdr rules for self
+        documenting databases
+        """
         tbl_groups = Dict()
+        i = 0
+        for tbl_name, table in self.tables.items():
+            i += 1
+            if (tbl_name[-5:] == '_grid' and table.type == 'view'):
+                continue
+            if tbl_name[0:1] == "_":
+                name = tbl_name[1:]
+            else:
+                name = tbl_name
+            name = tbl_name[1:] if tbl_name[0:1] == "_" else tbl_name
+            parts = name.split("_")
 
-        # If not generating cache or generating cache for databases
-        # with Urdr structure. This is the default behaviour, which
-        # treats databases as following the Urdr rules for self
-        # documenting databases
-        if (not self.config.update_cache or self.config.urd_structure):
-            i = 0
-            for tbl_name, table in self.tables.items():
-                i += 1
-                if (tbl_name[-5:] == '_grid' and table.type == 'view'):
-                    continue
-                if tbl_name[0:1] == "_":
-                    name = tbl_name[1:]
+            # Don't include tables that are subordinate to other tables
+            # i.e. the primary key also has a foreign key
+            # These are handled in get_content_node
+            tbl = Table(self, tbl_name)
+            if tbl.is_subordinate():
+                continue
+
+            placed = False
+            for group in tbl_groups:
+                if name.startswith(group + '_'):
+                    tbl_groups[group].append(tbl_name)
+                    placed = True
+
+            if not placed:
+                group = None
+                for part in parts:
+                    test_group = group + '_' + part if group else part
+                    if (
+                        len(self.tables) > i and
+                        list(self.tables)[i].startswith(test_group+'_')
+                    ):
+                        group = test_group
+                    elif group is None:
+                        group = part
+
+                if not tbl_groups[group]:
+                    tbl_groups[group] = []
+
+                tbl_groups[group].append(tbl_name)
+
+        return tbl_groups
+
+    def get_table_groups(self):
+        tbl_groups = Dict()
+        # Group for tables not belonging to other groups
+        tbl_groups['...'] = []
+
+        for table in self.tables.values():
+            top_level = self.is_top_level(table)
+            if top_level:
+                self.tables[table.name].top_level = True
+                # modules = self.attach_to_module(table, modules)
+
+                # Recursively get all tables under this top level table
+                grouptables = self.get_relation_tables(table.name, [])
+
+                if table.name not in grouptables:
+                    grouptables.append(table.name)
+                if len(grouptables) > 2:
+                    tbl_groups[table.name] = grouptables
                 else:
-                    name = tbl_name
-                parts = name.split("_")
+                    tbl_groups['...'].extend(grouptables)
+            elif table.type == 'list':
+                tbl_groups['...'].append(table.name)
 
-                # Don't include tables that are subordinate to other tables
-                # i.e. the primary key also has a foreign key
-                # These are handled in get_content_node
-                subordinate = False
-                tbl = Table(self, tbl_name)
-                for colname in table.pkey.columns:
-                    if tbl.get_fkey(colname):
-                        subordinate = True
-                        break
-
-                if not subordinate:
-                    placed = False
-                    for group in tbl_groups:
-                        if name.startswith(group + '_'):
-                            tbl_groups[group].append(tbl_name)
-                            placed = True
-
-                    if not placed:
-                        group = None
-                        for part in parts:
-                            test_group = group + '_' + part if group else part
-                            if len(self.tables) > i and list(self.tables)[i].startswith(test_group + '_'):
-                                group = test_group
-                            elif group is None:
-                                group = part
-
-                        if not tbl_groups[group]:
-                            tbl_groups[group] = []
-
-                        tbl_groups[group].append(tbl_name)
-
-        else:
-            # Group for tables not belonging to other groups
-            tbl_groups['...'] = []
-
-            for table in self.tables.values():
-                top_level = self.is_top_level(table)
-                if top_level:
-                    self.tables[table.name].top_level = True
-                    # modules = self.attach_to_module(table, modules)
-
-                    # Recursively get all tables under this top level table
-                    grouptables = self.get_relation_tables(table.name, [])
-
-                    if table.name not in grouptables:
-                        grouptables.append(table.name)
-                    if len(grouptables) > 2:
-                        tbl_groups[table.name] = grouptables
-                    else:
-                        tbl_groups['...'].extend(grouptables)
-                elif table.type == 'list':
-                    tbl_groups['...'].append(table.name)
-
-            self.relocate_tables(tbl_groups)
+        self.relocate_tables(tbl_groups)
 
         return tbl_groups
 
@@ -608,7 +546,11 @@ class Database:
 
         contents = Dict()
 
-        tbl_groups = self.get_tbl_groups()
+        if (not self.config.update_cache or self.config.urd_structure):
+            tbl_groups = self.get_tbl_groups_urdr()
+        else:
+            tbl_groups = self.get_tbl_groups()
+
         self.sub_tables = self.get_sub_tables()
 
         for group_name, table_names in tbl_groups.items():
@@ -682,7 +624,11 @@ class Database:
         self._comments = {}
         # SQLAlchemy reflection doesn't work for comments in mysql/mariadb
         if self.engine.name in ['mysql', 'mariadb']:
-            sql = self.expr.table_comments()
+            sql = """
+            select table_name, table_comment
+            from   information_schema.tables
+            where table_schema = :schema
+            """
             rows = self.query(sql, {'schema': self.schema})
             for row in rows:
                 self._comments[row.table_name] = row.table_comment
@@ -742,7 +688,7 @@ class Database:
                     # Can't extract constraint names in SQLite
                     if not fkey.name:
                         fkey.name = fkey.table + '_'
-                        fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
+                        fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
 
                     self._fkeys[fkey.table][fkey.name] = Dict(fkey)
 
@@ -763,7 +709,7 @@ class Database:
                     # Can't extract constraint names in SQLite
                     if not fkey.name:
                         fkey.name = fkey.table + '_'
-                        fkey.name += '_'.join(fkey.constrained_columns) + '_fkey'
+                        fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
                     self._relations[fkey.referred_table][fkey.name] = fkey
 
         return self._relations

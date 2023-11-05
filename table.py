@@ -1,15 +1,13 @@
 """Module for handling tables"""
-import time
 import datetime
-import re
 import pypandoc
 from addict import Dict
 from record import Record
 from column import Column
 from field import Field
-from expression import Expression
 from grid import Grid
 from sqlglot import parse_one, exp
+from sqlalchemy import text
 
 
 class Table:
@@ -20,10 +18,10 @@ class Table:
         self.name = tbl_name
         self.label = db.get_label(tbl_name)
         self.view = tbl_name
-        if tbl_name + '_view' in db.user_tables:
+        if tbl_name + '_view' in db.tablenames:
             self.view = tbl_name + '_view'
         self.grid_view = self.view
-        if tbl_name + '_grid' in db.user_tables:
+        if tbl_name + '_grid' in db.tablenames:
             self.grid_view = tbl_name + '_grid'
 
     @property
@@ -52,7 +50,10 @@ class Table:
         pkey_type = None
 
         # Find data type for first pkey column
-        if self.pkey and len(self.pkey.columns) and self.pkey.columns != ['rowid']:
+        if (
+            self.pkey and len(self.pkey.columns) and
+            self.pkey.columns != ['rowid']
+        ):
             colname = self.pkey.columns[0]
             cols = self.db.columns[self.name]
             for col in cols:
@@ -74,46 +75,13 @@ class Table:
 
         return self._type
 
-    @property
-    def privilege(self):
-        """Return privileges of database user"""
+    def is_subordinate(self):
+        subordinate = False
+        for colname in self.pkey.columns:
+            if self.get_fkey(colname):
+                subordinate = True
 
-        privilege = Dict({
-            'select': self.db.privilege.select or 0,
-            'insert': self.db.privilege.insert or 0,
-            'update': self.db.privilege['update'] or 0,
-            'delete': self.db.privilege.delete or 0
-        })
-        if self.db.engine.name in ['mysql', 'mariadb']:
-            rows = self.db.query('show grants').fetchall()
-            for row in rows:
-                stmt = row[0]
-                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
-                if not matched:
-                    continue
-                privs = matched.group(1).strip().lower() + ','
-                privs =  [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
-                obj = matched.group(2).replace('"', '').strip()
-                if obj == self.db.schema + '.' + self.name:
-                    for priv in privilege:
-                        if priv in privs:
-                            privilege[priv] = 1
-        elif self.db.engine.name == 'postgresql':
-            sql = self.db.expr.table_privileges()
-            params = {'schema': self.db.schema, 'table': self.name}
-            rows = self.db.query(sql, params).fetchall()
-            for row in rows:
-                if row.privilege_type == 'SELECT':
-                    privilege.select = 1
-                elif row.privilege_type == 'INSERT':
-                    privilege.insert = 1
-                elif row.privilege_type == 'UPDATE':
-                    privilege['update'] = 1
-                elif row.privilege_type == 'DELETE':
-                    privilege.delete = 1
-
-        self._privilege = privilege
-        return privilege
+        return subordinate
 
     def count_rows(self):
         sql = f'select count(*) from "{self.name}"'
@@ -172,7 +140,10 @@ class Table:
     def fields(self):
         """Return all fields of table"""
         if not hasattr(self, '_fields'):
-            self.init_fields()
+            if (self.db.cache and not self.db.config.update_cache):
+                self._fields = self.db.cache.tables[self.name].fields
+            else:
+                self.init_fields()
 
         return self._fields
 
@@ -203,7 +174,8 @@ class Table:
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
         # Find relation to child records
-        rel = [rel for rel in self.relations.values() if rel.table == self.name][0]
+        rel = [rel for rel in self.relations.values()
+               if rel.table == self.name][0]
         fkey = self.get_fkey(rel.name)
 
         return fkey
@@ -217,7 +189,7 @@ class Table:
         aliases = []
 
         for key, fkey in self.fkeys.items():
-            if fkey.referred_table not in self.db.user_tables:
+            if fkey.referred_table not in self.db.tablenames:
                 continue
 
             alias = fkey.constrained_columns[-1]
@@ -240,7 +212,7 @@ class Table:
 
         self._joins = "\n".join(joins)
 
-        if (self.name + '_grid') in self.db.user_tables:
+        if (self.name + '_grid') in self.db.tablenames:
             join_view = "join " + self.grid_view + " on "
             ons = [f'{self.grid_view}.{col} = {self.view}.{col}'
                    for col in self.pkey.columns]
@@ -287,7 +259,7 @@ class Table:
         for rec in records:
             values = []
             for col, val in rec.items():
-                if type(val) == str:
+                if type(val) is str:
                     val = val.replace('"', '""')
                     val = "'" + val + "'"
                 elif val is None:
@@ -356,10 +328,6 @@ class Table:
 
     def init_fields(self):
         """Store Dict of fields in table object"""
-        if (self.db.cache and not self.db.config.update_cache):
-            self._fields = self.db.cache.tables[self.name].fields
-            return
-
         fields = Dict()
         indexed_cols = []
         for key, index in self.indexes.items():
@@ -376,7 +344,7 @@ class Table:
 
             column = Column(self, col)
             field = Field(self, col.name)
-            field.set_attrs_from_col(col)
+            field.set_attrs_from_col(column)
             if hasattr(field, 'fkey'):
                 condition, params = field.get_condition()
                 field.options = field.get_options(condition, params)
@@ -415,7 +383,7 @@ class Table:
                 fields[col].editable = False
             if len(updated_idx.columns) == 2:
                 col = updated_idx.columns[1]
-                fields[col].default = self.db.user
+                fields[col].default = self.db.user.name
         created_idx = self.indexes.get(self.name + "_created_idx", None)
         if created_idx:
             for col in created_idx.columns:
@@ -423,7 +391,7 @@ class Table:
                 fields[col].editable = False
             if len(created_idx.columns) == 2:
                 col = created_idx.columns[1]
-                fields[col].default = self.db.user
+                fields[col].default = self.db.user.name
 
         self._fields = fields
 
@@ -439,13 +407,8 @@ class Table:
         """Store Dict of 'has many' relations as attribute of table object"""
         table_name = self.name
         if self.type == 'view':
-            sql = self.db.expr.view_definition()
-            if sql is None:
-                view_def = self.db.refl.get_view_definition(self.name, self.db.schema)
-            else:
-                params = {'schema': self.db.schema, 'table': self.name}
-                row = self.db.query(sql, params).first()
-                view_def = None if not row else row[0]
+            view_def = (self.db.refl
+                        .get_view_definition(self.name, self.db.schema))
 
             if view_def:
                 # get dialect for SQLGlot
@@ -457,10 +420,15 @@ class Table:
                 elif dialect == 'mariadb':
                     dialect = 'mysql'
 
-                table = parse_one(view_def, read=dialect).find(exp.Table)
+                table = (parse_one(view_def, read=dialect)
+                         .find(exp.From)
+                         .find(exp.Table))
                 if table:
                     table.pkey = self.db.pkeys[table.name]
-                    if table.pkey and self.pkey and table.pkey.columns == self.pkey.columns:
+                    if (
+                        table.pkey and self.pkey and
+                        table.pkey.columns == self.pkey.columns
+                    ):
                         table_name = table.name
         if hasattr(self.db, 'relations'):
             self._relations = self.db.relations[table_name]
@@ -486,30 +454,14 @@ class Table:
 
         self._relations = relations
 
-    def export_ddl(self, system):
+    def export_ddl(self, dialect):
         """Return ddl for table"""
         ddl = f"create table {self.name} (\n"
         coldefs = []
-        for col in self.fields.values():
-            expr = Expression(system)
-            size = col.size
-            if 'precision' in col and col.precision is not None:
-                size = str(col.precision)
-                if col.scale and col.scale is not None:
-                    size += "," + str(col.scale)
-            datatype = expr.to_native_type(col.datatype, size)
-            coldef = f"    {col.name} {datatype}"
-            if not col.nullable:
-                coldef += " NOT NULL"
-            if col.default:
-                default = col.default if not col.default_expr \
-                    else col.default_expr
-                if 'current_timestamp()' in default:
-                    default = default.replace('current_timestamp()', 'CURRENT_TIMESTAMP')
-                if 'ON UPDATE' in default and system != 'mysql':
-                    default = default.split('ON UPDATE')[0]
-                coldef += " DEFAULT " + default
-
+        cols = self.db.refl.get_columns(self.name, self.db.schema)
+        for col in cols:
+            column = Column(self, col)
+            coldef = column.get_def(dialect)
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
         if (self.pkey.columns and self.pkey.columns != ['rowid']):
@@ -634,7 +586,7 @@ class Table:
 
             try:
                 value = pypandoc.convert_text(row[colname], to_format,
-                                             format=from_format)
+                                              format=from_format)
             except Exception as e:
                 print('kunne ikke konvertere ' + params[-1])
                 print(e.message)

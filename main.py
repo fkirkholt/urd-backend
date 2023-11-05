@@ -19,8 +19,8 @@ import os
 from addict import Dict
 from jose import jwt
 import time
-from expression import Expression
 import xattr
+from user import User
 
 
 cfg = Settings()
@@ -55,7 +55,7 @@ def get_engine(cfg, db_name=None):
 
     engine = create_engine(url)
     try:
-        with engine.connect() as conn:
+        with engine.connect():
             pass
     except Exception as ex:
         print(ex)
@@ -141,16 +141,14 @@ def logout(response: Response):
 @app.get("/dblist")
 def dblist(role: str = None):
     result = []
-    roles = []
     useradmin = False
     if cfg.system == 'sqlite':
         file_list = os.listdir(cfg.host)
         for filename in file_list:
             attrs = xattr.xattr(cfg.host + '/' + filename)
             comment = None
-            for attr in attrs:
-                if attr == 'user.comment':
-                    comment = attrs.get(attr)
+            if 'user.comment' in attrs:
+                comment = attrs.get('user.comment')
             if os.path.splitext(filename)[1] not in ('.db', '.sqlite3'):
                 continue
             base = Dict()
@@ -161,27 +159,20 @@ def dblist(role: str = None):
     else:
         engine = get_engine(cfg)
         if role:
-            sql = 'set default role ' + role
             with engine.connect() as conn:
-                conn.execute(text(sql))
+                conn.execute(text('set default role ' + role))
         elif cfg.system in ['mysql', 'mariadb']:
             sql = 'select current_role()'
             with engine.connect() as conn:
                 rows = conn.execute(text(sql)).fetchall()
-                if len(rows) == 0:
-                    role = None
-                elif len(rows) == 1:
-                    role = rows[0][0]
-                else:
-                    role = 'ALL'
+                role = (None if len(rows) == 0 else rows[0][0]
+                        if len(rows) == 1 else 'ALL')
 
-        expr = Expression(cfg.system)
-        with engine.connect() as conn:
-            if role:
-                sql = 'set role ' + role
-                conn.execute(text(sql))
-            sql = expr.databases()
-            rows = conn.execute(text(sql), {'schema': None, 'cat': None}).fetchall()
+                if role:
+                    conn.execute(text('set role ' + role))
+
+        user = User(engine)
+        rows = user.databases()
 
         for row in rows:
             base = Dict()
@@ -190,32 +181,25 @@ def dblist(role: str = None):
             base.columns.description = row.db_comment
             result.append(base)
 
-        # Find all roles
-        sql = expr.current_user_roles()
-        if sql:
-            with engine.connect() as conn:
-                rows = conn.execute(text(sql)).fetchall()
-
-            for row in rows:
-                roles.append(row[0])
-
         # Find if user has useradmin privileges
         if cfg.system in ['mysql', 'mariadb']:
             with engine.connect() as cnxn:
                 rows = cnxn.execute(text('show grants')).fetchall()
             for row in rows:
                 stmt = row[0]
-                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
+                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+",
+                                    stmt)
                 if not matched:
                     continue
                 privs = matched.group(1).strip().lower() + ','
-                privs = [priv.strip() for priv in re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
+                privs = [priv.strip() for priv in
+                         re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
                 if 'all privileges' in privs or 'create user' in privs:
                     useradmin = True
 
     return {'data': {
         'records': result,
-        'roles': roles,
+        'roles': user.roles,
         'role': role,
         'useradmin': useradmin,
         'system': cfg.system
@@ -226,41 +210,45 @@ def dblist(role: str = None):
 def userlist():
     users = []
     roles = []
-    expr = Expression(cfg.system)
     engine = get_engine(cfg)
     with engine.connect() as cnxn:
-        sql = expr.users()
-        rows = cnxn.execute(text(sql)).fetchall()
+        if engine.name in ['mysql', 'mariadb']:
+            sql = """
+            select user as name, Host as host
+            from mysql.user
+            where host not in ('%', '')
+              and user not in ('PUBLIC', 'root', 'mariadb.sys', '')
+            order by user
+            """
+            rows = cnxn.execute(text(sql)).fetchall()
 
-    for row in rows:
-        user = Dict()
-        user.name = row.name
-        user.host = row.host
-        users.append(user)
+            for row in rows:
+                user = Dict()
+                user.name = row.name
+                user.host = row.host
+                users.append(user)
 
-    with engine.connect() as cnxn:
-        sql = expr.roles()
-        rows = cnxn.execute(text(sql)).fetchall()
+            sql = """
+            select user as name
+            from mysql.user
+            where host in ('%', '')
+              and not length(authentication_string)
+              and user != 'PUBLIC'
+            """
+            rows = cnxn.execute(text(sql)).fetchall()
 
-    for row in rows:
-        roles.append(row.name)
+            for row in rows:
+                roles.append(row.name)
 
     return {'data': {'users': users, 'roles': roles}}
 
 
 @app.get("/user_roles")
 def user_roles(user: str, host: str):
-    expr = Expression(cfg.system)
     engine = get_engine(cfg)
-    with engine.connect() as cnxn:
-        sql = expr.user_roles()
-        rows = cnxn.execute(text(sql), {'user': user}).fetchall()
+    user = User(engine, user)
 
-    user_roles = []
-    for row in rows:
-        user_roles.append(row.role_name)
-
-    return {'data': user_roles}
+    return {'data': user.roles}
 
 
 @app.put("/change_user_role")

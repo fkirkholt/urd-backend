@@ -80,7 +80,8 @@ class Grid:
                 'actions': ["show_file"] if "show_file" in actions else []
             },
             'form': self.get_form(),
-            'privilege': self.tbl.privilege,
+            'privilege': self.db.user.table_privilege(self.db.schema,
+                                                      self.tbl.name),
             'hidden': self.tbl.is_hidden(),
             'pkey': self.tbl.pkey.columns or None,
             'fkeys': self.tbl.fkeys,
@@ -219,7 +220,7 @@ class Grid:
             return self.db.cache.tables[self.tbl.name].grid.columns
         from table import Table
         self._columns = []
-        has_view = self.tbl.name + '_grid' in self.db.user_tables
+        has_view = self.tbl.name + '_grid' in self.db.tablenames
         if has_view:
             view_name = self.tbl.name + '_grid'
             view = Table(self.db, view_name)
@@ -233,7 +234,7 @@ class Grid:
 
             return self._columns
 
-        has_view = self.tbl.name + '_view' in self.db.user_tables
+        has_view = self.tbl.name + '_view' in self.db.tablenames
         if has_view:
             view_name = self.tbl.name + '_view'
             view = Table(self.db, view_name)
@@ -474,7 +475,7 @@ class Grid:
                     field_parts = field.split('.')
                     tbl_name = field_parts[0]
                     field_name = field_parts[1]
-                    if tbl_name + '_view' in self.db.user_tables:
+                    if tbl_name + '_view' in self.db.tablenames:
                         field = f"{tbl_name}_view.{field_name}"
 
                 mark = field.replace('.', '_')
@@ -596,7 +597,7 @@ class Grid:
             rel_tbl = Table(self.db, rel.table)
             name_parts = rel.table.split("_")
 
-            if rel.table not in self.db.user_tables:
+            if rel.table not in self.db.tablenames:
                 rel.hidden = True
 
             # Find indexes that can be used to get relation

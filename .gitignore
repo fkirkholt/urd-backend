@@ -4,3 +4,4 @@ static/
 venv/
 __pycache__/
 main.spec
+q.py

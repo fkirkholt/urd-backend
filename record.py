@@ -377,9 +377,9 @@ class Record:
         set_values = {}
         # todo: get values for auto update fields
         for field in self.tbl.fields.values():
+            fld = Field(self.tbl, field.name)
             if field.get('extra', None) == "auto_update":
-                set_values[field.name] = \
-                    self.db.expr.replace_vars(field.default, self.db)
+                set_values[field.name] = fld.replace_vars(field.default)
 
         for key, value in values.items():
             if value == "":

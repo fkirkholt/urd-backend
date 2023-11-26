@@ -1,4 +1,4 @@
-# Urðr (URDR - Universal Relational Database Reflection)
+# Urðr (Universal Relational Database Reflection)
 
 Urðr (named after one of the [Norns](https://en.wikipedia.org/wiki/Norns)
 in Norse mythology) is an application that can be used to map, display and
@@ -7,8 +7,8 @@ the database itself (reflection) in order to display data and relations between
 them. This requires some rules to be followed when designing the database. The
 rules are often based on common principles for designing databases.
 
-The rules are laid out here: [self-documenting databases](./docs/selvdokumenterende-baser.org)
-(currently only in norwegian).
+The rules are laid out here:
+[self-documenting databases](./docs/self-documenting-databases.md).
 
 The application is designed for archivists, who need to map databases, find how
 the information is connected, and create access databases from the original
@@ -44,20 +44,24 @@ python3 main.py
 
 ## Features
 
-- Display data for all tables
+- Display data for all tables, based on reflection
 - Edit data in all tables
 - Allow searching in all table columns
-- Group tables based on relations or prefix
+- [Group][group] tables based on relations or prefix
 - Show interactive ER-diagram
 - Analyze relations and group tables by modules
 - Filter relations and columns based on how much they are used
 - Run sql queries
-- Use html attributes to configure how a database is displayed
+- Use [html attributes][html-attributes]
+  to configure how a database is displayed
 - Use the database's own authentication and authorization
-- Supports row based authorization, based on views
+- Supports [row based authorization][row-based-access] based on views
 - Assign users to predefined roles
 - Export database to other database systems
 - Convert columns with rtf to markdown
 
 ![The data panel](/docs/assets/images/data-panel.png)
 
+[group]: docs/self-documenting-databases.md#grouping
+[html-attributes]: docs/self-documenting-databases.md#html-attributes
+[row-based-access]: docs/self-documenting-databases.md#using-view-for-access-control

@@ -1,4 +1,4 @@
-# Urðr (Universal Relational Database Reflection)
+# Urðr (Universal relational database reflection)
 
 Urðr (named after one of the [Norns](https://en.wikipedia.org/wiki/Norns)
 in Norse mythology) is an application that can be used to map, display and
@@ -48,7 +48,7 @@ python3 main.py
 - Edit data in all tables
 - Allow searching in all table columns
 - [Group][group] tables based on relations or prefix
-- Show interactive ER-diagram
+- Show interactive [ER-diagram](docs/er-diagram.md)
 - Analyze relations and group tables by modules
 - Filter relations and columns based on how much they are used
 - Run sql queries

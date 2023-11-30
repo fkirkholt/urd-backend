@@ -199,7 +199,7 @@ def dblist(role: str = None):
 
     return {'data': {
         'records': result,
-        'roles': user.roles,
+        'roles': [] if cfg.system == 'sqlite' else user.roles,
         'role': role,
         'useradmin': useradmin,
         'system': cfg.system

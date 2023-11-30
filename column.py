@@ -1,11 +1,13 @@
 from addict import Dict
 from datatype import Datatype
+from sqlalchemy import text
 
 
 class Column:
 
     def __init__(self, tbl, col):
         self.db = tbl.db
+        self.tbl = tbl
         col = Dict(col)
         for attr in col.keys():
             setattr(self, attr, col[attr])
@@ -31,8 +33,6 @@ class Column:
             create index {self.tbl.name}_{self.name}_idx
             on {self.tbl.name}({self.name})
             """
-
-            self.db.query(sql).commit()
         else:
             sql = f"""
             create index {self.tbl.name}_{self.name}_is_null_idx
@@ -40,7 +40,9 @@ class Column:
             where {self.name} is null
             """
 
-            self.db.query(sql).commit()
+        with self.db.engine.connect() as cnxn:
+            cnxn.execute(text(sql))
+            cnxn.commit()
 
     def check_use(self):
         """Check ratio of columns that's not null"""
@@ -52,7 +54,7 @@ class Column:
         where {self.name} is null or {self.name} = ''
         """
 
-        count = self.db.query(sql).fetchval()
+        count = self.db.query(sql).first()[0]
 
         rowcount = self.tbl.rowcount
         use = (rowcount - count)/rowcount
@@ -72,7 +74,7 @@ class Column:
         ) t2
         """
 
-        max_in_group = self.db.query(sql).fetchval()
+        max_in_group = self.db.query(sql).first()[0]
 
         frequency = max_in_group/self.tbl.rowcount
 

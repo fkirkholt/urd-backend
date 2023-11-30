@@ -247,6 +247,7 @@ class Grid:
         grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
         if grid_idx:
             self._columns = grid_idx.columns
+            return self._columns
 
         fkeys = self.tbl.fkeys
         hidden = self.tbl.is_hidden()
@@ -257,7 +258,7 @@ class Grid:
                 field.name[0:6].lower() == 'const_'
             ):
                 continue
-            if field.datatype == 'str' and (not field.size or field.size >= 255):
+            if field.datatype == 'str' and (field.size and field.size >= 255):
                 continue
             if field.datatype == 'json':
                 continue
@@ -270,6 +271,8 @@ class Grid:
             ):
                 continue
             if not (hasattr(field, 'virtual') or (not grid_idx and not len(self._columns) > 4)):
+                continue
+            if 'use' in field and (field.use < 0.9 or field.frequency > 0.4):
                 continue
             self._columns.append(key)
 

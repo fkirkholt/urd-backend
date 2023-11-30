@@ -540,7 +540,7 @@ class Database:
 
     def get_contents(self):
         """Get list of contents"""
-        if (self.cache and not self.config):
+        if (self.cache and not self.config.update_cache):
             self.contents = self.cache.contents
             return self.contents
 
@@ -666,6 +666,7 @@ class Database:
                 for idx in indexes:
                     idx = Dict(idx)
                     idx.columns = idx.pop('column_names')
+                    idx.pop('dialect_options', None)
 
                     self._indexes[table][idx.name] = idx
                     pkey = self.pkeys[table]

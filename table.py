@@ -430,7 +430,7 @@ class Table:
                         table.pkey.columns == self.pkey.columns
                     ):
                         table_name = table.name
-        if hasattr(self.db, 'relations'):
+        if hasattr(self.db, 'relations') and not self.db.config.update_cache:
             self._relations = self.db.relations[table_name]
             return
         if self.db.cache and not self.db.config.update_cache:
@@ -448,7 +448,7 @@ class Table:
                 select count(distinct({fkey_col})) from {relation.table}
                 """
 
-                count = self.db.query(sql).fetchval()
+                count = self.db.query(sql).first()[0]
 
                 relations[name].use = count/self.rowcount
 

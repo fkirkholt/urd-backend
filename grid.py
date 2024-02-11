@@ -1,6 +1,7 @@
 import re
 import math
 from addict import Dict
+from sqlalchemy import text
 
 
 class Grid:
@@ -151,7 +152,8 @@ class Grid:
         """
 
         params = self.cond.params + params
-        row = self.db.query(sql, params).fetchone()
+        with self.db.engine.connect() as cnxn:
+            row = cnxn.execute(text(sql), params).fetchone()
         idx = row[0] if row else None
         if idx is not None:
             page_nr = math.floor(idx / self.tbl.limit)
@@ -338,10 +340,11 @@ class Grid:
         sql += "" if not cond else "where " + cond + "\n"
         sql += order
 
-        result = self.db.query(sql, self.cond.params)
-        if self.tbl.offset:
-            result.fetchmany(self.tbl.offset)
-        records = result.mappings().fetchmany(self.tbl.limit)
+        with self.db.engine.connect() as cnxn:
+            result = cnxn.execute(text(sql), self.cond.params)
+            if self.tbl.offset:
+                result.fetchmany(self.tbl.offset)
+            records = result.mappings().fetchmany(self.tbl.limit)
 
         return records
 
@@ -354,7 +357,8 @@ class Grid:
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else f"where {conds}\n"
 
-        count = self.db.query(sql, self.cond.params).first()[0]
+        with self.db.engine.connect() as cnxn:
+            count = cnxn.execute(text(sql), self.cond.params).first()[0]
 
         return count
 
@@ -375,10 +379,11 @@ class Grid:
         sql += "" if not conds else "where " + conds + "\n"
         sql += order
 
-        result = self.db.query(sql, self.cond.params)
-        if self.tbl.offset:
-            result.fetchmany(self.tbl.offset)
-        records = result.mappings().fetchmany(self.tbl.limit)
+        with self.db.engine.connect() as cnxn:
+            result = cnxn.execute(text(sql), self.cond.params)
+            if self.tbl.offset:
+                result.fetchmany(self.tbl.offset)
+            records = result.mappings().fetchmany(self.tbl.limit)
 
         return records
 
@@ -401,7 +406,8 @@ class Grid:
             sql += self.tbl.joins + "\n"
             sql += "" if not cond else "where " + cond
 
-            sums = self.db.query(sql, params).mappings().first()
+            with self.db.engine.connect() as cnxn:
+                sums = cnxn.execute(text(sql), params).mappings().first()
 
         return sums
 

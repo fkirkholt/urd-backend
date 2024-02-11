@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from addict import Dict
+from sqlalchemy import text
 
 
 class Field:
@@ -57,7 +58,7 @@ class Field:
                             fkey.referred_columns[-1]]:
                 self.label = self.db.get_label(fkey.referred_table)
         if (
-            hasattr(col, 'autoincrement') or (
+            (hasattr(col, 'autoincrement') and col.autoincrement) or (
                 self.datatype in ['int', 'Decimal'] and
                 len(self.tbl.pkey.columns) and
                 col.name == self.tbl.pkey.columns[-1] and
@@ -168,7 +169,8 @@ class Field:
         where {condition}
         """
 
-        count = self.db.query(sql, params).first()[0]
+        with self.db.engine.connect() as cnxn:
+            count = cnxn.execute(text(sql), params).first()[0]
 
         if (count > 200):
             return False
@@ -184,7 +186,8 @@ class Field:
         order by {self.view or value_field}
         """
 
-        options = self.db.query(sql, params).all()
+        with self.db.engine.connect() as cnxn:
+            options = cnxn.execute(text(sql), params).all()
 
         # Return list of recular python dicts so that it can be
         # json serialized and put in cache

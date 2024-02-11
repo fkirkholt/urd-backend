@@ -1,8 +1,9 @@
 """Module for handling databases and connections"""
 import os
 import time
+import re
 from graphlib import TopologicalSorter
-from sqlalchemy import text, inspect, bindparam, exc
+from sqlalchemy import text, inspect, exc
 import sqlglot
 import simplejson as json
 from addict import Dict
@@ -26,7 +27,7 @@ class Database:
         elif engine.name == 'mssql':
             self.schema = 'dbo' if len(path) == 1 else path[1]
             self.cat = path[0]
-        elif engine.name == 'sqlite':
+        elif engine.name in ('duckdb', 'sqlite'):
             self.schema = 'main'
             self.cat = None
         else:
@@ -69,6 +70,12 @@ class Database:
             'mysql'
         ]
         if self.engine.name == 'postgresql' and schema.startswith('pg_'):
+            return False
+        elif self.engine.name == 'duckdb' and (
+            schema.endswith('.information_schema') or
+            schema.startswith('system.') or
+            schema.startswith('temp.')
+        ):
             return False
         elif schema in system_schemas:
             return False
@@ -585,7 +592,9 @@ class Database:
             select count(*) from html_attributes
             where selector = :selector
             """
-            count = self.query(sql, {'selector': 'base'}).first()[0]
+
+            with self.engine.connect() as cnxn:
+                count = cnxn.execute(text(sql), {'selector': 'base'}).first()[0]
 
             cache = {
                 "tables": self.tables,
@@ -629,9 +638,11 @@ class Database:
             from   information_schema.tables
             where table_schema = :schema
             """
-            rows = self.query(sql, {'schema': self.schema})
-            for row in rows:
-                self._comments[row.table_name] = row.table_comment
+
+            with self.engine.connect() as cnxn:
+                rows = cnxn.execute(text(sql), {'schema': self.schema})
+                for row in rows:
+                    self._comments[row.table_name] = row.table_comment
         else:
             rows = self.refl.get_multi_table_comment(self.schema)
             for (schema, table), row in rows.items():
@@ -642,16 +653,34 @@ class Database:
     @property
     def pkeys(self):
         """Get primary key of table"""
+
         if not hasattr(self, '_pkeys'):
             self._pkeys = Dict()
-            pkey_constraints = self.refl.get_multi_pk_constraint(self.schema)
-            for (schema, table), pkey in pkey_constraints.items():
-                self._pkeys[table] = Dict({
-                    'table_name': table,
-                    'name': pkey['name'] or 'PRIMARY',
-                    'unique': True,
-                    'columns': pkey['constrained_columns']
-                })
+            # reflection of constraints is not implemented for duckdb yet
+            if self.engine.name == 'duckdb':
+                sql = """
+                select * from duckdb_constraints()
+                where constraint_type = 'PRIMARY KEY'
+                """
+                with self.engine.connect() as cnxn:
+                    rows = cnxn.execute(text(sql)).fetchall()
+                    for row in rows:
+                        pkey = Dict({
+                            'table_name': row.table_name,
+                            'name': 'PRIMARY',
+                            'unique': True,
+                            'columns': row.constraint_column_names
+                        })
+                        self._pkeys[row.table_name] = pkey
+            else:
+                pkey_constraints = self.refl.get_multi_pk_constraint(self.schema)
+                for (schema, table), pkey in pkey_constraints.items():
+                    self._pkeys[table] = Dict({
+                        'table_name': table,
+                        'name': pkey['name'] or 'PRIMARY',
+                        'unique': True,
+                        'columns': pkey['constrained_columns']
+                    })
 
         return self._pkeys
 
@@ -659,18 +688,36 @@ class Database:
     def indexes(self):
         if not hasattr(self, '_indexes'):
             self._indexes = Dict()
-            schema_indexes = self.refl.get_multi_indexes(self.schema)
-
-            for (schema, table), indexes in schema_indexes.items():
-
-                for idx in indexes:
-                    idx = Dict(idx)
-                    idx.columns = idx.pop('column_names')
-                    idx.pop('dialect_options', None)
-
-                    self._indexes[table][idx.name] = idx
-                    pkey = self.pkeys[table]
+            if self.engine.name == 'duckdb':
+                sql = "select * from duckdb_indexes()"
+                with self.engine.connect() as cnxn:
+                    rows = cnxn.execute(text(sql)).fetchall()
+                    for row in rows:
+                        idx = Dict({
+                            'table_name': row.table_name,
+                            'name': row.index_name,
+                            'unique': row.is_unique
+                        })
+                        expr = row.sql
+                        x = re.search(r"\bon \w+\s?\(([^)]*)\)", expr)
+                        cols_delim = x.group(1).split(',')
+                        idx.columns = [s.strip() for s in cols_delim]
+                        self._indexes[row.table_name][idx.name] = idx
+                for table, pkey in self.pkeys.items():
                     self._indexes[table][pkey.name] = pkey
+            else:
+                schema_indexes = self.refl.get_multi_indexes(self.schema)
+
+                for (schema, table), indexes in schema_indexes.items():
+
+                    for idx in indexes:
+                        idx = Dict(idx)
+                        idx.columns = idx.pop('column_names')
+                        idx.pop('dialect_options', None)
+
+                        self._indexes[table][idx.name] = idx
+                        pkey = self.pkeys[table]
+                        self._indexes[table][pkey.name] = pkey
 
         return self._indexes
 
@@ -679,19 +726,53 @@ class Database:
         """Get all foreign keys of table"""
         if not hasattr(self, '_fkeys'):
             self._fkeys = Dict()
-            schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+            self._relations = Dict()
 
-            for key, fkeys in schema_fkeys.items():
-                for fkey in fkeys:
-                    fkey = Dict(fkey)
-                    fkey.table = key[-1]
-
-                    # Can't extract constraint names in SQLite
-                    if not fkey.name:
+            if self.engine.name == 'duckdb':
+                sql = """
+                select * from duckdb_constraints()
+                where constraint_type = 'FOREIGN KEY'
+                """
+                with self.engine.connect() as cnxn:
+                    rows = cnxn.execute(text(sql)).fetchall()
+                    for row in rows:
+                        fkey = Dict({
+                            'table': row.table_name,
+                            'constrained_columns': row.constraint_column_names,
+                            'referred_schema': 'main',
+                            'schema': 'main'
+                        })
+                        expr = row.constraint_text
+                        if expr:
+                            x = re.search(r"\bREFERENCES (\w+)", expr)
+                            fkey.referred_table = x.group(1)
+                            x = re.search(r"\bREFERENCES \w+\(([^)]*)\)", expr)
+                            cols_delim = x.group(1).split(',')
+                            fkey.referred_columns = [s.strip() for s in cols_delim]
+                        else:
+                            fkey.referred_table = fkey.table
+                            fkey.referred_columns = self.pkeys[fkey.table].columns
                         fkey.name = fkey.table + '_'
                         fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+                        self._fkeys[fkey.table][fkey.name] = fkey
+                        self._relations[fkey.referred_table][fkey.name] = fkey
 
-                    self._fkeys[fkey.table][fkey.name] = Dict(fkey)
+            else:
+                schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+
+                for key, fkeys in schema_fkeys.items():
+                    for fkey in fkeys:
+                        fkey = Dict(fkey)
+                        fkey.table = key[-1]
+                        fkey.schema = key[0] or self.db.schema
+
+                        # Can't extract constraint names in SQLite
+                        if not fkey.name:
+                            fkey.name = fkey.table + '_'
+                            fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+
+                        self._fkeys[fkey.table][fkey.name] = Dict(fkey)
+                        self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
 
         return self._fkeys
 
@@ -699,19 +780,24 @@ class Database:
     def relations(self):
         """Get all has-many relations of table"""
         if not hasattr(self, '_relations'):
-            self._relations = Dict()
-            schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+            self.fkeys
+            if False:
+                if self.engine.name == 'duckdb':
+                    self.fkeys
+                    return self._relations
+                self._relations = Dict()
+                schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
 
-            for key, fkeys in schema_fkeys.items():
-                for fkey in fkeys:
-                    fkey = Dict(fkey)
-                    fkey.table = key[1]
-                    fkey.schema = key[0] or self.db.schema
-                    # Can't extract constraint names in SQLite
-                    if not fkey.name:
-                        fkey.name = fkey.table + '_'
-                        fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
-                    self._relations[fkey.referred_table][fkey.name] = fkey
+                for key, fkeys in schema_fkeys.items():
+                    for fkey in fkeys:
+                        fkey = Dict(fkey)
+                        fkey.table = key[1]
+                        fkey.schema = key[0] or self.db.schema
+                        # Can't extract constraint names in SQLite
+                        if not fkey.name:
+                            fkey.name = fkey.table + '_'
+                            fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+                        self._relations[fkey.referred_table][fkey.name] = fkey
 
         return self._relations
 
@@ -737,7 +823,7 @@ class Database:
             query.time = round(time.time() - t1, 4)
 
             # if cursor.description:
-            if result.cursor:
+            if result.returns_rows:
                 if limit:
                     query.data = result.mappings().fetchmany(limit)
                 else:
@@ -749,26 +835,12 @@ class Database:
             else:
                 rowcount = result.rowcount
 
-                cnxn.commit()
-
                 query.rowcount = rowcount
                 query.result = f"Query OK, {rowcount} rows affected"
 
-        return query
+            cnxn.commit()
 
-    def query(self, sql, params={}):
-        """Execute sql query"""
-        t = time.time()
-        with self.engine.connect() as cnxn:
-            stmt = text(sql)
-            for col, val in params.items():
-                if isinstance(val, list):
-                    stmt = stmt.bindparams(bindparam(col, expanding=True))
-            cursor = cnxn.execute(stmt, params)
-        if (time.time()-t) > 1:
-            print("Query took " + str(time.time()-t) + " seconds")
-            print('query:', sql)
-        return cursor
+        return query
 
     def export_as_sql(self, dialect: str, include_recs: bool,
                       select_recs: bool):

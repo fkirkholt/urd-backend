@@ -25,7 +25,8 @@ class Column:
         from {self.tbl.name}
         """
 
-        return self.db.query(sql).fetchval()
+        with self.db.engine.connect() as cnxn:
+            return cnxn.execute(text(sql)).fetchval()
 
     def create_index(self, col_type):
         if col_type not in ['blob', 'clob', 'text']:
@@ -54,7 +55,8 @@ class Column:
         where {self.name} is null or {self.name} = ''
         """
 
-        count = self.db.query(sql).first()[0]
+        with self.db.engine.connect() as cnxn:
+            count = cnxn.execute(text(sql)).first()[0]
 
         rowcount = self.tbl.rowcount
         use = (rowcount - count)/rowcount
@@ -74,7 +76,8 @@ class Column:
         ) t2
         """
 
-        max_in_group = self.db.query(sql).first()[0]
+        with self.db.engine.connect() as cnxn:
+            max_in_group = cnxn.execute(text(sql)).first()[0]
 
         frequency = max_in_group/self.tbl.rowcount
 

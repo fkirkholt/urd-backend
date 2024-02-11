@@ -245,7 +245,9 @@ class Record:
         select * from {self.db.schema}.{self.tbl.view}\n
         where {cond}
         """
-        row = self.db.query(sql, params).mappings().fetchone()
+
+        with self.db.engine.connect() as cnxn:
+            row = cnxn.execute(text(sql), params).mappings().fetchone()
         self.cache.vals = row
 
         return self.cache.vals
@@ -270,7 +272,8 @@ class Record:
         sql += self.tbl.joins + "\n"
         sql += " where " + cond
 
-        row = self.db.query(sql, self.pk).mappings().fetchone()
+        with self.db.engine.connect() as cnxn:
+            row = cnxn.execute(text(sql), self.pk).mappings().fetchone()
 
         return row
 
@@ -307,7 +310,9 @@ class Record:
         select {select} as path from {schema}.{self.tbl.name}\n
         where {cond}
         """
-        row = self.db.query(sql, self.pk).first()
+
+        with self.engine.connect() as cnxn:
+            row = cnxn.execute(text(sql), self.pk).first()
 
         return os.path.normpath(row.path)
 
@@ -337,7 +342,8 @@ class Record:
             sql += f"else max({inc_col}) +1 end from {self.tbl.name} "
             sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
-            values[inc_col] = self.db.query(sql, params).first()[0]
+            with self.db.engine.connext() as cnxn:
+                values[inc_col] = cnxn.execute(text(sql), params).first()[0]
             self.pk[inc_col] = values[inc_col]
 
         # Array of values to be inserted

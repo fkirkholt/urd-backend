@@ -35,9 +35,13 @@ mod = os.path.getmtime("static/js/dist/bundle.js")
 
 def get_engine(cfg, db_name=None):
     # driver = cfg.driver[cfg.db_system]
-    driver = getattr(cfg, f'{cfg.system}_driver')
+    if cfg.system != 'duckdb':
+        driver = getattr(cfg, f'{cfg.system}_driver')
 
-    if cfg.system == 'sqlite':
+    if cfg.system == 'duckdb':
+        path = os.path.join(cfg.host, db_name)
+        url = f"duckdb:///{path}"
+    elif cfg.system == 'sqlite':
         path = os.path.join(cfg.host, db_name)
         url = f"sqlite+{driver}:///{path}"
     elif cfg.system == 'oracle':
@@ -142,7 +146,7 @@ def logout(response: Response):
 def dblist(role: str = None):
     result = []
     useradmin = False
-    if cfg.system == 'sqlite':
+    if cfg.system in ('sqlite', 'duckdb'):
         file_list = os.listdir(cfg.host)
         for filename in file_list:
             attrs = xattr.xattr(cfg.host + '/' + filename)
@@ -199,7 +203,7 @@ def dblist(role: str = None):
 
     return {'data': {
         'records': result,
-        'roles': [] if cfg.system == 'sqlite' else user.roles,
+        'roles': [] if cfg.system in ('sqlite', 'duckdb') else user.roles,
         'role': role,
         'useradmin': useradmin,
         'system': cfg.system

@@ -85,7 +85,8 @@ class Table:
 
     def count_rows(self):
         sql = f'select count(*) from "{self.name}"'
-        return self.db.query(sql).first()[0]
+        with self.db.engine.connect() as cnxn:
+            return cnxn.execute(text(sql)).first()[0]
 
     def is_hidden(self):
         """Decide if this is a hidden table"""
@@ -448,7 +449,8 @@ class Table:
                 select count(distinct({fkey_col})) from {relation.table}
                 """
 
-                count = self.db.query(sql).first()[0]
+                with self.db.engine.connect() as cnxn:
+                    count = cnxn.execute(text(sql)).first()[0]
 
                 relations[name].use = count/self.rowcount
 
@@ -537,7 +539,8 @@ class Table:
         else:
             sql = f"select * from {self.name}"
 
-        rows = self.db.query(sql).mappings()
+        with self.db.engine.connect() as cnxn:
+            rows = cnxn.execute(text(sql)).mappings()
 
         if select_recs:
             insert += f'insert into {self.name}\n'
@@ -572,7 +575,8 @@ class Table:
         from {self.name}
         """
 
-        rows = self.db.query(sql).mappings()
+        with self.db.engine.connect() as cnxn:
+            rows = cnxn.execute(text(sql)).mappings()
         for row in rows:
             if row[colname] is None:
                 continue

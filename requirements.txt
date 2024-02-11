@@ -5,6 +5,8 @@ cffi==1.15.1
 click==8.1.7
 cryptography==41.0.4
 cx-Oracle==8.3.0
+duckdb==0.9.2
+duckdb_engine==0.10.0
 ecdsa==0.18.0
 fastapi==0.103.1
 greenlet==2.0.2

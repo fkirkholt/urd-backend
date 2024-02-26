@@ -477,6 +477,18 @@ def export_csv(base: str, table: str, fields: str):
     return response
 
 
+@app.get('/kdrs_xml')
+def export_kdrs_xml(base: str, version: str, descr: str):
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base)
+    xml = dbo.export_as_kdrs_xml(version, descr)
+    response = StreamingResponse(io.StringIO(xml), media_type="application/xml")
+    response.headers['Content-Disposition'] = \
+        f'attachment; filename={dbo.identifier}.xml'
+
+    return response
+
+
 @app.get('/file')
 def get_file(base: str, table: str, pkey: str):
     pkey = json.loads(urllib.parse.unquote(pkey))

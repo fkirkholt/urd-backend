@@ -902,3 +902,89 @@ class Database:
             ddl += view_def + ";\n"
 
         return ddl
+
+    def export_as_kdrs_xml(self, version, descr):
+        xml = "<root>\n"
+        xml += "  <meta>\n"
+        xml += "    <version>" + version + "</version>\n"
+        xml += "    <description>" + descr + "</description>\n"
+        xml += "  </meta>\n"
+        xml += "  <views>\n"
+
+        self.get_tables()
+        contents = self.get_contents()
+
+        for label, obj in contents.items():
+            if type(obj) is str and obj[0:7] == 'tables.':
+                tbl_name = obj[7:]
+            elif 'item' in obj:
+                tbl_name = obj.item[7:]
+            else:
+                continue
+
+            tbl = self.tables[tbl_name]
+            if not tbl.fields:
+                table = Table(self, tbl_name)
+                tbl.fields = table.fields
+
+            xml += "    <view>\n"
+            xml += "      <name>" + tbl.label + "</name>\n"
+            xml += "      <tables>\n"
+            xml += "        <table>\n"
+            xml += "          <name>" + tbl.name + "</name>\n"
+            xml += "          <heading>Finn " + tbl.label + "</heading>\n"
+            xml += "          <fields>" + ', '.join(tbl.fields.keys()) + "</fields>\n"
+            xml += "          <primarykey>" + ', '.join(tbl.pkey.columns) + "</primarykey>\n"
+            xml += "          <preview>false</preview>\n"  # TODO: how to choose value?
+            xml += "        </table>\n"
+
+            if 'subitems' in obj:
+                for subitem, subobj in obj.subitems.items():
+                    if type(subobj) is str and subobj[0:7] == 'tables.':
+                        subtbl_name = subobj[7:]
+                    elif 'item' in subobj:
+                        subtbl_name = subobj.item[7:]
+                    else:
+                        continue
+
+                    subtbl = self.tables[subtbl_name]
+
+                    if not subtbl.fields:
+                        table = Table(self, subtbl_name)
+                        subtbl.fields = table.fields
+
+                    for key, fkey in subtbl.fkeys.items():
+                        if fkey.referred_table == tbl.name:
+                            fkey_str = ', '.join(fkey.constrained_columns)
+
+                    xml += "        <table>\n"
+                    xml += "          <name>" + subtbl.name + "</name>\n"
+                    xml += "          <heading>" + subtbl.label + "</heading>\n"
+                    xml += "          <parent>" + tbl.name + "</parent>\n"
+                    xml += "          <fields>" + ', '.join(subtbl.fields.keys()) + "</fields>\n"
+                    xml += "          <primarykey>" + ', '.join(subtbl.pkey.columns) + "</primarykey>\n"
+                    xml += "          <foreignkey>" + fkey_str + "</foreignkey>\n"
+                    xml += "          <search>true</search>\n"  # TODO: how to choose value?
+                    if subtbl.grid and 'sort_columns' in subtbl.grid:
+                        xml += "          <sort>" + ', '.join(subtbl.grid.sort_columns) + "</sort>\n"
+
+                    for key, fkey in subtbl.fkeys.items():
+                        last_col = fkey.constrained_columns[-1]
+                        view = subtbl.fields[last_col].view
+                        view = view.replace(last_col + '.', '')
+                        xml += "          <lookup>\n"
+                        xml += "            <foreignkey>" + ', '.join(fkey.constrained_columns) + "</foreignkey>\n"
+                        xml += "            <table>" + fkey.referred_table + "</table>\n"
+                        xml += "            <primarykey>" + ', '.join(fkey.referred_columns) + "</primarykey>\n"
+                        xml += "            <fields>" + view + ' as ' + last_col + "</fields>\n"
+                        xml += "          </lookup>\n"
+
+                    xml += "        </table>\n"
+
+            xml += "      </tables>\n"
+            xml += "    </view>\n"
+
+        xml += "  </views\n>"
+        xml += "</root>"
+
+        return xml

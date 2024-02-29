@@ -716,8 +716,10 @@ class Database:
                         idx.pop('dialect_options', None)
 
                         self._indexes[table][idx.name] = idx
-                        pkey = self.pkeys[table]
-                        self._indexes[table][pkey.name] = pkey
+
+                for table in self.pkeys:
+                    pkey = self.pkeys[table]
+                    self._indexes[table][pkey.name] = pkey
 
         return self._indexes
 

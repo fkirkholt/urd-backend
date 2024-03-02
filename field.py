@@ -59,7 +59,7 @@ class Field:
                 self.label = self.db.get_label(fkey.referred_table)
         if (
             (hasattr(col, 'autoincrement') and col.autoincrement) or (
-                self.datatype in ['int', 'Decimal'] and
+                (self.datatype == 'int' and str(col.type) != 'SMALLINT') and
                 len(self.tbl.pkey.columns) and
                 col.name == self.tbl.pkey.columns[-1] and
                 col.name not in self.tbl.fkeys

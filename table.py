@@ -70,7 +70,7 @@ class Table:
             self._type = "xref"
         elif self.name[-4:] == "_ext":
             self._type = "ext"
-        elif pkey_type == 'str':
+        elif pkey_type == 'str' or 'SMALLINT' in str(pkey_col['type']):
             self._type = "list"
 
         return self._type

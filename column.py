@@ -9,6 +9,7 @@ class Column:
         self.db = tbl.db
         self.tbl = tbl
         col = Dict(col)
+        self.type = col.type
         for attr in col.keys():
             setattr(self, attr, col[attr])
         if hasattr(col.type, 'length'):

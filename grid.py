@@ -513,7 +513,9 @@ class Grid:
     def get_field_groups(self, fields):
         """Group fields according to first part of field name"""
         col_groups = Dict()
+        i = 0
         for field in fields.values():
+            i += 1
             # Don't add column to form if it's part of
             # primary key but not shown in grid
             if (
@@ -528,13 +530,34 @@ class Grid:
 
             # Group by prefix
             parts = field.name.split("_")
-            group = parts[0]
 
             # Don't add fields that start with _
             # They are treated as hidden fields
-            if group == "":
+            if field.name.startswith('_'):
                 field.hidden = True
                 continue
+
+            placed = False
+            for group in col_groups:
+                if field.name.startswith(group + '_'):
+                    col_groups[group].append(field.name)
+                    placed = True
+
+            if placed:
+                continue
+
+            group = None
+            for part in parts:
+                test_group = group + '_' + part if group else part
+                print('test_group', test_group)
+                if (
+                    len(fields) > i and
+                    list(fields.keys())[i].startswith(test_group+'_')
+                ):
+                    print('betingelsen oppfylt')
+                    group = test_group
+                elif group is None:
+                    group = part
 
             if group not in col_groups:
                 col_groups[group] = []

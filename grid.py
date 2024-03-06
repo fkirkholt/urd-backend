@@ -254,6 +254,8 @@ class Grid:
         fkeys = self.tbl.fkeys
         hidden = self.tbl.is_hidden()
         for key, field in self.tbl.fields.items():
+            if len(self._columns) == 5:
+                break
             # Don't show hdden columns
             if (
                 field.name[0:1] == '_' or

@@ -122,15 +122,15 @@ class Datatype:
 
     def to_native_type(self, platform):
         if platform in ['mysql', 'mariadb']:
-            return self.get_mysql_type(self.type, self.size)
+            return self.get_mysql_type()
         elif platform == 'mssql':
-            return self.get_sqlserver_type(self.type, self.size)
+            return self.get_sqlserver_type()
         elif platform == "sqlite":
-            return self.get_sqlite_type(self.type, self.size)
+            return self.get_sqlite_type()
         elif platform == 'postgresql':
-            return self.get_postgres_type(self.type, self.size)
+            return self.get_postgres_type()
         elif platform == 'oracle':
-            return self.get_oracle_type(self.type, self.size)
+            return self.get_oracle_type()
         else:
             raise ValueError(f"Type conversion for {platform} not "
                              "implemented")

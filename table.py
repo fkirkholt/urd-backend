@@ -48,6 +48,7 @@ class Table:
 
         # Data type of primary key column
         pkey_type = None
+        pkey_col = None
 
         # Find data type for first pkey column
         if (
@@ -70,7 +71,7 @@ class Table:
             self._type = "xref"
         elif self.name[-4:] == "_ext":
             self._type = "ext"
-        elif pkey_type == 'str' or 'SMALLINT' in str(pkey_col['type']):
+        elif pkey_type == 'str' or (pkey_col and 'SMALLINT' in str(pkey_col['type'])):
             self._type = "list"
 
         return self._type

@@ -318,7 +318,7 @@ class Database:
 
     def is_top_level(self, table):
         """Check if table is top level, i.e. not subordinate to other tables"""
-        if (table.type == 'list'):
+        if (table.type == 'list' or table.hidden):
             return False
 
         for fkey in table.fkeys.values():
@@ -326,7 +326,7 @@ class Database:
                 continue
 
             # Not top level if has foreign keys to other table
-            # that is not a hidden table
+            # that is not a hidden table and not of type 'list'
             if fkey.referred_table != table.name:
                 fk_table = self.tables[fkey.referred_table]
                 if fk_table.hidden is False and fk_table.type != 'list':
@@ -423,7 +423,7 @@ class Database:
 
         return tbl_groups
 
-    def get_table_groups(self):
+    def get_tbl_groups(self):
         tbl_groups = Dict()
         # Group for tables not belonging to other groups
         tbl_groups['...'] = []
@@ -463,24 +463,19 @@ class Database:
                           if tbl_name in tbl_names2]
                 len_combined = len(set(tbl_names + tbl_names2))
 
-                if len(common):
-                    if (
-                        len(tbl_names) <= len(tbl_names2) and
-                        (len(diff) == 1 or len_combined < 15)
-                    ):
+                if len(common) and len(tbl_names) <= len(tbl_names2):
+                    if len(diff) == 1 or len_combined < 15:
                         tbl_groups[group_name2].extend(tbl_names)
                         delete_groups.append(group_name)
                         break
-                    elif (
-                        len(tbl_names) <= len(tbl_names2) and
-                        len(common) == 1 and len(diff) > 1
-                    ):
+                    elif len(common) == 1 and len(diff) > 1:
                         # We want the common tables only in the smallest
                         # group
                         tbl_groups[group_name2].remove(common[0])
-                    elif (len(tbl_names) <= len(tbl_names2)):
+                    else:
                         for tbl_name in common:
-                            tbl_groups[group_name2].remove(tbl_name)
+                            if tbl_name in tbl_groups[group_name2]:
+                                tbl_groups[group_name2].remove(tbl_name)
 
         for group_name in delete_groups:
             del tbl_groups[group_name]

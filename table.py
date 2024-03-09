@@ -453,7 +453,7 @@ class Table:
                 with self.db.engine.connect() as cnxn:
                     count = cnxn.execute(text(sql)).first()[0]
 
-                relations[name].use = count/self.rowcount
+                relations[name].use = count/self.rowcount if self.rowcount > 0 else 0
 
         self._relations = relations
 

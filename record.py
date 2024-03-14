@@ -288,11 +288,14 @@ class Record:
 
         for idx, colname in enumerate(rel.referred_columns):
             foreign = rel.constrained_columns[idx]
+            primary = rel.referred_columns[idx]
             value = rec.fields[colname].value
             mark = rel.table + '_' + foreign
             expr = f'"{rel.table}"."{foreign}" = :{mark}'
             grid.cond.prep_stmnts.append(expr)
             grid.cond.params[mark] = value
+            expr = f'"{rel.table}"."{foreign}" != "{rel.table}"."{primary}"'
+            grid.cond.prep_stmnts.append(expr)
 
         relation = grid.get()
 

@@ -42,12 +42,16 @@ class Grid:
         expansion_column = self.get_expansion_column()
         if expansion_column:
             fkey = self.tbl.get_parent_fk()
-            rel_column = self.tbl.fields[fkey.constrained_columns[-1]]
+            rel_column = fkey.constrained_columns[-1]
+            ref_column = fkey.referred_columns[-1]
             selects['count_children'] = self.select_children_count(fkey)
 
             # Filters on highest level if not filtered by user
             if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
-                expr = f"{self.tbl.view}.{rel_column.name} IS NULL"
+                expr = f"""
+                    {self.tbl.view}.{rel_column} IS NULL
+                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column}
+                """
                 self.cond.prep_stmnts.append(expr)
 
         actions = self.get_actions()
@@ -168,9 +172,9 @@ class Grid:
         """ number of relations to same table for expanding row"""
         wheres = []
 
-        for idx, colname in enumerate(fkey.constrained_columns):
-            primary = fkey.referred_columns[idx]
-            wheres.append(colname + ' = ' + self.tbl.name + '.' + primary)
+        for idx, col in enumerate(fkey.constrained_columns):
+            prim = fkey.referred_columns[idx]
+            wheres.append(f"{col} != {prim} and {col} = {self.tbl.name}.{prim}")
 
         where = ' and '.join(wheres)
 
@@ -551,7 +555,6 @@ class Grid:
             group = None
             for part in parts:
                 test_group = group + '_' + part if group else part
-                print('test_group', test_group)
                 if (
                     len(fields) > i and
                     list(fields.keys())[i].startswith(test_group+'_')

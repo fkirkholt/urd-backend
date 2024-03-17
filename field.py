@@ -48,6 +48,8 @@ class Field:
         self.label = self.db.get_label(self.name),
         self.attrs = attrs
 
+        smallints = ['TINYINT', 'SMALLINT', 'MEDIUMINT']
+
         fkey = self.tbl.get_fkey(self.name)
         if fkey:
             self.fkey = fkey
@@ -59,7 +61,7 @@ class Field:
                 self.label = self.db.get_label(fkey.referred_table)
         if (
             (hasattr(col, 'autoincrement') and col.autoincrement) or (
-                (self.datatype == 'int' and str(col.type) != 'SMALLINT') and
+                (self.datatype == 'int' and str(col.type) not in smallints) and
                 len(self.tbl.pkey.columns) and
                 col.name == self.tbl.pkey.columns[-1] and
                 col.name not in self.tbl.fkeys

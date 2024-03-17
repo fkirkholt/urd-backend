@@ -559,7 +559,6 @@ class Grid:
                     len(fields) > i and
                     list(fields.keys())[i].startswith(test_group+'_')
                 ):
-                    print('betingelsen oppfylt')
                     group = test_group
                 elif group is None:
                     group = part

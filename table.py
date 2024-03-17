@@ -59,9 +59,9 @@ class Table:
             cols = self.db.columns[self.name]
             for col in cols:
                 if col['name'] == colname:
-                    pkey_col = col
+                    pkey_col = Dict(col)
                     break
-            pkey_type = pkey_col['type'].python_type.__name__
+            pkey_type = pkey_col.type.python_type.__name__
 
         self._type = self.main_type
 
@@ -71,7 +71,18 @@ class Table:
             self._type = "xref"
         elif self.name[-4:] == "_ext":
             self._type = "ext"
-        elif pkey_type == 'str' or (pkey_col and 'SMALLINT' in str(pkey_col['type'])):
+        elif (
+            pkey_type == 'str' or (
+                pkey_col and (
+                    'TINYINT' in str(pkey_col.type) or
+                    'SMALLINT' in str(pkey_col.type) or
+                    'MEDIUMINT' in str(pkey_col.type) or (
+                        'NUMERIC' in str(pkey_col.type) and
+                        (pkey_col.type.scale is not None or pkey_col.type.precision < 10)
+                    )
+                )
+            )
+        ):
             self._type = "list"
 
         return self._type

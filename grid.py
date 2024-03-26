@@ -682,6 +682,6 @@ class Grid:
             if (len(name_parts) > 1 and name_parts[0] in rel_tbl_names):
                 continue
             if not rel.hidden:
-                form['items'][rel.label] = "relations." + alias
+                form['items'][rel.label] = "relation." + alias
 
         return form

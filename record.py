@@ -345,7 +345,7 @@ class Record:
             sql += f"else max({inc_col}) +1 end from {self.tbl.name} "
             sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
-            with self.db.engine.connext() as cnxn:
+            with self.db.engine.connect() as cnxn:
                 values[inc_col] = cnxn.execute(text(sql), params).first()[0]
             self.pk[inc_col] = values[inc_col]
 

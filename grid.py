@@ -642,6 +642,7 @@ class Grid:
             for index in rel_tbl.indexes.values():
                 if index.columns[slice_obj] == rel.constrained_columns:
                     index_exist = True
+                    rel.index = index
 
             if index_exist and not rel.get('hidden', False):
                 if set(rel_tbl.pkey.columns) <= set(rel.constrained_columns):
@@ -661,16 +662,13 @@ class Grid:
                                               postfix='_' + self.tbl.name)
 
                 # Add name of foreign key column if other than name
-                # of reference table
+                # of reference table (and primary key column)
                 if rel.constrained_columns[-1] not in self.tbl.name:
                     col = rel.constrained_columns[-1]
-                    postfix = None
                     join_ref_cols = '_'.join(rel.referred_columns)
-                    if col == f"{self.tbl.name}_{join_ref_cols}":
-                        postfix = join_ref_cols
-                    colname = self.db.get_label(col, postfix).lower()
-
-                    rel.label += " (" + colname + ")"
+                    if col != f"{self.tbl.name}_{join_ref_cols}":
+                        colname = self.db.get_label(col).lower()
+                        rel.label += " (" + colname + ")"
             else:
                 rel.hidden = True
 

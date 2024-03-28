@@ -72,8 +72,8 @@ class Field:
         if col.default and not hasattr(col, 'autoincrement'):
             def_vals = col.default.split('::')
             default = def_vals[0]
-            self.default = default.replace("'", "")
-            self.default = self.replace_vars(col.default)
+            self.default = self.replace_vars(default)
+            self.default = self.default.replace("'", "")
         else:
             self.default = col.default
 

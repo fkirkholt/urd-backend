@@ -658,15 +658,15 @@ class Grid:
                         rel_tbl.pkey.columns.index(rel.constrained_columns[-1])
 
                 rel.label = self.db.get_label(rel_tbl.name,
-                                              prefix=self.tbl.name + '_',
-                                              postfix='_' + self.tbl.name)
+                                              prefix=self.tbl.name,
+                                              postfix=self.tbl.name)
 
                 # Add name of foreign key column if other than name
                 # of reference table (and primary key column)
                 if rel.constrained_columns[-1] not in self.tbl.name:
                     col = rel.constrained_columns[-1]
                     join_ref_cols = '_'.join(rel.referred_columns)
-                    if col != f"{self.tbl.name}_{join_ref_cols}":
+                    if col != f"{self.tbl.name.rstrip('_')}_{join_ref_cols}":
                         colname = self.db.get_label(col).lower()
                         rel.label += " (" + colname + ")"
             else:

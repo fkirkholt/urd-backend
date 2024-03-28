@@ -511,8 +511,10 @@ class Database:
         if id_parts[-1] in ("list", "liste", "xref", "link"):
             identifier = "_".join(id_parts[:-1])
         if prefix:
+            prefix = prefix.rstrip('_') + '_'
             identifier = identifier.replace(prefix, '')
         if postfix:
+            postfix = postfix.lstrip('_') + '_'
             identifier = identifier.replace(postfix, '')
         label = identifier.replace('_', ' ')
 

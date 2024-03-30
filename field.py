@@ -151,12 +151,13 @@ class Field:
     def get_options(self, condition, params):
 
         fkey = self.tbl.get_fkey(self.name)
-        pkey_col = fkey.referred_columns[-1] if fkey else self.name
 
         if fkey and fkey.referred_table in self.db.tablenames:
             from_table = fkey.referred_table
+            pkey_col = fkey.referred_columns[-1]
         else:
             from_table = self.tbl.name
+            pkey_col = self.name
 
         # Field that holds the value of the options
         value_field = f'{self.name}.' + pkey_col

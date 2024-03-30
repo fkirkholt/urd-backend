@@ -311,7 +311,7 @@ class Table:
                 if rel.schema == self.db.schema:
                     rel_db = self.db
                 else:
-                    rel_db = Database(self.db.engine, rel.schema)
+                    rel_db = Database(self.db.engine, rel.schema, self.db.user.name)
 
                 rel_table = Table(rel_db, rel.table_name)
 

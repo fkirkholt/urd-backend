@@ -266,6 +266,8 @@ class Grid:
                 field.name[0:6].lower() == 'const_'
             ):
                 continue
+            if field.name == 'password':
+                continue
             if field.datatype == 'str' and (field.size and field.size >= 255):
                 continue
             if field.datatype == 'json':
@@ -336,11 +338,16 @@ class Grid:
             ):
                 cols.append(f'{self.tbl.grid_view}.{key}')
 
+        sql = ''
+        access_idx_name = self.tbl.name + '_access_code_idx'
+        if access_idx_name in self.tbl.indexes:
+            sql += self.db.cte_access
+
         select = ', '.join(cols)
         cond = self.get_cond_expr()
         order = self.make_order_by()
 
-        sql = "select " + select + "\n"
+        sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not cond else "where " + cond + "\n"
@@ -358,7 +365,11 @@ class Grid:
         """Return rowcount for grid"""
         conds = self.get_cond_expr()
 
-        sql = "select count(*)\n"
+        sql = ''
+        access_idx_name = self.tbl.name + '_access_code_idx'
+        if access_idx_name in self.tbl.indexes:
+            sql += self.db.cte_access
+        sql += "select count(*)\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else f"where {conds}\n"
@@ -371,15 +382,24 @@ class Grid:
     def get_display_values(self, selects):
         """Return display values for columns in grid"""
 
-        order = self.make_order_by()
-        conds = self.get_cond_expr()
-
         alias_selects = {}
         for key, value in selects.items():
             alias_selects[key] = f'{value} as {key}'
         select = ', '.join(alias_selects.values())
 
-        sql = "select " + select + "\n"
+        sql = ''
+        access_idx_name = self.tbl.name + '_access_code_idx'
+        if access_idx_name in self.tbl.indexes:
+            sql += self.db.cte_access
+            self.cond.params.uid = self.db.user.name
+            col = self.tbl.indexes[access_idx_name].columns[-1]
+            stmt = col + ' IS NULL or ' + col + ' in (select code from cte_access)'
+            self.cond.prep_stmnts.append(stmt)
+
+        order = self.make_order_by()
+        conds = self.get_cond_expr()
+
+        sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else "where " + conds + "\n"

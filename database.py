@@ -17,9 +17,11 @@ from datatype import Datatype
 class Database:
     """Contains methods for getting data and metadata from database"""
 
-    def __init__(self, engine, db_name):
+    def __init__(self, engine, db_name, uid):
         self.engine = engine
         self.identifier = db_name
+        self.refl = inspect(engine)
+        self.user = User(engine, name=uid)
         path = db_name.split('.')
         if engine.name == 'postgresql':
             self.schema = 'public' if len(path) == 1 else path[1]
@@ -34,9 +36,22 @@ class Database:
             self.schema = db_name
             self.cat = None
 
-        self.refl = inspect(engine)
+        if 'urdr' in self.refl.get_schema_names():
+            self.cte_access = """
+            with recursive cte_access (code, parent) as (
+                select a1.code, a1.parent
+                from urdr.access a1
+                join urdr.user_access ua on ua.access_code = a1.code
+                where ua.user_id = :uid
+                union all
+                select a2.code, a2.parent
+                from urdr.access a2
+                join cte_access cte on cte.code = a2.parent
+            )
+            """
+        else:
+            self.cte_access = None
 
-        self.user = User(engine)
         self.html_attrs = self.init_html_attributes()
         attrs = Dict(self.html_attrs.pop('base', None))
         self.cache = attrs.pop('data-cache', None)
@@ -96,7 +111,7 @@ class Database:
                 "system": self.engine.name,
                 "server": self.engine.url.host,
                 "schema": self.schema,
-                "schemata": self.schemas,
+                "schemata": [s for s in self.schemas if s != 'urdr'],
                 "label": self.get_label(self.identifier),
                 "tables": self.get_tables(),
                 "contents": self.get_contents(),
@@ -179,7 +194,7 @@ class Database:
         ):
             self.create_html_attributes()
 
-        tbl_names = self.refl.get_table_names(self.schema)
+        tbl_names = self.user.tables(self.schema)
         view_names = self.refl.get_view_names(self.schema)
 
         for tbl_name in self.tablenames:
@@ -300,7 +315,7 @@ class Database:
                 rows = cnxn.execute(text(sql), params).fetchall()
             self._tablenames = [row[0] for row in rows]
         else:
-            table_names = self.refl.get_table_names(self.schema)
+            table_names = self.user.tables(self.schema)
             view_names = self.refl.get_view_names(self.schema)
             self._tablenames = table_names + view_names
 

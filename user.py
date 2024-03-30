@@ -1,6 +1,7 @@
 import re
 from addict import Dict
-from sqlalchemy import text
+from sqlalchemy import text, inspect
+from settings import Settings
 
 
 class User:
@@ -12,7 +13,26 @@ class User:
         self._is_admin = {}
 
     def databases(self, schema=None, cat=None):
-        if self.engine.name == 'postgresql' and schema and schema != 'public':
+        if self.engine.name == 'sqlite':
+            sql = """
+            with recursive cte_access (code, parent) as (
+                select a1.code, a1.parent
+                from access a1
+                join user_access ua on ua.access_code = a1.code
+                where ua.user_id = :uid
+                union all
+                select a2.code, a2.parent
+                from access a2
+                join cte_access cte on cte.code = a2.parent
+            )
+            select name, description
+            from database_ db
+            left join database_access dba on dba.database_name = db.name
+            where read_access is null
+               or read_access in (select code from cte_access)
+            """
+
+        elif self.engine.name == 'postgresql' and schema and schema != 'public':
             sql = f"""
             select '{schema}' as db_name,
                    obj_description('{schema}'::regnamespace) as db_comment
@@ -53,10 +73,47 @@ class User:
             """
 
         with self.engine.connect() as conn:
-            params = {'schema': schema, 'cat': cat}
+            if self.engine.name == 'sqlite':
+                params = {'uid': self.name}
+            else:
+                params = {'schema': schema, 'cat': cat}
             rows = conn.execute(text(sql), params).fetchall()
 
         return rows
+
+    def tables(self, schema):
+        cfg = Settings()
+        refl = inspect(self.engine)
+        tbl_names = refl.get_table_names(schema)
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+            db_path = self.engine.url.database
+            db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
+            urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
+            sql = f"""
+            with recursive cte_access (code, parent) as (
+                select a1.code, a1.parent
+                from {urdr}.access a1
+                join user_access ua on ua.access_code = a1.code
+                where ua.user_id = :uid
+                union all
+                select a2.code, a2.parent
+                from {urdr}.access a2
+                join cte_access cte on cte.code = a2.parent
+            )
+            select table_name from {urdr}.table_access
+            where  database_name = :db and read_access is not NULL and
+                   read_access not in (select code from cte_access)
+            """
+
+            params = {'uid': self.name, 'db': db_name}
+
+            with self.engine.connect() as cnxn:
+                rows = cnxn.execute(text(sql), params).fetchall()
+
+                for row in rows:
+                    tbl_names.remove(row[0])
+
+        return tbl_names
 
     @property
     def roles(self):
@@ -92,7 +149,39 @@ class User:
         privilege.delete = 0
         privilege.create = 0
 
-        if self.engine.name in ['mysql', 'mariadb']:
+        cfg = Settings()
+
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+            db_path = self.engine.url.database
+            db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
+            urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
+            sql = f"""
+            with recursive cte_access (code, parent) as (
+                select a1.code, a1.parent
+                from {urdr}.access a1
+                join user_access ua on ua.access_code = a1.code
+                where ua.user_id = :uid
+                union all
+                select a2.code, a2.parent
+                from {urdr}.access a2
+                join cte_access cte on cte.code = a2.parent
+            )
+            select count(*) from {urdr}.database_access dba
+            where database_name = :db_name and
+                  write_access in (select code from cte_access)
+            """
+            with self.engine.connect() as cnxn:
+                params = {'uid': self.name, 'db_name': db_name}
+                count = cnxn.execute(text(sql), params).first()[0]
+
+            if count:
+                privilege.select = 1
+                privilege.insert = 1
+                privilege['update'] = 1
+                privilege.delete = 1
+                privilege.create = 1  # TODO: Er dette greit?
+
+        elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
                 rows = cnxn.execute(text('show grants')).fetchall()
             for row in rows:
@@ -137,6 +226,7 @@ class User:
     def table_privilege(self, schema, table):
         """Return privileges of database user"""
 
+        cfg = Settings()
         schema_privilege = self.schema_privilege(schema)
 
         privilege = Dict({
@@ -145,6 +235,69 @@ class User:
             'update': schema_privilege['update'] or 0,
             'delete': schema_privilege.delete or 0
         })
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+            db_path = self.engine.url.database
+            db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
+            urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
+            sql = f"""
+            select count(*) from {urdr}.table_access ta
+            where database_name = :db_name and table_name = :table
+            """
+            with self.engine.connect() as cnxn:
+                params = {'db_name': db_name, 'table': table}
+                count = cnxn.execute(text(sql), params).first()[0]
+            if count:
+                privilege.select = 0
+                privilege.insert = 0
+                privilege['update'] = 0
+                privilege.delete = 0
+
+                sql = f"""
+                with recursive cte_access (code, parent) as (
+                    select a1.code, a1.parent
+                    from {urdr}.access a1
+                    join user_access ua on ua.access_code = a1.code
+                    where ua.user_id = :uid
+                    union all
+                    select a2.code, a2.parent
+                    from {urdr}.access a2
+                    join cte_access cte on cte.code = a2.parent
+                )
+                select count(*) from {urdr}.table_access ta
+                where database_name = :db and table_name = :table and
+                      (read_access is NULL or
+                      read_access in (select code from cte_access))
+                """
+                with self.engine.connect() as cnxn:
+                    params = {'uid': self.name, 'db': db_name, 'table': table}
+                    count_read = cnxn.execute(text(sql), params).first()[0]
+
+                sql = f"""
+                with recursive cte_access (code, parent) as (
+                    select a1.code, a1.parent
+                    from {urdr}.access a1
+                    join user_access ua on ua.access_code = a1.code
+                    where ua.user_id = :uid
+                    union all
+                    select a2.code, a2.parent
+                    from {urdr}.access a2
+                    join cte_access cte on cte.code = a2.parent
+                )
+                select count(*) from {urdr}.table_access ta
+                where database_name = :db and table_name = :table and
+                      write_access in (select code from cte_access)
+                """
+                with self.engine.connect() as cnxn:
+                    params = {'uid': self.name, 'db': db_name, 'table': table}
+                    count_write = cnxn.execute(text(sql), params).first()[0]
+
+                if count_read:
+                    privilege.select = 1
+                if count_write:
+                    privilege.insert = 1
+                    privilege['update'] = 1
+                    privilege.delete = 1
+
         if self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
                 rows = cnxn.execute(text('show grants')).fetchall()

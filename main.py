@@ -16,6 +16,7 @@ from record import Record
 from field import Field
 import json
 import os
+import hashlib
 from addict import Dict
 from jose import jwt
 import time
@@ -24,6 +25,11 @@ from user import User
 
 
 cfg = Settings()
+default = Dict({
+    'system': cfg.system,
+    'host': cfg.host,
+    'database': cfg.database
+})
 
 app = FastAPI()
 
@@ -58,6 +64,7 @@ def get_engine(cfg, db_name=None):
             url += '/postgres'
 
     engine = create_engine(url)
+
     try:
         with engine.connect():
             pass
@@ -67,6 +74,32 @@ def get_engine(cfg, db_name=None):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication"
         )
+
+    if cfg.system == 'sqlite' and db_name == 'urdr.db':
+        with engine.connect() as conn:
+            sql = """
+            select count(*) from user
+            where id = :id and password = :pwd
+            """
+
+            hashed_pwd = hashlib.sha256(cfg.pwd.encode('utf-8')).hexdigest()
+            params = {'id': cfg.uid, 'pwd': hashed_pwd}
+            count = conn.execute(text(sql), params).first()[0]
+
+            if count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        'msg': "Invalid authentication",
+                        "system": default.system,
+                        "host": default.host,
+                        "database": default.database
+                    }
+                )
+    elif cfg.system == 'sqlite' and default.database == 'urdr.db':
+        with engine.connect() as cnxn:
+            path = os.path.join(default.host, default.database)
+            cnxn.execute(text('ATTACH DATABASE "' + path + '" as urdr'))
 
     return engine
 
@@ -98,7 +131,12 @@ async def check_login(request: Request, call_next):
         not request.url.path.startswith('/static')
     ):
         return JSONResponse(content={
-            "message": "login"
+            "message": "login",
+            "detail": {
+                'system': default.system,
+                'host': default.host,
+                'database': default.database
+            }
         }, status_code=401)
 
     response = await call_next(request)
@@ -125,7 +163,9 @@ def login(response: Response, system: str, server: str, username: str,
     cfg.database = database
     cfg.host = server or 'localhost'
 
-    cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
+    # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
+    if cfg.system == 'sqlite' and cfg.database != 'urdr.db':
+        cfg.timeout = None
     response.set_cookie(key="session", value=token(), expires=cfg.timeout)
 
     return {"success": True}
@@ -139,7 +179,7 @@ def logout(response: Response):
     cfg.database = None
     cfg.uid = None
     cfg.pwd = None
-    return {"success": True}
+    return {'success': True, 'cnxn': default}
 
 
 @app.get("/dblist")
@@ -147,19 +187,32 @@ def dblist(role: str = None):
     result = []
     useradmin = False
     if cfg.system in ('sqlite', 'duckdb'):
-        file_list = os.listdir(cfg.host)
-        for filename in file_list:
-            attrs = xattr.xattr(cfg.host + '/' + filename)
-            comment = None
-            if 'user.comment' in attrs:
-                comment = attrs.get('user.comment')
-            if os.path.splitext(filename)[1] not in ('.db', '.sqlite3'):
-                continue
-            base = Dict()
-            base.columns.name = filename
-            base.columns.label = filename.capitalize()
-            base.columns.description = comment
-            result.append(base)
+        if cfg.database == 'urdr.db':
+            engine = get_engine(cfg, 'urdr.db')
+            user = User(engine, name=cfg.uid)
+            rows = user.databases()
+
+            for row in rows:
+                base = Dict()
+                base.columns.name = row.name
+                base.columns.label = row.name.capitalize()
+                base.columns.description = row.description
+                result.append(base)
+
+        else:
+            file_list = os.listdir(cfg.host)
+            for filename in file_list:
+                attrs = xattr.xattr(cfg.host + '/' + filename)
+                comment = None
+                if 'user.comment' in attrs:
+                    comment = attrs.get('user.comment')
+                if os.path.splitext(filename)[1] not in ('.db', '.sqlite3'):
+                    continue
+                base = Dict()
+                base.columns.name = filename
+                base.columns.label = filename.capitalize()
+                base.columns.description = comment
+                result.append(base)
     else:
         engine = get_engine(cfg)
         if role:
@@ -268,7 +321,7 @@ def change_role(user: str, host: str, role: str, grant: bool):
 
 
 @app.put("/change_password")
-def change_password(old_pwd: str, new_pwd: str):
+def change_password(base: str, old_pwd: str, new_pwd: str):
     if old_pwd != cfg.pwd:
         return {'data': 'Feil passord'}
     elif cfg.system in ['mysql', 'mariadb']:
@@ -282,6 +335,16 @@ def change_password(old_pwd: str, new_pwd: str):
             cnxn.commit()
 
         return {'data': 'Passord endret'}
+    elif cfg.system == 'sqlite' and default.database == 'urdr.db':
+        sql = "update urdr.user set password = :pwd where id = :uid"
+        pwd = hashlib.sha256(new_pwd.encode('utf-8')).hexdigest()
+        params = {'uid': cfg.uid, 'pwd': pwd}
+        engine = get_engine(cfg, base)
+        with engine.connect() as cnxn:
+            cnxn.execute(text(sql), params)
+            cnxn.commit()
+        return {'data': 'Passord endret'}
+
     else:
         return {'data': 'Ikke implementert for denne databaseplattformen'}
 
@@ -301,7 +364,7 @@ def create_user(name: str, pwd: str):
 @app.get("/database")
 def db_info(base: str):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     info = dbo.get_info()
 
     return {'data': info}
@@ -317,8 +380,14 @@ async def get_table(request: Request):
         base_path = req.base + '.' + req.schema
     else:
         base_path = req.base or schema
-    dbo = Database(engine, base_path)
+    dbo = Database(engine, base_path, cfg.uid)
     table = Table(dbo, req.table)
+    privilege = dbo.user.table_privilege(req.base, req.table)
+    if privilege.select == 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No access"
+        )
     grid = Grid(table)
     table.limit = int(req.get('limit', 30))
     table.offset = int(req.get('offset', 0))
@@ -348,7 +417,7 @@ def get_record(base: str, table: str, pkey: str, schema: str = None):
         base_path = base + '.' + schema
     else:
         base_path = base or schema
-    dbo = Database(engine, base_path)
+    dbo = Database(engine, base_path, cfg.uid)
     tbl = Table(dbo, table)
     pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
@@ -358,7 +427,7 @@ def get_record(base: str, table: str, pkey: str, schema: str = None):
 @app.get("/children")
 def get_children(base: str, table: str, pkey: str):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)
     tbl.offset = 0
     tbl.limit = 30
@@ -371,7 +440,7 @@ def get_children(base: str, table: str, pkey: str):
 def get_relations(base: str, table: str, pkey: str, count: bool,
                   alias: str = None):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)
     pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
@@ -387,7 +456,7 @@ async def save_table(request: Request):
     req = await request.json()
     base = req['base_name']
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, req['table_name'])
     return {'data': tbl.save(req['records'])}
 
@@ -397,7 +466,7 @@ async def get_options(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
     engine = get_engine(cfg, req.base)
-    dbo = Database(engine, req.base)
+    dbo = Database(engine, req.base, cfg.uid)
     tbl = Table(dbo, req.table)
     fld = Field(tbl, req.column)
     conds = req.condition.split(" and ") if req.condition else []
@@ -430,7 +499,7 @@ def dialog_cache(request: Request):
 @app.put('/urd/update_cache')
 async def update_cache(base: str, config: str):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     dbo.config = Dict(json.loads(config))
     dbo.config.update_cache = True
     dbo.get_tables()
@@ -444,7 +513,7 @@ def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool,
                table: str = None):
     # Fiks alle slike connections
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     if table:
         table = Table(dbo, table)
         ddl = table.export_ddl(dialect)
@@ -464,7 +533,7 @@ def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool,
 @app.get('/table_csv')
 def export_csv(base: str, table: str, fields: str):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     table = Table(dbo, table)
     table.offset = 0
     table.limit = None
@@ -480,7 +549,7 @@ def export_csv(base: str, table: str, fields: str):
 @app.get('/kdrs_xml')
 def export_kdrs_xml(base: str, version: str, descr: str):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     xml = dbo.export_as_kdrs_xml(version, descr)
     response = StreamingResponse(io.StringIO(xml), media_type="application/xml")
     response.headers['Content-Disposition'] = \
@@ -493,7 +562,7 @@ def export_kdrs_xml(base: str, version: str, descr: str):
 def get_file(base: str, table: str, pkey: str):
     pkey = json.loads(urllib.parse.unquote(pkey))
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)
     rec = Record(dbo, tbl, pkey)
     path = rec.get_file_path()
@@ -507,7 +576,7 @@ def convert(base: str, table: str, from_format: str, to_format: str,
             fields: str):
     fields = json.loads(fields)
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)
     for field_name in fields:
         result = tbl.convert(field_name, from_format, to_format)
@@ -519,7 +588,7 @@ def convert(base: str, table: str, from_format: str, to_format: str,
 def query(base: str, sql: str, limit: str):
     print('sql', sql)
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base)
+    dbo = Database(engine, base, cfg.uid)
     limit = 0 if not limit else int(limit)
     result = dbo.query_result(sql, limit)
 

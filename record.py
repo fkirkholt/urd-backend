@@ -1,4 +1,5 @@
 import os
+import hashlib
 from field import Field
 from addict import Dict
 from datetime import datetime
@@ -37,6 +38,9 @@ class Record:
             fld = Field(self.tbl, field.name)
             field.value = values.get(field.name, None)
             field.text = None if not displays else displays.get(field.name, None)
+            if field.name == 'password':
+                field.value = '****'
+                field.text = '****'
             if 'editable' not in field:
                 field.editable = True
 
@@ -74,7 +78,7 @@ class Record:
             if rel.schema == self.db.schema:
                 db = self.db
             else:
-                db = Database(self.db.engine, base_name)
+                db = Database(self.db.engine, base_name, self.db.user.name)
 
             tbl_rel = Table(db, rel.table)
             columns = db.refl.get_columns(rel.table, db.schema)
@@ -173,7 +177,7 @@ class Record:
             base_name = rel.base + '.' + rel.schema
         else:
             base_name = rel.base or rel.schema
-        db = Database(self.db.engine, base_name)
+        db = Database(self.db.engine, base_name, self.db.user.name)
         tbl_rel = Table(db, rel.table)
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500  # TODO: should have pagination in stead
@@ -360,6 +364,9 @@ class Record:
             if str(value).upper() in ['CURRENT_TIMESTAMP']:
                 value = datetime.now()
 
+            if key == 'password':
+                value = hashlib.sha256(value.encode('utf-8')).hexdigest()
+
             inserts[key] = value
 
         sql = f"""
@@ -393,6 +400,9 @@ class Record:
         for key, value in values.items():
             if value == "":
                 value = None
+
+            if key == 'password':
+                value = hashlib.sha256(value.encode('utf-8')).hexdigest()
 
             set_values[key] = value
 

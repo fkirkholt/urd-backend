@@ -140,7 +140,10 @@ async def check_login(request: Request, call_next):
         }, status_code=401)
 
     response = await call_next(request)
-    if cfg.uid is not None and request.url.path != "/logout":
+    if (
+        cfg.uid and request.url.path not in ["/logout", "/"]
+        and not request.url.path.startswith('/static')
+    ):
         # Update cookie to renew expiration time
         response.set_cookie(key="session", value=token(), expires=cfg.timeout)
 

@@ -47,8 +47,9 @@ class Table:
             return 'view'
 
         # Data type of primary key column
-        pkey_type = None
         pkey_col = None
+        pkey_col_type = None
+        pkey_col_length = None
 
         # Find data type for first pkey column
         if (
@@ -61,7 +62,9 @@ class Table:
                 if col['name'] == colname:
                     pkey_col = Dict(col)
                     break
-            pkey_type = pkey_col.type.python_type.__name__
+            pkey_col_type = pkey_col.type.python_type.__name__
+            if hasattr(pkey_col.type, 'length'):
+                pkey_col_length = pkey_col.type.length
 
         self._type = self.main_type
 
@@ -72,7 +75,7 @@ class Table:
         elif self.name[-4:] == "_ext":
             self._type = "ext"
         elif (
-            pkey_type == 'str' or (
+            (pkey_col_type == 'str' and pkey_col_length and pkey_col_length < 10) or (
                 pkey_col and (
                     'TINYINT' in str(pkey_col.type) or
                     'SMALLINT' in str(pkey_col.type) or

@@ -313,18 +313,14 @@ class Grid:
         for sort in sort_fields.values():
             if self.db.engine.name in ['mysql', 'mariadb']:
                 order += f"isnull({sort.field}), {sort.field} {sort.order}, "
-            elif self.db.engine.name == 'sqlite':
-                order += f"{sort.field} is null, {sort.field} {sort.order}, "
             else:
-                order += f"{sort.field} {sort.order}, "
+                order += f"{sort.field} {sort.order} nulls last, "
 
-        for field in self.tbl.pkey.columns:
-            order += f'{self.tbl.view}.{field}, '
+        if len(sort_fields) == 0:
+            for field in self.tbl.pkey.columns:
+                order += f'{self.tbl.view}.{field}, '
 
         order = order[0:-2]
-
-        if self.db.engine.name in ['oracle', 'postgresql']:
-            order += " nulls last"
 
         return order
 
@@ -349,15 +345,19 @@ class Grid:
 
         sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += self.tbl.joins + "\n"
+        sql += self.tbl.joins
         sql += "" if not cond else "where " + cond + "\n"
-        sql += order
+        sql += order + "\n"
+
+        if self.db.engine.name in ['mssql', 'oracle']:
+            sql += f"offset {self.tbl.offset} rows\n"
+            sql += f"fetch next {self.tbl.limit} rows only"
+        else:
+            sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
         with self.db.engine.connect() as cnxn:
             result = cnxn.execute(text(sql), self.cond.params)
-            if self.tbl.offset:
-                result.fetchmany(self.tbl.offset)
-            records = result.mappings().fetchmany(self.tbl.limit)
+            records = result.mappings().fetchall()
 
         return records
 
@@ -369,10 +369,18 @@ class Grid:
         access_idx_name = self.tbl.name + '_access_code_idx'
         if access_idx_name in self.tbl.indexes:
             sql += self.db.cte_access
-        sql += "select count(*)\n"
+
+        if self.db.engine.name == 'sqlite':
+            sql += "select * \n"
+        else:
+            sql += "select count(*)\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
         sql += self.tbl.joins + "\n"
         sql += "" if not conds else f"where {conds}\n"
+
+        # Counting can very slow in SQLite, so we limit to 1000
+        if self.db.engine.name == 'sqlite':
+            sql = f"select count(*) from (\n{sql}\nlimit 1000)"
 
         with self.db.engine.connect() as cnxn:
             count = cnxn.execute(text(sql), self.cond.params).first()[0]
@@ -401,15 +409,19 @@ class Grid:
 
         sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += self.tbl.joins + "\n"
+        sql += self.tbl.joins
         sql += "" if not conds else "where " + conds + "\n"
-        sql += order
+        sql += order + "\n"
+
+        if self.db.engine.name in ['mssql', 'oracle']:
+            sql += f"offset {self.tbl.offset} rows\n"
+            sql += f"fetch next {self.tbl.limit} rows only"
+        else:
+            sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
         with self.db.engine.connect() as cnxn:
             result = cnxn.execute(text(sql), self.cond.params)
-            if self.tbl.offset:
-                result.fetchmany(self.tbl.offset)
-            records = result.mappings().fetchmany(self.tbl.limit)
+            records = result.mappings().fetchall()
 
         return records
 

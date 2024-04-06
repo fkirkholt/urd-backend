@@ -201,7 +201,7 @@ class Database:
             if tbl_name[-5:] == '_view' and tbl_name[:-5] in self.tablenames:
                 continue
 
-            hidden = tbl_name[0:1] == "_"
+            hidden = tbl_name[0:1] == "_" or tbl_name == 'html_attributes'
 
             table = Table(self, tbl_name)
             grid = Grid(table)

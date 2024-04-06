@@ -404,7 +404,7 @@ async def get_table(request: Request):
             grid.set_search_cond(req['filter'])
 
     if req.get('sort', None):
-        grid.sort_columns = json.loads(req.sort)
+        grid.sort_columns = Dict(json.loads(req.sort))
 
     # todo: handle sort
     pkey_vals = None

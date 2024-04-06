@@ -11,7 +11,6 @@ class Grid:
         self.tbl = table
         self.db = table.db
         self.user_filtered = False
-        self.sort_columns = []
         self.cond = Dict({
             'prep_stmnts': [],
             'params': {},
@@ -293,30 +292,17 @@ class Grid:
 
         order = "order by "
         sort_fields = Dict()
-        if len(self.sort_columns) == 0:
-            self.sort_columns = self.get_sort_columns()
-        for sort in self.sort_columns:
-            # Split into field and sort order
-            parts = sort.split(' ')
-            key = parts[0]
-            direction = 'asc' if len(parts) == 1 else parts[1]
-            if key in self.tbl.fields and not self.tbl.fields[key].virtual:
+        for sort in self.sort_columns.values():
+            if sort.col in self.tbl.fields and not self.tbl.fields[sort.col].virtual:
                 tbl_name = self.tbl.view
             else:
                 tbl_name = self.tbl.name + '_grid'
-            sort_fields[key].field = tbl_name + "." + key
-            sort_fields[key].order = direction
+            order += f"{tbl_name}.{sort.col} {sort.dir}, "
 
         if (len(self.tbl.pkey.columns) == 0 and len(sort_fields) == 0):
             return ""
 
-        for sort in sort_fields.values():
-            if self.db.engine.name in ['mysql', 'mariadb']:
-                order += f"isnull({sort.field}), {sort.field} {sort.order}, "
-            else:
-                order += f"{sort.field} {sort.order} nulls last, "
-
-        if len(sort_fields) == 0:
+        if len(self.sort_columns) == 0:
             for field in self.tbl.pkey.columns:
                 order += f'{self.tbl.view}.{field}, '
 
@@ -449,8 +435,11 @@ class Grid:
 
         return sums
 
-    def get_sort_columns(self):
+    @property
+    def sort_columns(self):
         """Return columns for default sorting of grid"""
+        if hasattr(self, '_sort_columns'):
+            return self._sort_columns
         sort_idx = self.tbl.indexes.get(self.tbl.name + "_sort_idx", None)
         grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)
         if sort_idx:
@@ -463,12 +452,17 @@ class Grid:
             columns = []
             direction = {}
 
-        sort_columns = []
-        for col in columns:
-            dir = '' if col not in direction else ' ' + direction[col][0]
-            sort_columns.append(col + dir)
+        self._sort_columns = Dict()
+        for idx, col in enumerate(columns):
+            dir = 'ASC' if col not in direction else direction[col][0]
+            sort = Dict({'col': col, 'dir': dir, 'idx': idx})
+            self._sort_columns[sort.col] = sort
 
-        return sort_columns
+        return self._sort_columns
+
+    @sort_columns.setter
+    def sort_columns(self, sorting):
+        self._sort_columns = sorting
 
     def get_summation_columns(self):
         """Return columns that should be summed"""

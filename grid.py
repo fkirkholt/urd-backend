@@ -658,12 +658,18 @@ class Grid:
     def relations_form(self, form):
         """Add relations to form"""
         from table import Table
-        rel_tbl_names = self.tbl.get_rel_tbl_names()
 
+        relations = Dict()
         for alias, rel in self.tbl.relations.items():
             rel.order = 10
             rel_tbl = Table(self.db, rel.table)
-            name_parts = rel.table.split("_")
+
+            # Remove relations that are extensions to other tables
+            if (
+                rel_tbl.type == 'ext' and
+                rel_tbl.pkey.columns != rel.constrained_columns
+            ):
+                continue
 
             if rel.table not in self.db.tablenames:
                 rel.hidden = True
@@ -704,15 +710,12 @@ class Grid:
             else:
                 rel.hidden = True
 
-            self.tbl.relations[alias] = rel
+            relations[alias] = rel
 
-        sorted_rels = dict(sorted(self.tbl.relations.items(),
+        sorted_rels = dict(sorted(relations.items(),
                            key=lambda tup: tup[1].order))
 
         for alias, rel in sorted_rels.items():
-            name_parts = rel.table.split("_")
-            if (len(name_parts) > 1 and name_parts[0] in rel_tbl_names):
-                continue
             if not rel.hidden:
                 form['items'][rel.label] = "relation." + alias
 

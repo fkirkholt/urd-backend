@@ -88,6 +88,11 @@ class Table:
         ):
             self._type = "list"
 
+        for fkey in self.fkeys.values():
+            if fkey.constrained_columns == self.pkey.columns:
+                self._type = "ext"
+                break
+
         return self._type
 
     def is_subordinate(self):

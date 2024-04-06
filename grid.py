@@ -457,7 +457,7 @@ class Grid:
             columns = sort_idx.columns
             direction = sort_idx.column_sorting or {}
         elif grid_idx:
-            columns = grid_idx.columns[0:3]
+            columns = grid_idx.columns[0:1]
             direction = grid_idx.column_sorting or {}
         else:
             columns = []

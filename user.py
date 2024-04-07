@@ -385,7 +385,11 @@ class User:
         if schema in self._is_admin:
             return self._is_admin[schema]
         self._is_admin[schema] = False
-        if self.engine.name in ['mysql', 'mariadb']:
+
+        cfg = Settings()
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+            return 'sysadmin' in self.access_codes
+        elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
                 rows = cnxn.execute(text('show grants')).fetchall()
             for row in rows:

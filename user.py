@@ -140,6 +140,37 @@ class User:
 
         return roles
 
+    @property
+    def access_codes(self):
+        if hasattr(self, '_access_codes'):
+            return self._access_codes
+        if self.engine.name == 'sqlite':
+            db_path = self.engine.url.database
+            urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
+
+            sql = f"""
+            with recursive cte_access (code, parent) as (
+                select a1.code, a1.parent
+                from {urdr}.access a1
+                join user_access ua on ua.access_code = a1.code
+                where ua.user_id = :uid
+                union all
+                select a2.code, a2.parent
+                from {urdr}.access a2
+                join cte_access cte on cte.code = a2.parent
+            )
+            select code from cte_access
+            """
+
+            self._access_codes = []
+            with self.engine.connect() as cnxn:
+                rows = cnxn.execute(text(sql), {'uid': self.name}).fetchall()
+
+            for row in rows:
+                self._access_codes.append(row.code)
+
+        return self._access_codes
+
     def schema_privilege(self, schema):
         """Get user privileges"""
         privilege = Dict()
@@ -155,31 +186,33 @@ class User:
             db_path = self.engine.url.database
             db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
             urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
-            sql = f"""
-            with recursive cte_access (code, parent) as (
-                select a1.code, a1.parent
-                from {urdr}.access a1
-                join user_access ua on ua.access_code = a1.code
-                where ua.user_id = :uid
-                union all
-                select a2.code, a2.parent
-                from {urdr}.access a2
-                join cte_access cte on cte.code = a2.parent
-            )
-            select count(*) from {urdr}.database_access dba
-            where database_name = :db_name and
-                  write_access in (select code from cte_access)
-            """
-            with self.engine.connect() as cnxn:
-                params = {'uid': self.name, 'db_name': db_name}
-                count = cnxn.execute(text(sql), params).first()[0]
 
-            if count:
+            sql = f"""
+            select read_access, write_access from {urdr}.database_access
+            where database_name = :db_name
+            """
+
+            with self.engine.connect() as cnxn:
+                params = {'db_name': db_name}
+                row = cnxn.execute(text(sql), params).first()
+
+            if row:
+                read_access = row.read_access
+                write_access = row.write_access
+            else:
+                read_access = None
+                write_access = None
+
+            if read_access is None or read_access in self.access_codes:
+                privilege.select = 1
+
+            if write_access is None or write_access in self.access_codes:
                 privilege.select = 1
                 privilege.insert = 1
                 privilege['update'] = 1
                 privilege.delete = 1
-                privilege.create = 1  # TODO: Er dette greit?
+            if 'sysadmin' in self.access_codes: 
+                privilege.create = 1
 
         elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:

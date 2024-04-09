@@ -25,11 +25,6 @@ from user import User
 
 
 cfg = Settings()
-default = Dict({
-    'system': cfg.system,
-    'host': cfg.host,
-    'database': cfg.database
-})
 
 app = FastAPI()
 
@@ -91,14 +86,14 @@ def get_engine(cfg, db_name=None):
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={
                         'msg': "Invalid authentication",
-                        "system": default.system,
-                        "host": default.host,
-                        "database": default.database
+                        "system": cfg.system,
+                        "host": cfg.host,
+                        "database": cfg.database
                     }
                 )
-    elif cfg.system == 'sqlite' and default.database == 'urdr.db':
+    elif cfg.system == 'sqlite' and cfg.database == 'urdr.db':
         with engine.connect() as cnxn:
-            path = os.path.join(default.host, default.database)
+            path = os.path.join(cfg.host, cfg.database)
             cnxn.execute(text('ATTACH DATABASE "' + path + '" as urdr'))
 
     return engine
@@ -133,9 +128,9 @@ async def check_login(request: Request, call_next):
         return JSONResponse(content={
             "message": "login",
             "detail": {
-                'system': default.system,
-                'host': default.host,
-                'database': default.database
+                'system': cfg.system,
+                'host': cfg.host,
+                'database': cfg.database
             }
         }, status_code=401)
 
@@ -182,7 +177,13 @@ def logout(response: Response):
     cfg.database = None
     cfg.uid = None
     cfg.pwd = None
-    return {'success': True, 'cnxn': default}
+    cnxn = {
+        'system': cfg.system,
+        'host': cfg.host,
+        'database': cfg.database
+    }
+
+    return {'success': True, 'cnxn': cnxn}
 
 
 @app.get("/dblist")
@@ -338,7 +339,7 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
             cnxn.commit()
 
         return {'data': 'Passord endret'}
-    elif cfg.system == 'sqlite' and default.database == 'urdr.db':
+    elif cfg.system == 'sqlite' and cfg.database == 'urdr.db':
         sql = "update urdr.user set password = :pwd where id = :uid"
         pwd = hashlib.sha256(new_pwd.encode('utf-8')).hexdigest()
         params = {'uid': cfg.uid, 'pwd': pwd}

@@ -172,9 +172,6 @@ def login(response: Response, system: str, server: str, username: str,
 @app.get("/logout")
 def logout(response: Response):
     response.delete_cookie("session")
-    cfg.system = None
-    cfg.host = None
-    cfg.database = None
     cfg.uid = None
     cfg.pwd = None
     cnxn = {

@@ -173,12 +173,14 @@ class User:
 
     def schema_privilege(self, schema):
         """Get user privileges"""
+
+        # Set privileges to 0 so that these could be overriden when
+        # finding privileges for different database systemes
         privilege = Dict()
         privilege.select = 0
         privilege.insert = 0
         privilege['update'] = 0
         privilege.delete = 0
-        privilege.create = 0
 
         cfg = Settings()
 
@@ -211,8 +213,6 @@ class User:
                 privilege.insert = 1
                 privilege['update'] = 1
                 privilege.delete = 1
-            if 'sysadmin' in self.access_codes: 
-                privilege.create = 1
 
         elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
@@ -231,27 +231,15 @@ class User:
                         if priv in privs or 'all privileges' in privs:
                             privilege[priv] = 1
         elif self.engine.name == 'postgresql':
-            sql = """
-            select pg_catalog.has_schema_privilege(current_user, nspname, 'CREATE') "create",
-                   pg_catalog.has_schema_privilege(current_user, nspname, 'USAGE') "usage"
-            from pg_catalog.pg_namespace
-            where nspname = :schema
-            """
-
-            with self.engine.connect() as cnxn:
-                param = {'schema': schema}
-                priv = cnxn.execute(text(sql), param).first()
-            privilege.create = priv.create
-            if self.is_admin(schema):
-                for priv in privilege:
-                    privilege[priv] = 1
+            # postgres has no schema privileges, but default privileges
+            # should be 0, so that table privileges may override these
+            pass
         else:
             # Privilege not implemented for oracle or mssql yet
             privilege.select = 1
             privilege.insert = 1
             privilege['update'] = 1
             privilege.delete = 1
-            privilege.create = 1
 
         self._privilege = privilege
         return privilege

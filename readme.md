@@ -25,6 +25,8 @@ based on the rules that Urðr uses to present the data.
 
 Linux or MacOS
 
+Python >= 3.10
+
 ## Installation
 
 ~~~ sh

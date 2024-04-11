@@ -633,7 +633,7 @@ class Grid:
                     elif field.datatype in ["date", "int"]:
                         sum_size += 10
 
-                if sum_size <= 50:
+                if sum_size <= 100:
                     inline = True
 
                 group_label = self.db.get_label(group_name)
@@ -642,7 +642,8 @@ class Grid:
                     'name': group_name,
                     'inline': inline,
                     'expandable': True,
-                    'items': subitems
+                    'items': subitems,
+                    'size': sum_size
                 })
 
         form = self.relations_form(form)

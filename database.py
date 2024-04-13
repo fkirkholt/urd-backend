@@ -799,23 +799,6 @@ class Database:
         """Get all has-many relations of table"""
         if not hasattr(self, '_relations'):
             self.fkeys
-            if False:
-                if self.engine.name == 'duckdb':
-                    self.fkeys
-                    return self._relations
-                self._relations = Dict()
-                schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
-
-                for key, fkeys in schema_fkeys.items():
-                    for fkey in fkeys:
-                        fkey = Dict(fkey)
-                        fkey.table = key[1]
-                        fkey.schema = key[0] or self.db.schema
-                        # Can't extract constraint names in SQLite
-                        if not fkey.name:
-                            fkey.name = fkey.table + '_'
-                            fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
-                        self._relations[fkey.referred_table][fkey.name] = fkey
 
         return self._relations
 

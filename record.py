@@ -134,12 +134,6 @@ class Record:
             if count_null_conds:
                 count_inherited = grid2.get_rowcount()
 
-            if set(tbl_rel.pkey.columns) <= set(rel.constrained_columns):
-                # if pkey is same as, or a subset of, fkey
-                relationship = "1:1"
-            else:
-                relationship = "1:M"
-
             relation = Dict({
                 'count_records': count_records + count_inherited,
                 'count_inherited': count_inherited,
@@ -148,7 +142,7 @@ class Record:
                 'conds': conds,
                 'base_name': rel.base,
                 'schema_name': rel.schema,
-                'relationship': relationship,
+                'relationship': rel.relationship,
                 'delete_rule': rel.delete_rule
             })
 
@@ -223,7 +217,7 @@ class Record:
             relation.fields[col].defines_relation = True
 
         # If foreign key columns contains primary key
-        if set(tbl_rel.pkey.columns) <= set(rel.constrained_columns):
+        if rel.relationship == '1:1':
             rec = Record(self.db, tbl_rel, pkey_vals)
             relation.records = [rec.get()]
             relation.relationship = "1:1"

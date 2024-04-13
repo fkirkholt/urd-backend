@@ -678,12 +678,8 @@ class Grid:
                     rel.index = index
 
             if index_exist and not rel.get('hidden', False):
-                if set(rel_tbl.pkey.columns) <= set(rel.constrained_columns):
-                    # Put 1:1 relations first
+                if rel.relationship == '1:1':
                     rel.order = 1
-                    rel.relationship = '1:1'
-                else:
-                    rel.relationship = '1:M'
                 if set(rel_tbl.pkey.columns) > set(rel.constrained_columns):
                     # Set order priority so that tables higher up in hierarchy
                     # comes before tables further down

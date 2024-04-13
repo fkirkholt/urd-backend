@@ -779,6 +779,10 @@ class Database:
                         fkey = Dict(fkey)
                         fkey.table = key[-1]
                         fkey.schema = key[0] or self.db.schema
+                        if set(self.pkeys[fkey.table].columns) <= set(fkey.constrained_columns):
+                            fkey.relationship = '1:1'
+                        else:
+                            fkey.relationship = '1:M'
 
                         # Can't extract constraint names in SQLite
                         if not fkey.name:

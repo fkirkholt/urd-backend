@@ -660,9 +660,11 @@ class Grid:
             rel_tbl = Table(self.db, rel.table)
 
             # Remove relations that are extensions to other tables
+            # and where constrained columns is a sublist of pkey column
+            # representing relation further up than parents
             if (
                 rel_tbl.type == 'ext' and
-                rel_tbl.pkey.columns != rel.constrained_columns
+                set(rel.constrained_columns) < set(rel_tbl.pkey.columns)
             ):
                 continue
 

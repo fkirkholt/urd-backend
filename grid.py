@@ -697,7 +697,10 @@ class Grid:
                 if rel.constrained_columns[-1] not in self.tbl.name:
                     col = rel.constrained_columns[-1]
                     join_ref_cols = '_'.join(rel.referred_columns)
-                    if col != f"{self.tbl.name.rstrip('_')}_{join_ref_cols}":
+                    if (
+                        col != f"{self.tbl.name.rstrip('_')}_{join_ref_cols}"
+                        and col != join_ref_cols
+                    ):
                         colname = self.db.get_label(col).lower()
                         rel.label += " (" + colname + ")"
             else:

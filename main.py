@@ -337,10 +337,12 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
 
         return {'data': 'Passord endret'}
     elif cfg.system == 'sqlite' and cfg.database == 'urdr.db':
-        sql = "update urdr.user set password = :pwd where id = :uid"
+        engine = get_engine(cfg, base)
+        db_path = engine.url.database
+        urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
+        sql = f"update {urdr}.user set password = :pwd where id = :uid"
         pwd = hashlib.sha256(new_pwd.encode('utf-8')).hexdigest()
         params = {'uid': cfg.uid, 'pwd': pwd}
-        engine = get_engine(cfg, base)
         with engine.connect() as cnxn:
             cnxn.execute(text(sql), params)
             cnxn.commit()

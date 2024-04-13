@@ -45,7 +45,7 @@ class Field:
             attrs['data-format'] = html_attrs['data-format']
 
         self.nullable = (col.nullable == 1)
-        self.label = self.db.get_label(self.name),
+        self.label = self.db.get_label(self.name)
         self.attrs = attrs
 
         smallints = ['TINYINT', 'SMALLINT', 'MEDIUMINT']
@@ -56,7 +56,8 @@ class Field:
             self.element = 'select'
             self.view = self.get_view(fkey) or self.name
             self.expandable = getattr(self, 'expandable', False)
-            if col.name in [fkey.referred_table+'_'+fkey.referred_columns[-1],
+            ref_col = fkey.referred_columns[-1].strip('_')
+            if col.name in [fkey.referred_table + '_' + ref_col,
                             fkey.referred_columns[-1]]:
                 self.label = self.db.get_label(fkey.referred_table)
         if (

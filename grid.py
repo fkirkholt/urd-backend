@@ -609,13 +609,7 @@ class Grid:
         for group_name, col_names in field_groups.items():
             if len(col_names) == 1:
                 cname = col_names[0]
-                fkey = self.tbl.fields[cname].fkey
-                postfix = None
-                if fkey:
-                    join_ref_cols = '_'.join(fkey.referred_columns)
-                    if cname == f"{fkey.referred_table}_{join_ref_cols}":
-                        postfix = join_ref_cols
-                label = self.db.get_label(col_names[0], postfix)
+                label = self.tbl.fields[cname].label
                 form['items'][label] = col_names[0]
             else:
                 inline = False

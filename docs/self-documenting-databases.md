@@ -318,9 +318,9 @@ consists of both the keyword itself, and the unit of measurement that
 comes after the field value.
 
 You can customize how a field is displayed by specifying `data-type`
-and/or `data-format`. This assumes that you use a selecter in
+and/or `data-format`. This assumes that you use a selector in
 following patter: `label[data-field="tablename.fieldname"]`. This
-selector belongs to the label- tag, which encloses the field. You can
+selector belongs to the `label` tag, which encloses the field. You can
 skip `label` and only use `[data-field="tablename.fieldname"]`. The
 html element for the field is then generatede based on the values of
 `data-type` and `data-format`.
@@ -346,22 +346,24 @@ allows registration of dates in more formats than many databases,
 e.g. "2012-05" which stands for May 2012. These can then be registered
 as text in the database.
 
-If you want to create a url of a field, you can register it with
-`data-format: link`. Then you get a `<a>` tag around the field value
-i display mode.
+If you want to create a url of a field, you can set the attribute
+`data-format: link` to the `label` tag. Then you get a `<a>` tag
+around the field value in display mode. You can set the `href`
+attribute by setting attribute `data-href` to the `label` tag. You
+can use column names in curly brackets to be replaced by the value
+of the column. E.g. `data-href: url/to/whatever?key={name}`
 
-You can then create dynamic links to this `<a>` tag by using `onclick`
-attribute, along with `this.dataset.value`. The element that displays
+You can also make the `href` by setting attribute `onmouseover` to
+the `a` tag, and using `this.dataset.value` for dynamic url depending
+on the value of the field. The element that displays
 the field value has an attribute `data-value` in order to facilitate
-this. It is also possible to replace `this.dataset.value` with
-`this.innerHTML`.
+this.
 
-The selector is written as `label[data-field="table name.field name"] > a`,
-and the attributes can be something like this:
+The selector is written as `label[data-field="table_name.field_name"] > a`,
+and the attribute can be something like this:
 
 ~~~ yaml
-href: '/url/to/whatever'
-onclick: "location.href=this.href+'?key='+this.dataset.value;return false;"
+onmouseover: "this.href='/url/to/whatever?key='+this.dataset.value"
 ~~~
 
 You can also style the grid, e.g. with the background color of the

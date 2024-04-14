@@ -43,6 +43,8 @@ class Field:
             attrs['data-type'] = html_attrs['data-type']
         if 'data-format' in html_attrs:
             attrs['data-format'] = html_attrs['data-format']
+        if 'data-href' in html_attrs:
+            attrs['data-href'] = html_attrs['data-href']
 
         self.nullable = (col.nullable == 1)
         self.label = self.db.get_label(self.name)

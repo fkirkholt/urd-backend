@@ -499,16 +499,17 @@ class Database:
         """Return Dict of tables with subordinate tables"""
         sub_tables = Dict()
         for tbl_name, table in self.tables.items():
-            name_parts = tbl_name.split("_")
+            name_parts = tbl_name.rstrip('_').split("_")
             tbl = Table(self, tbl_name)
 
             for colname in table.pkey.columns:
                 fkey = tbl.get_fkey(colname)
                 if fkey:
                     if (
-                        len(name_parts) > 1 and
-                        name_parts[0] in self.tables and
-                        name_parts[0] != fkey.referred_table
+                        len(name_parts) > 1 and (
+                            name_parts[0] in self.tables or
+                            name_parts[0]+'_' in self.tables
+                        ) and name_parts[0] != fkey.referred_table.strip('_')
                     ):
                         continue
 

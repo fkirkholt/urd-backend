@@ -198,7 +198,7 @@ class Grid:
 
     def get_actions(self):
         # Make action for displaying files
-        filepath_idx_name = self.tbl.name + '_filepath_idx'
+        filepath_idx_name = self.tbl.name.rstrip('_') + '_filepath_idx'
         filepath_idx = self.tbl.indexes.get(filepath_idx_name, None)
         actions = Dict()
         if filepath_idx:

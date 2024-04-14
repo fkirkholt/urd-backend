@@ -690,9 +690,9 @@ class Grid:
                 # of reference table (and primary key column)
                 if rel.constrained_columns[-1] not in self.tbl.name:
                     col = rel.constrained_columns[-1]
-                    join_ref_cols = '_'.join(rel.referred_columns)
+                    ref = rel.referred_columns[-1]
                     if (
-                        col != f"{self.tbl.name.rstrip('_')}_{join_ref_cols}"
+                        col != f"{self.tbl.name.rstrip('_')}_{ref.strip('_')}"
                         and col != join_ref_cols
                     ):
                         colname = self.db.get_label(col).lower()

@@ -36,16 +36,17 @@ class Database:
             self.schema = db_name
             self.cat = None
 
-        if 'urdr' in self.refl.get_schema_names():
-            self.cte_access = """
+        if 'urdr' in self.refl.get_schema_names() or db_name == 'urdr.db':
+            schema = 'main' if db_name == 'urdr.db' else 'urdr'
+            self.cte_access = f"""
             with recursive cte_access (code, parent) as (
                 select a1.code, a1.parent
-                from urdr.access a1
-                join urdr.user_access ua on ua.access_code = a1.code
+                from {schema}.access a1
+                join {schema}.user_access ua on ua.access_code = a1.code
                 where ua.user_id = :uid
                 union all
                 select a2.code, a2.parent
-                from urdr.access a2
+                from {schema}.access a2
                 join cte_access cte on cte.code = a2.parent
             )
             """

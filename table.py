@@ -231,6 +231,16 @@ class Table:
             joins.append(f'left join {self.db.schema}.{fkey.referred_table} '
                          f'{alias} on {on_list}')
 
+        for key, fkey in self.relations.items():
+            if fkey.relationship == '1:1':
+                alias = fkey.table
+                ons = [f"{alias}.{fkey.constrained_columns[idx]} = "
+                       f"{self.view}.{col}"
+                       for idx, col in enumerate(fkey.referred_columns)]
+                on_list = ' AND '.join(ons)
+                joins.append(f"left join {self.db.schema}.{fkey.table} "
+                             f"on {on_list}")
+
         self._joins = "\n".join(joins)
 
         if (self.name + '_grid') in self.db.tablenames:
@@ -259,6 +269,31 @@ class Table:
             self.init_relations()
 
         return self._relations
+
+    def get_access_code_idx(self):
+        idx_name = self.name.rstrip('_') + '_access_code_idx'
+
+        if idx_name in self.indexes:
+            idx = self.indexes[idx_name]
+            idx.table = self.view
+            return idx
+
+        for key, rel in self.relations.items():
+            rel_table = Table(self.db, rel.table)
+
+            # accept index name based on main table
+            if rel.relationship == '1:1' and idx_name in rel_table.indexes:
+                idx = rel_table.indexes[idx_name]
+                idx.table = rel.table
+                return idx
+
+            idx_name_rel = rel.table.rstrip('_') + '_access_code_idx'
+            if rel.relationship == '1:1' and idx_name_rel in rel_table.indexes:
+                idx = rel_table.indexes[idx_name_rel]
+                idx.table = rel.table
+                return idx
+
+        return None
 
     def get_rel_tbl_names(self):
         tbl_names = []

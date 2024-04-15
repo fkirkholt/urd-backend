@@ -321,8 +321,8 @@ class Grid:
                 cols.append(f'{self.tbl.grid_view}.{key}')
 
         sql = ''
-        access_idx_name = self.tbl.name + '_access_code_idx'
-        if access_idx_name in self.tbl.indexes:
+        access_idx = self.tbl.get_access_code_idx()
+        if access_idx:
             sql += self.db.cte_access
 
         select = ', '.join(cols)
@@ -352,8 +352,8 @@ class Grid:
         conds = self.get_cond_expr()
 
         sql = ''
-        access_idx_name = self.tbl.name + '_access_code_idx'
-        if access_idx_name in self.tbl.indexes:
+        access_idx = self.tbl.get_access_code_idx()
+        if access_idx:
             sql += self.db.cte_access
 
         if self.db.engine.name == 'sqlite':
@@ -382,11 +382,11 @@ class Grid:
         select = ', '.join(alias_selects.values())
 
         sql = ''
-        access_idx_name = self.tbl.name + '_access_code_idx'
-        if access_idx_name in self.tbl.indexes:
+        access_idx = self.tbl.get_access_code_idx()
+        if access_idx:
             sql += self.db.cte_access
             self.cond.params.uid = self.db.user.name
-            col = self.tbl.indexes[access_idx_name].columns[-1]
+            col = access_idx.table + '.' + access_idx.columns[-1]
             stmt = col + ' IS NULL or ' + col + ' in (select code from cte_access)'
             self.cond.prep_stmnts.append(stmt)
 

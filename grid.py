@@ -387,7 +387,7 @@ class Grid:
             sql += self.db.cte_access
             self.cond.params.uid = self.db.user.name
             col = access_idx.table + '.' + access_idx.columns[-1]
-            stmt = col + ' IS NULL or ' + col + ' in (select code from cte_access)'
+            stmt = f'({col} IS NULL or {col} in (select code from cte_access))'
             self.cond.prep_stmnts.append(stmt)
 
         order = self.make_order_by()

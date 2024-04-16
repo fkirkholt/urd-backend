@@ -693,7 +693,7 @@ class Grid:
                     ref = rel.referred_columns[-1]
                     if (
                         col != f"{self.tbl.name.rstrip('_')}_{ref.strip('_')}"
-                        and col != join_ref_cols
+                        and col != ref
                     ):
                         colname = self.db.get_label(col).lower()
                         rel.label += " (" + colname + ")"

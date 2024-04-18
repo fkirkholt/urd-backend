@@ -144,7 +144,12 @@ class Grid:
 
         order_by = self.make_order_by()
 
-        sql = f"""
+        sql = ''
+        access_idx = self.tbl.get_access_code_idx()
+        if access_idx:
+            sql += self.db.cte_access
+
+        sql += f"""
         select rownum - 1
         from   (select row_number() over ({order_by}) as rownum,
                        {self.tbl.view}.*
@@ -154,7 +159,7 @@ class Grid:
         {rec_cond};
         """
 
-        params = self.cond.params + params
+        params = self.cond.params | params
         with self.db.engine.connect() as cnxn:
             row = cnxn.execute(text(sql), params).fetchone()
         idx = row[0] if row else None

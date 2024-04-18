@@ -143,6 +143,7 @@ class Grid:
             cond = "WHERE " + " AND ".join(self.cond.prep_stmnts)
 
         order_by = self.make_order_by()
+        join = '\n'.join(self.tbl.joins)
 
         sql = ''
         access_idx = self.tbl.get_access_code_idx()
@@ -154,7 +155,7 @@ class Grid:
         from   (select row_number() over ({order_by}) as rownum,
                        {self.tbl.view}.*
                 from   {self.tbl.view}
-                {self.tbl.joins}
+                {join}
                 {cond}) tab
         {rec_cond};
         """
@@ -336,7 +337,7 @@ class Grid:
 
         sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += self.tbl.joins
+        sql += '\n'.join(self.tbl.joins)
         sql += "" if not cond else "where " + cond + "\n"
         sql += order + "\n"
 
@@ -366,7 +367,7 @@ class Grid:
         else:
             sql += "select count(*)\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += self.tbl.joins + "\n"
+        sql += '\n'.join(self.tbl.joins) + "\n"
         sql += "" if not conds else f"where {conds}\n"
 
         # Counting can very slow in SQLite, so we limit to 1000
@@ -400,7 +401,7 @@ class Grid:
 
         sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += self.tbl.joins
+        sql += '\n'.join(self.tbl.joins)
         sql += "" if not conds else "where " + conds + "\n"
         sql += order + "\n"
 
@@ -432,7 +433,7 @@ class Grid:
 
             sql = "select " + select + "\n"
             sql += f"from {self.tbl.name}\n"
-            sql += self.tbl.joins + "\n"
+            sql += '\n'.join(self.tbl.joins) + "\n"
             sql += "" if not cond else "where " + cond
 
             with self.db.engine.connect() as cnxn:

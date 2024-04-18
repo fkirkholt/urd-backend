@@ -267,7 +267,7 @@ class Record:
 
         sql = "select " + select + "\n"
         sql += f"from {self.db.schema}.{self.tbl.view}\n"
-        sql += self.tbl.joins + "\n"
+        sql += '\n'.join(self.tbl.joins) + "\n"
         sql += " where " + cond
 
         with self.db.engine.connect() as cnxn:

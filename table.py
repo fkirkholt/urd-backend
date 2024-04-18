@@ -241,7 +241,21 @@ class Table:
                 joins.append(f"left join {self.db.schema}.{fkey.table} "
                              f"on {on_list}")
 
-        self._joins = "\n".join(joins)
+                rel_tbl = Table(self.db, fkey.table)
+                for join in rel_tbl.joins:
+                    print('join', join)
+                    # Don't add the join defining the 1:1 relation
+                    print('left join ' + self.db.schema + '.' + self.name)
+                    skip = False
+                    for col in rel_tbl.pkey.columns:
+                        if f' {col} on' in join:
+                            skip = True
+                    # if 'left join {self.db.schema}.{self.name}' not in join:
+                    if not skip:
+                        joins.append(join)
+                # joins = joins + rel_tbl.joins
+
+        # self._joins = "\n".join(joins)
 
         if (self.name + '_grid') in self.db.tablenames:
             join_view = "join " + self.grid_view + " on "
@@ -251,7 +265,8 @@ class Table:
         else:
             join_view = ""
 
-        self._joins += "\n" + join_view
+        joins.append(join_view)
+        self._joins = joins
 
         return self._joins
 

@@ -369,7 +369,8 @@ class Table:
                 if rel.schema == self.db.schema:
                     rel_db = self.db
                 else:
-                    rel_db = Database(self.db.engine, rel.schema, self.db.user.name)
+                    schema = rel.schema or rel.base_name
+                    rel_db = Database(self.db.engine, schema, self.db.user.name)
 
                 rel_table = Table(rel_db, rel.table_name)
 

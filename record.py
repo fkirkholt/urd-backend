@@ -145,6 +145,9 @@ class Record:
                 'relationship': rel.relationship,
                 'delete_rule': rel.delete_rule
             })
+            if relation.relationship == '1:1' and relation.count_records:
+                rec = Record(self.db, tbl_rel, conds)
+                relation.records = [rec.get()]
 
             relation.show_if = show_if
 
@@ -218,8 +221,6 @@ class Record:
 
         # If foreign key columns contains primary key
         if rel.relationship == '1:1':
-            rec = Record(self.db, tbl_rel, pkey_vals)
-            relation.records = [rec.get()]
             relation.relationship = "1:1"
         else:
             relation.relationship = "1:M"

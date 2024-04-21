@@ -647,8 +647,10 @@ class Database:
         self._comments = {}
         # SQLAlchemy reflection doesn't work for comments in mysql/mariadb
         if self.engine.name in ['mysql', 'mariadb']:
+            # Must have column aliases to avoid error in SQLAlchemy for this
+            # query in MySQL. Don't know why 
             sql = """
-            select table_name, table_comment
+            select table_name as table_name, table_comment as table_comment
             from   information_schema.tables
             where table_schema = :schema
             """

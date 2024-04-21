@@ -187,7 +187,6 @@ class Record:
 
         # Add condition to fetch only rows that link to record
         conds = Dict()
-        pkey_vals = {}
 
         if not self.pk:
             values = {col: None for col in rel.referred_columns}
@@ -210,20 +209,14 @@ class Record:
                 expr = f'{tbl_rel.view}.{col} = :{mark}'
                 grid.cond.prep_stmnts.append(expr)
             conds[col] = val
-            pkey_vals[col] = val
 
         relation = grid.get()
         relation.conds = conds
+        relation.relationship = rel.relationship
 
         for idx, col in enumerate(rel.constrained_columns):
             relation.fields[col].default = values[rel.referred_columns[idx]]
             relation.fields[col].defines_relation = True
-
-        # If foreign key columns contains primary key
-        if rel.relationship == '1:1':
-            relation.relationship = "1:1"
-        else:
-            relation.relationship = "1:M"
 
         return relation
 

@@ -107,6 +107,10 @@ class Column:
                 default = default.replace('current_user()', 'CURRENT_USER')
             if 'ON UPDATE' in default and dialect != 'mysql':
                 default = default.split('ON UPDATE')[0]
+
+            if dialect == 'mysql' and default in ('CURRENT_DATE', 'CURRENT_USER'):
+                default = '(' + default + ')'
+
             coldef += " DEFAULT " + default
 
         return coldef

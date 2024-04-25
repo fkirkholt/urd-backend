@@ -25,6 +25,7 @@ from user import User
 
 
 cfg = Settings()
+cfg_default = Settings()
 
 app = FastAPI()
 
@@ -175,9 +176,9 @@ def logout(response: Response):
     cfg.uid = None
     cfg.pwd = None
     cnxn = {
-        'system': cfg.system,
-        'host': cfg.host,
-        'database': cfg.database
+        'system': cfg_default.system,
+        'host': cfg_default.host,
+        'database': cfg_default.database
     }
 
     return {'success': True, 'cnxn': cnxn}

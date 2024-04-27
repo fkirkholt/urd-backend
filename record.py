@@ -80,11 +80,11 @@ class Record:
             else:
                 db = Database(self.db.engine, base_name, self.db.user.name)
 
-            tbl_rel = Table(db, rel.table)
-            columns = db.refl.get_columns(rel.table, db.schema)
+            tbl_rel = Table(db, rel.table_name)
+            columns = db.refl.get_columns(rel.table_name, db.schema)
             tbl_rel.cols = {col['name']: Dict(col) for col in columns}
 
-            if rel.table not in self.db.tablenames:
+            if rel.table_name not in self.db.tablenames:
                 continue
 
             # Find index used
@@ -137,7 +137,7 @@ class Record:
             relation = Dict({
                 'count_records': count_records + count_inherited,
                 'count_inherited': count_inherited,
-                'name': rel.table,
+                'name': rel.table_name,
                 'conditions': grid.get_client_conditions(),
                 'conds': conds,
                 'base_name': rel.base,
@@ -179,7 +179,7 @@ class Record:
         else:
             base_name = rel.base or rel.schema
         db = Database(self.db.engine, base_name, self.db.user.name)
-        tbl_rel = Table(db, rel.table)
+        tbl_rel = Table(db, rel.table_name)
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500  # TODO: should have pagination in stead
         tbl_rel.offset = 0
@@ -280,14 +280,14 @@ class Record:
         rec = self.get()
 
         rel = [rel for rel in self.tbl.relations.values()
-               if rel.table == self.tbl.name][0]
+               if rel.table_name == self.tbl.name][0]
 
         for idx, colname in enumerate(rel.referred_columns):
             foreign = rel.constrained_columns[idx]
             primary = rel.referred_columns[idx]
             value = rec.fields[colname].value
-            mark = rel.table + '_' + foreign
-            expr = f'"{rel.table}"."{foreign}" = :{mark}'
+            mark = rel.table_name + '_' + foreign
+            expr = f'"{rel.table_name}"."{foreign}" = :{mark}'
             grid.cond.prep_stmnts.append(expr)
             grid.cond.params[mark] = value
             expr = f'"{rel.table}"."{foreign}" != "{rel.table}"."{primary}"'

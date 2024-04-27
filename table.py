@@ -196,7 +196,7 @@ class Table:
         """Return foreign key defining hierarchy"""
         # Find relation to child records
         rel = [rel for rel in self.relations.values()
-               if rel.table == self.name][0]
+               if rel.table_name == self.name][0]
         fkey = self.get_fkey(rel.name)
 
         return fkey
@@ -233,15 +233,15 @@ class Table:
 
         for key, fkey in self.relations.items():
             if fkey.relationship == '1:1':
-                alias = fkey.table
+                alias = fkey.table_name
                 ons = [f"{alias}.{fkey.constrained_columns[idx]} = "
                        f"{self.view}.{col}"
                        for idx, col in enumerate(fkey.referred_columns)]
                 on_list = ' AND '.join(ons)
-                joins.append(f"left join {self.db.schema}.{fkey.table} "
+                joins.append(f"left join {self.db.schema}.{fkey.table_name} "
                              f"on {on_list}")
 
-                rel_tbl = Table(self.db, fkey.table)
+                rel_tbl = Table(self.db, fkey.table_name)
                 for join in rel_tbl.joins:
                     print('join', join)
                     # Don't add the join defining the 1:1 relation
@@ -294,18 +294,18 @@ class Table:
             return idx
 
         for key, rel in self.relations.items():
-            rel_table = Table(self.db, rel.table)
+            rel_table = Table(self.db, rel.table_name)
 
             # accept index name based on main table
             if rel.relationship == '1:1' and idx_name in rel_table.indexes:
                 idx = rel_table.indexes[idx_name]
-                idx.table = rel.table
+                idx.table = rel.table_name
                 return idx
 
-            idx_name_rel = rel.table.rstrip('_') + '_access_code_idx'
+            idx_name_rel = rel.table_name.rstrip('_') + '_access_code_idx'
             if rel.relationship == '1:1' and idx_name_rel in rel_table.indexes:
                 idx = rel_table.indexes[idx_name_rel]
-                idx.table = rel.table
+                idx.table = rel.table_name
                 return idx
 
         return None
@@ -313,7 +313,7 @@ class Table:
     def get_rel_tbl_names(self):
         tbl_names = []
         for rel in self.relations.values():
-            tbl_names.append(rel.table)
+            tbl_names.append(rel.table_name)
 
         return tbl_names
 

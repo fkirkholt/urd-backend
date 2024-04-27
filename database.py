@@ -755,7 +755,7 @@ class Database:
                     rows = cnxn.execute(text(sql)).fetchall()
                     for row in rows:
                         fkey = Dict({
-                            'table': row.table_name,
+                            'table_name': row.table_name,
                             'constrained_columns': row.constraint_column_names,
                             'referred_schema': 'main',
                             'schema': 'main'
@@ -768,11 +768,11 @@ class Database:
                             cols_delim = x.group(1).split(',')
                             fkey.referred_columns = [s.strip() for s in cols_delim]
                         else:
-                            fkey.referred_table = fkey.table
-                            fkey.referred_columns = self.pkeys[fkey.table].columns
-                        fkey.name = fkey.table + '_'
+                            fkey.referred_table = fkey.table_name
+                            fkey.referred_columns = self.pkeys[fkey.table_name].columns
+                        fkey.name = fkey.table_name + '_'
                         fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
-                        self._fkeys[fkey.table][fkey.name] = fkey
+                        self._fkeys[fkey.table_name][fkey.name] = fkey
                         self._relations[fkey.referred_table][fkey.name] = fkey
 
             else:
@@ -781,19 +781,19 @@ class Database:
                 for key, fkeys in schema_fkeys.items():
                     for fkey in fkeys:
                         fkey = Dict(fkey)
-                        fkey.table = key[-1]
+                        fkey.table_name = key[-1]
                         fkey.schema = key[0] or self.db.schema
-                        if set(self.pkeys[fkey.table].columns) <= set(fkey.constrained_columns):
+                        if set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns):
                             fkey.relationship = '1:1'
                         else:
                             fkey.relationship = '1:M'
 
                         # Can't extract constraint names in SQLite
                         if not fkey.name:
-                            fkey.name = fkey.table + '_'
+                            fkey.name = fkey.table_name + '_'
                             fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
 
-                        self._fkeys[fkey.table][fkey.name] = Dict(fkey)
+                        self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
                         self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
 
         return self._fkeys

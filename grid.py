@@ -193,7 +193,7 @@ class Grid:
         """Return column that should expand a hierarchic table"""
         self_relation = False
         for rel in self.tbl.relations.values():
-            if rel.table == self.tbl.name:
+            if rel.table_name == self.tbl.name:
                 self_relation = True
                 break
 
@@ -657,7 +657,7 @@ class Grid:
         relations = Dict()
         for alias, rel in self.tbl.relations.items():
             rel.order = 10
-            rel_tbl = Table(self.db, rel.table)
+            rel_tbl = Table(self.db, rel.table_name)
 
             # Remove relations that are extensions to other tables
             # and where constrained columns is a sublist of pkey column
@@ -668,7 +668,7 @@ class Grid:
             ):
                 continue
 
-            if rel.table not in self.db.tablenames:
+            if rel.table_name not in self.db.tablenames:
                 rel.hidden = True
 
             # Find indexes that can be used to get relation

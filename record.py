@@ -145,6 +145,10 @@ class Record:
                 'relationship': rel.relationship,
                 'delete_rule': rel.delete_rule
             })
+
+            # Add record for 1:1 relations to make it possible to
+            # mark the record to be deleted in frontend without expanding
+            # it to get the record from backend
             if relation.relationship == '1:1' and relation.count_records:
                 rec = Record(self.db, tbl_rel, conds)
                 relation.records = [rec.get()]

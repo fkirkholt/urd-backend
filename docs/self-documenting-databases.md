@@ -319,7 +319,7 @@ comes after the field value.
 
 You can customize how a field is displayed by specifying `data-type`
 and/or `data-format`. This assumes that you use a selector in
-following patter: `label[data-field="tablename.fieldname"]`. This
+following pattern: `label[data-field="tablename.fieldname"]`. This
 selector belongs to the `label` tag, which encloses the field. You can
 skip `label` and only use `[data-field="tablename.fieldname"]`. The
 html element for the field is then generatede based on the values of
@@ -346,7 +346,7 @@ allows registration of dates in more formats than many databases,
 e.g. "2012-05" which stands for May 2012. These can then be registered
 as text in the database.
 
-If you want to create a url of a field, you can set the attribute
+If you want to create an url of a field, you can set the attribute
 `data-format: link` to the `label` tag. Then you get a `<a>` tag
 around the field value in display mode. You can set the `href`
 attribute by setting attribute `data-href` to the `label` tag. You
@@ -370,6 +370,16 @@ You can also style the grid, e.g. with the background color of the
 row based on values in a column. Note that you have to add a default
 style, otherwise the colors will not be updated correctly when sorting
 the table afterwards.
+
+Example:
+~~~ sql
+insert into html_attributes values
+('table[data-name=todos] tr','{"class":"bg-white"}');
+insert into html_attributes values
+('table[data-name=todos] tr:has(td[headers="status"][data-value="done"])',
+'{"class":"bg-green"}');
+~~~
+
 
 # Views
 

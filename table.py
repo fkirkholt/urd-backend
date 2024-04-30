@@ -243,9 +243,7 @@ class Table:
 
                 rel_tbl = Table(self.db, fkey.table_name)
                 for join in rel_tbl.joins:
-                    print('join', join)
                     # Don't add the join defining the 1:1 relation
-                    print('left join ' + self.db.schema + '.' + self.name)
                     skip = False
                     for col in rel_tbl.pkey.columns:
                         if f' {col} on' in join:

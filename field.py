@@ -221,7 +221,10 @@ class Field:
                     # other pk columns are usually foreign keys
                     cols = [f'{self.name}.{col}' for col in index.columns
                             if col not in ref_tbl.pkey.columns[0:-1]]
-                    self.view = " || ', ' || ".join(cols)
+                    if self.db.engine.name == 'oracle':
+                        self.view = " || ', ' || ".join(cols)
+                    else:
+                        self.view = "concat_ws(', ', " + ', '.join(cols) + ")" 
                     if index.name.endswith("_sort_idx"):
                         break
 

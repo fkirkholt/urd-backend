@@ -16,6 +16,7 @@ class Grid:
             'params': {},
             'stmnts': []
         })
+        self.compressed = False
 
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
@@ -303,7 +304,13 @@ class Grid:
                 tbl_name = self.tbl.view
             else:
                 tbl_name = self.tbl.name + '_grid'
-            order += f"{tbl_name}.{sort.col} {sort.dir}, "
+            field = self.tbl.fields[sort.col]
+            if field.fkey and not self.compressed:
+                sort_col = self.tbl.fields[sort.col].view
+                order += f"{sort_col} {sort.dir}, "
+            else:
+                sort_col = sort.col
+                order += f"{tbl_name}.{sort_col} {sort.dir}, "
 
         if (len(self.tbl.pkey.columns) == 0 and len(sort_fields) == 0):
             return ""

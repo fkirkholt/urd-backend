@@ -407,6 +407,9 @@ async def get_table(request: Request):
     if req.get('sort', None):
         grid.sort_columns = Dict(json.loads(req.sort))
 
+    if req.get('compressed', False):
+        grid.compressed = False if req.compressed == 'false' else True
+
     # todo: handle sort
     pkey_vals = None
     if ('prim_key' in req and req.prim_key):

@@ -535,14 +535,17 @@ class Grid:
                 mark = field.replace('.', '_')
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
-                case_sensitive = value.lower() != value
                 field_expr = field
-                if (not case_sensitive and value.lower() != value.upper()):
-                    field_expr = f"lower({field})"
-                if operator == "IN":
-                    value = value.strip().split(",")
-                if value == "":
-                    value = None
+                if value.replace('.', '', 1).isdigit():
+                    value = int(value)
+                else:
+                    case_sensitive = value.lower() != value
+                    if (not case_sensitive and value.lower() != value.upper()):
+                        field_expr = f"lower({field})"
+                    if operator == "IN":
+                        value = value.strip().split(",")
+                    if value == "":
+                        value = None
                 expr = f"{field_expr} {operator} :{mark}"
                 self.cond.prep_stmnts.append(expr)
                 self.cond.params[mark] = value

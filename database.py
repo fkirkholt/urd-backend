@@ -745,6 +745,7 @@ class Database:
         if not hasattr(self, '_fkeys'):
             self._fkeys = Dict()
             self._relations = Dict()
+            aliases = []
 
             if self.engine.name == 'duckdb':
                 sql = """
@@ -772,6 +773,19 @@ class Database:
                             fkey.referred_columns = self.pkeys[fkey.table_name].columns
                         fkey.name = fkey.table_name + '_'
                         fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+
+                        ref_table_alias = fkey.constrained_columns[-1]
+                        ref_col = fkey.referred_columns[-1].strip('_')
+                        if ref_table_alias in [fkey.referred_table + '_' + ref_col,
+                                               fkey.referred_columns[-1]]:
+                            ref_table_alias = fkey.referred_table
+                        # In seldom cases there might be two foreign keys ending
+                        # in same column
+                        if ref_table_alias in aliases:
+                            ref_table_alias = ref_table_alias + '2'
+                        fkey.ref_table_alias = ref_table_alias
+                        aliases.append(ref_table_alias)
+
                         self._fkeys[fkey.table_name][fkey.name] = fkey
                         self._relations[fkey.referred_table][fkey.name] = fkey
 
@@ -792,6 +806,18 @@ class Database:
                         if not fkey.name:
                             fkey.name = fkey.table_name + '_'
                             fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+
+                        ref_table_alias = fkey.constrained_columns[-1]
+                        ref_col = fkey.referred_columns[-1].strip('_')
+                        if ref_table_alias in [fkey.referred_table + '_' + ref_col,
+                                               fkey.referred_columns[-1]]:
+                            ref_table_alias = fkey.referred_table
+                        # In seldom cases there might be two foreign keys ending
+                        # in same column
+                        if ref_table_alias in aliases:
+                            ref_table_alias = ref_table_alias + '2'
+                        fkey.ref_table_alias = ref_table_alias
+                        aliases.append(ref_table_alias)
 
                         self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
                         self._relations[fkey.referred_table][fkey.name] = Dict(fkey)

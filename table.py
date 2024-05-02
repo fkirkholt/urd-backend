@@ -207,29 +207,19 @@ class Table:
         if hasattr(self, '_joins'):
             return self._joins
         joins = []
-        aliases = []
 
         for key, fkey in self.fkeys.items():
             if fkey.referred_table not in self.db.tablenames:
                 continue
 
-            alias = fkey.constrained_columns[-1]
-
-            # In seldom cases there might be two foreign keys ending
-            # in same column
-            if alias in aliases:
-                alias = alias + '2'
-
-            aliases.append(alias)
-
             # Get the ON statement in the join
-            ons = [f'{alias}.{fkey.referred_columns[idx]} = '
+            ons = [f'{fkey.ref_table_alias}.{fkey.referred_columns[idx]} = '
                    f'{self.view}.{col}'
                    for idx, col in enumerate(fkey.constrained_columns)]
             on_list = ' AND '.join(ons)
 
             joins.append(f'left join {self.db.schema}.{fkey.referred_table} '
-                         f'{alias} on {on_list}')
+                         f'{fkey.ref_table_alias} on {on_list}')
 
         for key, fkey in self.relations.items():
             if fkey.relationship == '1:1':

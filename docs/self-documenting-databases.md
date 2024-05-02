@@ -98,6 +98,9 @@ they are listed as subordinate under their parent tables, as other
 subordinate tables.  If you want an extension table not to appear in
 the table of contents, you can give it the postfix `_ext`.
 
+Extension tables can't have columns with the same name as in the
+main table (with exception from the primary key column).
+
 ## Subordinate tables
 
 Tables where the whole or parts of the primary key also represent

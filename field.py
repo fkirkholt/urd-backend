@@ -41,6 +41,7 @@ class Field:
         html_attrs = self.get_attributes(self.tbl.name, self.name)
         if 'data-type' in html_attrs:
             attrs['data-type'] = html_attrs['data-type']
+            self.datatype = html_attrs['data-type']
         if 'data-format' in html_attrs:
             attrs['data-format'] = html_attrs['data-format']
         if 'data-href' in html_attrs:

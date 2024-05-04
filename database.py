@@ -745,7 +745,7 @@ class Database:
         if not hasattr(self, '_fkeys'):
             self._fkeys = Dict()
             self._relations = Dict()
-            aliases = []
+            aliases = {}
 
             if self.engine.name == 'duckdb':
                 sql = """
@@ -781,10 +781,12 @@ class Database:
                             ref_table_alias = fkey.referred_table
                         # In seldom cases there might be two foreign keys ending
                         # in same column
-                        if ref_table_alias in aliases:
+                        if fkey.table_name not in aliases:
+                            aliases[fkey.table_name] = []
+                        if ref_table_alias in aliases[fkey.table_name]:
                             ref_table_alias = ref_table_alias + '2'
                         fkey.ref_table_alias = ref_table_alias
-                        aliases.append(ref_table_alias)
+                        aliases[fkey.table_name].append(ref_table_alias)
 
                         self._fkeys[fkey.table_name][fkey.name] = fkey
                         self._relations[fkey.referred_table][fkey.name] = fkey
@@ -814,10 +816,12 @@ class Database:
                             ref_table_alias = fkey.referred_table
                         # In seldom cases there might be two foreign keys ending
                         # in same column
-                        if ref_table_alias in aliases:
+                        if fkey.table_name not in aliases:
+                            aliases[fkey.table_name] = []
+                        if ref_table_alias in aliases[fkey.table_name]:
                             ref_table_alias = ref_table_alias + '2'
                         fkey.ref_table_alias = ref_table_alias
-                        aliases.append(ref_table_alias)
+                        aliases[fkey.table_name].append(ref_table_alias)
 
                         self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
                         self._relations[fkey.referred_table][fkey.name] = Dict(fkey)

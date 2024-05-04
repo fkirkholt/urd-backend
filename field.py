@@ -159,12 +159,14 @@ class Field:
         if fkey and fkey.referred_table in self.db.tablenames:
             from_table = fkey.referred_table
             pkey_col = fkey.referred_columns[-1]
+            alias = fkey.ref_table_alias
         else:
             from_table = self.tbl.name
             pkey_col = self.name
+            alias = self.name
 
         # Field that holds the value of the options
-        value_field = f'{fkey.ref_table_alias}.' + pkey_col
+        value_field = f'{alias}.' + pkey_col
 
         condition = condition or '1=1'
 
@@ -188,7 +190,7 @@ class Field:
         sql = f"""
         select distinct {value_field} as value,
                {self.view or value_field} as label
-        from   {self.db.schema}.{from_table} {fkey.ref_table_alias}
+        from   {self.db.schema}.{from_table} {alias}
         where  {condition}
         order by {self.view or value_field}
         """

@@ -211,7 +211,7 @@ class Field:
         if fkey.referred_table in self.db.tablenames:
 
             ref_tbl = Table(self.db, fkey.referred_table)
-            self.view = self.name + '.' + ref_tbl.pkey.columns[-1]
+            self.view = fkey.ref_table_alias + '.' + ref_tbl.pkey.columns[-1]
 
             if ref_tbl.is_hidden() is False:
                 self.expandable = True

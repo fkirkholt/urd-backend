@@ -426,25 +426,43 @@ class Grid:
 
     def get_sums(self):
         """Return list of sums for summation columns"""
-        sums = []
+        sums = {}
 
-        cols = self.get_summation_columns()
+        if (self.tbl.name + '_footer') in self.db.tablenames:
+            view_name = self.tbl.name + '_footer'
+            view_def = (self.db.refl
+                        .get_view_definition(view_name, self.db.schema))
+            index = view_def.lower().index(view_name + ' as') + len(view_name) + 3
+            view_def = view_def[index:]
+        else:
+            return sums
+
         cond = self.get_cond_expr()
         params = self.cond.params
+        joins = [join for join in self.tbl.joins
+                 if self.tbl.name + '_grid' not in join]
 
-        if len(cols) > 0:
-            selects = []
-            for col in cols:
-                selects.append(f"sum({self.tbl.name}.{col}) as {col}")
-            select = ', '.join(selects)
+        if (self.tbl.name + '_grid') in self.db.tablenames:
+            join = "join " + self.tbl.name + " on "
+            ons = [f'{self.tbl.grid_view}.{col} = {self.tbl.view}.{col}'
+                   for col in self.tbl.pkey.columns]
+            join += ' AND '.join(ons) + "\n"
+        else:
+            join = ""
 
-            sql = "select " + select + "\n"
-            sql += f"from {self.tbl.name}\n"
-            sql += '\n'.join(self.tbl.joins) + "\n"
-            sql += "" if not cond else "where " + cond
+        joins.insert(0, join)
 
-            with self.db.engine.connect() as cnxn:
-                sums = cnxn.execute(text(sql), params).mappings().first()
+        sql = view_def + '\n'
+        sql += '\n'.join(joins) + "\n"
+        sql += '' if not cond else "where " + cond + "\n"
+
+        with self.db.engine.connect() as cnxn:
+            row = cnxn.execute(text(sql), params).mappings().first()
+
+            if row:
+                for col in row:
+                    if col not in self.tbl.pkey.columns:
+                        sums[col] = row[col]
 
         return sums
 
@@ -476,12 +494,6 @@ class Grid:
     @sort_columns.setter
     def sort_columns(self, sorting):
         self._sort_columns = sorting
-
-    def get_summation_columns(self):
-        """Return columns that should be summed"""
-        sum_idx = self.tbl.indexes.get(self.tbl.name + "_summation_idx", None)
-
-        return [] if not sum_idx else sum_idx.columns
 
     def set_search_cond(self, query):
         """Set search conditions for grid queries"""

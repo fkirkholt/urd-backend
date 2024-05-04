@@ -215,11 +215,6 @@ this index doesn'5 exist either, the table is sorted by primary key.
 
 Sorting direction can be specified in the indexes for the databases that support this.
 
-## Summation
-
-Fields included in the index `<table_name>_summation_idx` will be
-summed up in the footer of the grid.
-
 ## Identification
 
 One uses a unique index different from the primary key to determine what
@@ -403,6 +398,36 @@ number of child records, etc.
 
 All extra columns in the view will also be available in the record
 view, and become searchable.
+
+## Summation
+
+To make a footer with summation of columns, create a view `<table_name>_footer`
+with the select statement to create the summation columns. They should
+be named the same as the columns they sums. Urdr will then use the definition
+of the view to get the sums.
+
+Example:
+~~~ sql
+create view state_footer
+select sum(state.population) as population
+from state
+~~~
+
+If there is a `<tablename>_grid` view, then the summation view can be
+constructed based on that view instead.
+
+Example:
+
+~~~ sql
+create view state_footer
+select sum(state.population) as population
+from state_grid
+~~~
+
+Since it is the definition of the view which is used in the sql to fetch the sums,
+you must always prepend the table name to the columns in the select statement.
+The sql will have joins with other tables in order to get the sums when searhing
+within the table.
 
 ## Using view for access control
 

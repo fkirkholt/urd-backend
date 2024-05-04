@@ -398,7 +398,10 @@ class Database:
         i = 0
         for tbl_name, table in self.tables.items():
             i += 1
-            if (tbl_name[-5:] == '_grid' and table.type == 'view'):
+            if (
+                (tbl_name[-5:] == '_grid' or tbl_name[-7:] == '_footer')
+                and table.type == 'view'
+            ):
                 continue
             if tbl_name[0:1] == "_":
                 name = tbl_name[1:]

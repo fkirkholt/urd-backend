@@ -526,7 +526,7 @@ def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool,
         table = Table(dbo, table)
         ddl = table.export_ddl(dialect)
         if include_recs:
-            ddl += table.export_records(select_recs)
+            ddl += table.export_records(dialect, select_recs)
         filename = table.name
     else:
         ddl = dbo.export_as_sql(dialect, include_recs, select_recs)

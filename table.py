@@ -562,7 +562,7 @@ class Table:
 
         return ddl
 
-    def export_records(self, select_recs: bool, fkey: dict):
+    def export_records(self, dialect, select_recs=False, fkey=None):
         """Export records as sql
 
         Parameters:
@@ -606,8 +606,15 @@ class Table:
             insert += 'select ' + ', '.join(rows.keys())
             insert += f' from {self.db.schema}.{self.name};\n\n'
         else:
+            if dialect != 'oracle':
+                insert += f'insert into {self.name} values '
+            i = 0
             for row in rows:
-                insert += f'insert into {self.name} values ('
+                if (i > 0 and i % 1000 == 0) or dialect == 'oracle':
+                    insert += f'insert into {self.name} values ('
+                else:
+                    insert += '('
+                i += 1
                 for colname, val in row.items():
                     col = self.fields[colname]
                     if (self.name == 'meta_data' and colname == 'cache'):
@@ -621,7 +628,16 @@ class Table:
                     elif val is None:
                         val = 'null'
                     insert += str(val) + ','
-                insert = insert[:-1] + ");\n"
+                if i % 1000 == 0 or dialect == 'oracle':
+                    insert = insert[:-1] + ');\n\n'
+                else:
+                    insert = insert[:-1] + "),\n"
+            if dialect == 'oracle':
+                pass
+            elif i == 0:
+                insert = '\n'.join(insert.split('\n')[:-1])
+            elif i % 1000 != 0:
+                insert = insert[:-2] + ';\n\n'
 
         return insert
 

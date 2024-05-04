@@ -933,7 +933,7 @@ class Database:
                 self_ref = None
                 if tbl_name in self_referring:
                     self_ref = self_referring[tbl_name]
-                ddl += table.export_records(select_recs, self_ref)
+                ddl += table.export_records(dialect, select_recs, self_ref)
 
         for view_name in self.refl.get_view_names(self.schema):
             view_def = self.refl.get_view_definition(view_name, self.schema)

@@ -880,8 +880,8 @@ class Database:
 
         return query
 
-    def export_as_sql(self, dialect: str, include_recs: bool,
-                      select_recs: bool):
+    def export_as_sql(self, dialect: str, table_defs: bool, list_recs: bool,
+                      data_recs: bool, select_recs: bool):
         """Create sql for exporting a database
 
         Parameters:
@@ -910,17 +910,18 @@ class Database:
         sorter = TopologicalSorter(graph)
         ordered_tables = tuple(sorter.static_order())
 
-        for view_name in self.refl.get_view_names(self.schema):
-            if dialect == 'oracle':
-                ddl += f"drop view {view_name};\n"
-            else:
-                ddl += f"drop view if exists {view_name};\n"
+        if table_defs:
+            for view_name in self.refl.get_view_names(self.schema):
+                if dialect == 'oracle':
+                    ddl += f"drop view {view_name};\n"
+                else:
+                    ddl += f"drop view if exists {view_name};\n"
 
-        for tbl_name in reversed(ordered_tables):
-            if dialect == 'oracle':
-                ddl += f"drop table {tbl_name};\n"
-            else:
-                ddl += f"drop table if exists {tbl_name};\n"
+            for tbl_name in reversed(ordered_tables):
+                if dialect == 'oracle':
+                    ddl += f"drop table {tbl_name};\n"
+                else:
+                    ddl += f"drop table if exists {tbl_name};\n"
 
         for tbl_name in ordered_tables:
             if tbl_name is None:
@@ -928,16 +929,22 @@ class Database:
             if tbl_name == 'sqlite_sequence':
                 continue
             table = Table(self, tbl_name)
-            ddl += table.export_ddl(dialect)
-            if include_recs:
+            if table_defs:
+                ddl += table.export_ddl(dialect)
+            if list_recs or data_recs:
                 self_ref = None
                 if tbl_name in self_referring:
                     self_ref = self_referring[tbl_name]
-                ddl += table.export_records(dialect, select_recs, self_ref)
+                if (
+                    (table.type == 'list' and list_recs) or
+                    (table.type != 'list' and data_recs)
+                ):
+                    ddl += table.export_records(dialect, select_recs, self_ref)
 
-        for view_name in self.refl.get_view_names(self.schema):
-            view_def = self.refl.get_view_definition(view_name, self.schema)
-            ddl += view_def + ";\n"
+        if table_defs:
+            for view_name in self.refl.get_view_names(self.schema):
+                view_def = self.refl.get_view_definition(view_name, self.schema)
+                ddl += view_def + ";\n"
 
         return ddl
 

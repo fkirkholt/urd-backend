@@ -562,7 +562,7 @@ class Table:
 
         return ddl
 
-    def export_records(self, dialect, select_recs=False, fkey=None):
+    def export_records(self, dialect, select_recs, fkey=None):
         """Export records as sql
 
         Parameters:

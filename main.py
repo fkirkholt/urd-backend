@@ -517,19 +517,23 @@ async def update_cache(base: str, config: str):
 
 
 @app.get('/table_sql')
-def export_sql(base: str, dialect: str, include_recs: bool, select_recs: bool,
-               table: str = None):
+def export_sql(base: str, dialect: str, table_defs: bool, list_recs: bool,
+               data_recs: bool, select_recs: bool, table: str = None):
     # Fiks alle slike connections
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     if table:
         table = Table(dbo, table)
-        ddl = table.export_ddl(dialect)
-        if include_recs:
+        if table_defs:
+            ddl = table.export_ddl(dialect)
+        if (
+            (table.type == 'list' and list_recs) or
+            (table.type != 'list' and data_recs)
+        ):
             ddl += table.export_records(dialect, select_recs)
         filename = table.name
     else:
-        ddl = dbo.export_as_sql(dialect, include_recs, select_recs)
+        ddl = dbo.export_as_sql(dialect, table_defs, list_recs, data_recs, select_recs)
         filename = base + '.' + dialect
     response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
     response.headers["Content-Disposition"] = \

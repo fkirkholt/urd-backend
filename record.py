@@ -48,7 +48,16 @@ class Record:
                 'fkey' in field and
                 field.fkey.referred_table in self.db.tablenames
             ):
-                condition, params = fld.get_condition(fields=fields)
+                conditions = []
+                params = {}
+                for idx, col in enumerate(field.fkey.constrained_columns):
+                    if col != field.name and fields[col].value:
+                        colname = field.fkey.referred_columns[idx]
+                        cond = f"{colname} = :{colname}"
+                        conditions.append(cond)
+                        params[colname] = fields[col].value
+
+                condition = " AND ".join(conditions) if len(conditions) else ''
                 field.options = fld.get_options(condition, params)
 
             fields[field.name] = field

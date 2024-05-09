@@ -114,44 +114,6 @@ class Field:
 
         return attributes
 
-    def get_condition(self, fields=None):
-
-        # Find all foreign keys that limit the possible values of the field.
-        # These represents hierarchy, and usually linked selects.
-        fkeys = []
-        for fkey in self.tbl.fkeys.values():
-            if (
-                self.name in fkey.constrained_columns and
-                fkey.constrained_columns.index(self.name)
-            ):
-                fkey.foreign_idx = fkey.constrained_columns.index(self.name)
-                fkey.length = len(fkey.constrained_columns)
-                fkeys.append(fkey)
-
-        # Get conditions for fetching options, based on
-        # other fields representing hierarchy of linked selects
-        conditions = []
-        params = {}
-        # Holds list over foreign keys, to check hierarchy
-        fkeys_list = []
-        if fields:
-            for fkey in sorted(fkeys, key=lambda x: x['length']):
-                fkeys_list.append(fkey.constrained_columns)
-
-                if fkey.constrained_columns[:-1] in fkeys_list:
-                    continue
-
-                for idx, col in enumerate(fkey.constrained_columns):
-                    if col != self.name and fields[col].value:
-                        colname = fkey.referred_columns[idx]
-                        cond = f"{colname} = :{colname}"
-                        conditions.append(cond)
-                        params[colname] = fields[col].value
-
-        condition = " AND ".join(conditions) if len(conditions) else ''
-
-        return condition, params
-
     def get_options(self, condition, params):
 
         fkey = self.tbl.get_fkey(self.name)

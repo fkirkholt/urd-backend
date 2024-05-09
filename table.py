@@ -406,8 +406,7 @@ class Table:
             field = Field(self, col.name)
             field.set_attrs_from_col(column)
             if hasattr(field, 'fkey'):
-                condition, params = field.get_condition()
-                field.options = field.get_options(condition, params)
+                field.options = field.get_options('', {})
 
             # Get info about column use if user has chosen this option
             if (

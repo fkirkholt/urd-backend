@@ -486,14 +486,8 @@ async def get_options(request: Request):
         view = view if view else req.column
         conds.append(f"lower(cast({view} as char)) like '%{search}%'")
     cond = " and ".join(conds)
-    # Get condition defining classification relations
-    params = {}
-    if fkey:
-        cond2, params = fld.get_condition()
-        if cond2:
-            cond = cond + ' and ' + cond2
+    data = fld.get_options(cond, {})
 
-    data = fld.get_options(cond, params)
     return data
 
 

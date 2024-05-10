@@ -89,7 +89,12 @@ class Table:
             self._type = "list"
 
         for fkey in self.fkeys.values():
-            if fkey.constrained_columns == self.pkey.columns:
+            # An fkey with same columns as primary key designates an
+            # extension table. But the fkey can also have invisible columns
+            # used to control if the table should be displayed as relation
+            cols = [col for col in fkey.constrained_columns
+                    if not (col.startswith('_') or col.startswith('const_'))]
+            if cols == self.pkey.columns:
                 self._type = "ext"
                 break
 

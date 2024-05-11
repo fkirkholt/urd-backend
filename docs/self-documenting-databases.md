@@ -52,8 +52,9 @@ of the item.
 
 ## Cross-reference tables
 
-Cross-reference tables are indicated with the postfix `_xref` or
-`_link`. They are never displayed in the table list.
+Cross-reference tables can be indicated with the postfix `_xref` or
+`_link`. Tables where the primary key consists of two foreign keys
+linking two tables are also considered as crossreference tables.
 
 The label for such tables when displayed as relations, is derived
 from the name. If the name of the referenced table occurs in the
@@ -64,10 +65,8 @@ If you e.g. has tables `user`, `group` and a cross-reference table
 `user_group_xref`, and are showing a user, then the postfix `_xref`
 and `user` is removed, and you'll see the relation "Group".
 
-If you have a cross-reference table that you still want to display
-in the list of tables, you can give it the name you want, and skip
-the postfix. Then the table is placed in the list of tables under
-the table that is referred first in the primary key.
+The table is placed in the list of tables under the table that is
+referred first in the primary key.
 
 E.g. if you have a table `archive_creator` with a primary key
 `agent, archive`, the table `archive_creator` is placed under the
@@ -76,6 +75,9 @@ primary key to `archive, agent`.
 
 You should also group the columns in the primary key so they are in
 the same order as the columns in the table.
+
+Prefix the table name with underscore to remove it from the list
+of tables.
 
 ## Extension tables
 

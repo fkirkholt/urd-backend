@@ -88,6 +88,7 @@ class Table:
         ):
             self._type = "list"
 
+        all_fkey_columns = set()
         for fkey in self.fkeys.values():
             # An fkey with same columns as primary key designates an
             # extension table. But the fkey can also have invisible columns
@@ -97,6 +98,11 @@ class Table:
             if cols == self.pkey.columns:
                 self._type = "ext"
                 break
+            elif set(cols) < set(self.pkey.columns):
+                all_fkey_columns.update(set(cols))
+
+        if set(self.pkey.columns) <= all_fkey_columns:
+            self._type = "xref"
 
         return self._type
 

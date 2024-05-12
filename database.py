@@ -942,9 +942,13 @@ class Database:
                     ddl += table.export_records(dialect, select_recs, self_ref)
 
         if table_defs:
+            i = 0
             for view_name in self.refl.get_view_names(self.schema):
+                if i == 0:
+                    print('\n')
+                i += 1
                 view_def = self.refl.get_view_definition(view_name, self.schema)
-                ddl += view_def + ";\n"
+                ddl += view_def + ";\n\n"
 
         return ddl
 

@@ -527,7 +527,7 @@ class Table:
 
     def export_ddl(self, dialect):
         """Return ddl for table"""
-        ddl = f"create table {self.name} (\n"
+        ddl = f"\ncreate table {self.name} (\n"
         coldefs = []
         cols = self.db.refl.get_columns(self.name, self.db.schema)
         for col in cols:
@@ -559,6 +559,7 @@ class Table:
             ddl += ", ".join(fkey.referred_columns) + ")"
         ddl += ");\n\n"
 
+        index_written = False
         for idx in self.indexes.values():
             if idx.unique:
                 continue
@@ -567,8 +568,12 @@ class Table:
             idx_name = idx.name
             if idx.name == '_'.join(idx.columns):
                 idx_name = self.name + '_' + idx.name
-            ddl += f"index {idx_name} on {self.name} ("
+            ddl += f"index {idx_name} on {self.name}("
             ddl += ",".join(idx.columns) + ");\n"
+            index_written = True
+
+        if index_written:
+            ddl += '\n'
 
         return ddl
 
@@ -578,7 +583,7 @@ class Table:
         Parameters:
         select_recs: If records should be selected from existing database
         """
-        insert = '\n'
+        insert = ''
         if fkey and self.db.engine.name in ['mysql', 'postgresql', 'sqlite']:
             cols = self.db.refl.get_columns(self.name, self.db.schema)
             colnames = []
@@ -614,7 +619,7 @@ class Table:
         if select_recs:
             insert += f'insert into {self.name}\n'
             insert += 'select ' + ', '.join(rows.keys())
-            insert += f' from {self.db.schema}.{self.name};\n\n'
+            insert += f' from {self.db.schema}.{self.name};\n'
         else:
             if dialect != 'oracle':
                 insert += f'insert into {self.name} values '

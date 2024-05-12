@@ -538,20 +538,6 @@ class Table:
         if (self.pkey.columns and self.pkey.columns != ['rowid']):
             ddl += f",\n    primary key ({', '.join(self.pkey.columns)})"
 
-        for idx in self.indexes.values():
-            if not idx.unique:
-                continue
-            if idx.columns == self.pkey.columns:
-                continue
-
-            # Only mysql has index within table namespace
-            idx_name = idx.name
-            if idx.name == '_'.join(idx.columns):
-                idx_name = self.name + '_' + idx.name
-
-            ddl += f",\n    constraint {idx_name} unique ("
-            ddl += ",".join(idx.columns) + ")"
-
         for fkey in self.fkeys.values():
             ddl += ",\n    foreign key ("
             ddl += ", ".join(fkey.constrained_columns) + ") "
@@ -561,9 +547,11 @@ class Table:
 
         index_written = False
         for idx in self.indexes.values():
-            if idx.unique:
+            if idx.unique and idx.columns == self.pkey.columns:
                 continue
             ddl += "create "
+            if idx.unique:
+                ddl += "unique "
             # Only mysql has index within table namespace
             idx_name = idx.name
             if idx.name == '_'.join(idx.columns):

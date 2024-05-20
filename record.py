@@ -9,10 +9,12 @@ from column import Column
 
 class Record:
     def __init__(self, db, tbl, pkey_vals):
-        self.db = db
-        self.tbl = tbl
-        self.pk = self.format_pkey(pkey_vals)
-        self.cache = Dict()
+        self._db = db
+        self._tbl = tbl
+        self.base_name = db.identifier
+        self.table_name = tbl.name
+        self.pkey = self.format_pkey(pkey_vals)
+        self._cache = Dict()
 
     def format_pkey(self, pkey_vals):
         """Return pkey values where floats are strings. Needed by pyodbc"""
@@ -25,17 +27,28 @@ class Record:
         return formatted_pkey
 
     def get(self):
-        values = self.get_values()
-        displays = self.get_display_values()
 
-        new = True if not values else False
-        if new:
-            values = self.pk
+        return Dict({
+            'base_name': self._db.identifier,
+            'table_name': self._tbl.name,
+            'pkey': self.pkey,
+            'fields': self.fields,
+            'new': True if not self.get_values() else False,
+            'loaded': True
+        })
 
-        fields = Dict()
+    @property
+    def fields(self):
+        if hasattr(self, '_fields'):
+            return self._fields
 
-        for field in self.tbl.fields.values():
-            fld = Field(self.tbl, field.name)
+        values = self.get_values() or self.pkey
+        displays = self.get_display_values()  # TODO: Skal denne være property?
+
+        self._fields = Dict()
+
+        for field in self._tbl.fields.values():
+            fld = Field(self._tbl, field.name)
             field.value = values.get(field.name, None)
             field.text = None if not displays else displays.get(field.name, None)
             if field.name == 'password':
@@ -46,54 +59,48 @@ class Record:
 
             if (
                 'fkey' in field and
-                field.fkey.referred_table in self.db.tablenames
+                field.fkey.referred_table in self._db.tablenames
             ):
                 conditions = []
                 params = {}
                 for idx, col in enumerate(field.fkey.constrained_columns):
-                    if col != field.name and fields[col].value:
+                    if col != field.name and self._fields[col].value:
                         colname = field.fkey.referred_columns[idx]
                         cond = f"{colname} = :{colname}"
                         conditions.append(cond)
-                        params[colname] = fields[col].value
+                        params[colname] = self._fields[col].value
 
                 condition = " AND ".join(conditions) if len(conditions) else ''
                 field.options = fld.get_options(condition, params)
 
-            fields[field.name] = field
+            self._fields[field.name] = field
 
-        return Dict({
-            'base_name': self.db.identifier,
-            'table_name': self.tbl.name,
-            'pkey': self.pk,
-            'fields': fields,
-            'new': new,
-            'loaded': True
-        })
+        return self._fields
+
 
     def get_relation_count(self):
         from database import Database
         from table import Table, Grid
 
-        values = None if len(self.pk) == 0 else self.get_values()
+        values = None if len(self.pkey) == 0 else self.get_values()
 
         relations = {}
-        for key, rel in self.tbl.relations.items():
-            if self.db.engine.name == 'postgresql':
+        for key, rel in self._tbl.relations.items():
+            if self._db.engine.name == 'postgresql':
                 base_name = rel.schema
             else:
                 base_name = rel.base or rel.schema
 
-            if rel.schema == self.db.schema:
-                db = self.db
+            if rel.schema == self._db.schema:
+                db = self._db
             else:
-                db = Database(self.db.engine, base_name, self.db.user.name)
+                db = Database(self._db.engine, base_name, self._db.user.name)
 
             tbl_rel = Table(db, rel.table_name)
             columns = db.refl.get_columns(rel.table_name, db.schema)
             tbl_rel.cols = {col['name']: Dict(col) for col in columns}
 
-            if rel.table_name not in self.db.tablenames:
+            if rel.table_name not in self._db.tablenames:
                 continue
 
             # Find index used
@@ -112,15 +119,15 @@ class Record:
             show_if = None
 
             for i, colname in enumerate(rel.constrained_columns):
-                val = None if len(self.pk) == 0 else values[rel.referred_columns[i]]
-                col = Column(self.tbl, tbl_rel.cols[colname])
+                val = None if len(self.pkey) == 0 else values[rel.referred_columns[i]]
+                col = Column(self._tbl, tbl_rel.cols[colname])
 
                 mark = tbl_rel.view + '_' + colname
                 expr = f'{tbl_rel.view}.{colname} = :{mark}'
                 if (
                     col.nullable and
                     colname != rel.constrained_columns[0] and
-                    rel.referred_columns == list(self.pk.keys()) and
+                    rel.referred_columns == list(self.pkey.keys()) and
                     rel.index.unique is True
                 ):
                     expr = f'{tbl_rel.view}.{colname} IS NULL'
@@ -137,7 +144,7 @@ class Record:
                 if (colname[0] == '_' or colname[0:6] == 'const_') and col.default:
                     show_if = {rel.referred_columns[i]: col.default}
 
-            count_records = grid.get_rowcount() if len(self.pk) else 0
+            count_records = grid.get_rowcount() if len(self.pkey) else 0
 
             count_inherited = 0
             if count_null_conds:
@@ -159,7 +166,7 @@ class Record:
             # mark the record to be deleted in frontend without expanding
             # it to get the record from backend
             if relation.relationship == '1:1' and relation.count_records:
-                rec = Record(self.db, tbl_rel, conds)
+                rec = Record(self._db, tbl_rel, conds)
                 relation.records = [rec.get()]
 
             relation.show_if = show_if
@@ -182,12 +189,12 @@ class Record:
     def get_relation(self, alias: str):
         from database import Database
         from table import Table, Grid
-        rel = self.tbl.get_relation(alias)
-        if self.db.engine.name == 'postgresql':
+        rel = self._tbl.get_relation(alias)
+        if self._db.engine.name == 'postgresql':
             base_name = rel.base + '.' + rel.schema
         else:
             base_name = rel.base or rel.schema
-        db = Database(self.db.engine, base_name, self.db.user.name)
+        db = Database(self._db.engine, base_name, self._db.user.name)
         tbl_rel = Table(db, rel.table_name)
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500  # TODO: should have pagination in stead
@@ -201,18 +208,18 @@ class Record:
         # Add condition to fetch only rows that link to record
         conds = Dict()
 
-        if not self.pk:
+        if not self.pkey:
             values = {col: None for col in rel.referred_columns}
         else:
             values = self.get_values()
         for idx, col in enumerate(rel.constrained_columns):
-            val = None if len(self.pk) == 0 else values[rel.referred_columns[idx]]
+            val = None if len(self.pkey) == 0 else values[rel.referred_columns[idx]]
             mark = tbl_rel.view + '_' + col
             grid.cond.params[mark] = val
             if (
-                len(self.pk) and tbl_rel.fields[col].nullable and
+                len(self.pkey) and tbl_rel.fields[col].nullable and
                 col != rel.constrained_columns[0] and
-                rel.referred_columns == list(self.pk.keys()) and
+                rel.referred_columns == list(self.pkey.keys()) and
                 rel.index.unique is True
             ):
                 expr = (f'({tbl_rel.view}.{col} = :{mark} or '
@@ -234,33 +241,33 @@ class Record:
         return relation
 
     def get_value(self, colname):
-        if self.cache.get('vals', None):
-            return self.cache.vals[colname]
+        if self._cache.get('vals', None):
+            return self._cache.vals[colname]
         values = self.get_values()
         return values[colname]
 
     def get_values(self):
-        if self.cache.get('vals', None):
-            return self.cache.vals
-        conds = [f"{key} = :{key}" for key in self.pk]
+        if self._cache.get('vals', None):
+            return self._cache.vals
+        conds = [f"{key} = :{key}" for key in self.pkey]
         cond = " and ".join(conds)
-        params = {key: val for key, val in self.pk.items()}
+        params = {key: val for key, val in self.pkey.items()}
 
         sql = f"""
-        select * from {self.db.schema}.{self.tbl.view}\n
+        select * from {self._db.schema}.{self._tbl.view}\n
         where {cond}
         """
 
-        with self.db.engine.connect() as cnxn:
+        with self._db.engine.connect() as cnxn:
             row = cnxn.execute(text(sql), params).mappings().fetchone()
-        self.cache.vals = row
+        self._cache.vals = row
 
-        return self.cache.vals
+        return self._cache.vals
 
     def get_display_values(self):
         displays = {}
 
-        for key, field in self.tbl.fields.items():
+        for key, field in self._tbl.fields.items():
             if 'view' in field:
                 displays[key] = f"({field.view}) as {key}"
 
@@ -269,32 +276,31 @@ class Record:
 
         select = ', '.join(displays.values())
 
-        conds = [f"{self.tbl.view}.{key} = :{key}" for key in self.pk]
+        conds = [f"{self._tbl.view}.{key} = :{key}" for key in self.pkey]
         cond = " and ".join(conds)
 
         sql = "select " + select + "\n"
-        sql += f"from {self.db.schema}.{self.tbl.view}\n"
-        sql += '\n'.join(self.tbl.joins) + "\n"
+        sql += f"from {self._db.schema}.{self._tbl.view}\n"
+        sql += '\n'.join(self._tbl.joins) + "\n"
         sql += " where " + cond
 
-        with self.db.engine.connect() as cnxn:
-            row = cnxn.execute(text(sql), self.pk).mappings().fetchone()
+        with self._db.engine.connect() as cnxn:
+            row = cnxn.execute(text(sql), self.pkey).mappings().fetchone()
 
         return row
 
     def get_children(self):
         from table import Grid
-        grid = Grid(self.tbl)
+        grid = Grid(self._tbl)
         grid.user_filtered = True
-        rec = self.get()
 
-        rel = [rel for rel in self.tbl.relations.values()
-               if rel.table_name == self.tbl.name][0]
+        rel = [rel for rel in self._tbl.relations.values()
+               if rel.table_name == self._tbl.name][0]
 
         for idx, colname in enumerate(rel.referred_columns):
             foreign = rel.constrained_columns[idx]
             primary = rel.referred_columns[idx]
-            value = rec.fields[colname].value
+            value = self.fields[colname].value
             mark = rel.table_name + '_' + foreign
             expr = f'"{rel.table_name}"."{foreign}" = :{mark}'
             grid.cond.prep_stmnts.append(expr)
@@ -307,20 +313,20 @@ class Record:
         return relation['records']
 
     def get_file_path(self):
-        filepath_idx_name = self.tbl.name + '_filepath_idx'
-        filepath_idx = self.tbl.indexes.get(filepath_idx_name, None)
+        filepath_idx_name = self._tbl.name + '_filepath_idx'
+        filepath_idx = self._tbl.indexes.get(filepath_idx_name, None)
         select = " || '/' || ".join(filepath_idx.columns)
-        conds = [f"{key} = :{key}" for key in self.pk]
+        conds = [f"{key} = :{key}" for key in self.pkey]
         cond = " and ".join(conds)
-        schema = self.db.schema
+        schema = self._db.schema
 
         sql = f"""
-        select {select} as path from {schema}.{self.tbl.name}\n
+        select {select} as path from {schema}.{self._tbl.name}\n
         where {cond}
         """
 
         with self.engine.connect() as cnxn:
-            row = cnxn.execute(text(sql), self.pk).first()
+            row = cnxn.execute(text(sql), self.pkey).first()
 
         return os.path.normpath(row.path)
 
@@ -329,16 +335,16 @@ class Record:
 
         # Get autoinc values for primary keys
         # Supports simple and compound primary keys
-        for colname in self.tbl.pkey.colnames:
+        for colname in self._tbl.pkey.colnames:
             if colname in values:
-                self.pk[colname] = values[colname]
-        inc_col = self.tbl.pkey.columns[-1]
+                self.pkey[colname] = values[colname]
+        inc_col = self._tbl.pkey.columns[-1]
         if (
             inc_col not in values and
-            self.tbl.fields[inc_col].extra == "auto_increment"
+            self._tbl.fields[inc_col].extra == "auto_increment"
         ):
-            s = slice(0, len(self.tbl.pkey.columns) - 1)
-            cols = self.tbl.pkey.columns[s]
+            s = slice(0, len(self._tbl.pkey.columns) - 1)
+            cols = self._tbl.pkey.columns[s]
 
             conditions = []
             params = {}
@@ -347,12 +353,12 @@ class Record:
                 params[col] = values[col]
 
             sql = f"select case when max({inc_col}) is null then 1 "
-            sql += f"else max({inc_col}) +1 end from {self.tbl.name} "
+            sql += f"else max({inc_col}) +1 end from {self._tbl.name} "
             sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
-            with self.db.engine.connect() as cnxn:
+            with self._db.engine.connect() as cnxn:
                 values[inc_col] = cnxn.execute(text(sql), params).first()[0]
-            self.pk[inc_col] = values[inc_col]
+            self.pkey[inc_col] = values[inc_col]
 
         # Array of values to be inserted
         inserts = {}
@@ -371,15 +377,15 @@ class Record:
             inserts[key] = value
 
         sql = f"""
-        insert into "{self.tbl.view}" ({','.join(inserts.keys())})
+        insert into "{self._tbl.view}" ({','.join(inserts.keys())})
         values ({', '.join([f":{key}" for key in inserts])})
         """
 
-        with self.db.engine.connect() as conn:
+        with self._db.engine.connect() as conn:
             conn.execute(text(sql), inserts)
             conn.commit()
 
-        return self.pk
+        return self.pkey
 
     def set_fk_values(self, relations):
         """Set value of fk of relations after autincrement pk"""
@@ -388,13 +394,13 @@ class Record:
                 for idx, colname in enumerate(rel.constrained_columns):
                     if colname not in rel_rec.values:
                         pk_col = rel.referred_columns[idx]
-                        rel_rec.values[colname] = self.pk[pk_col]
+                        rel_rec.values[colname] = self.pkey[pk_col]
 
     def update(self, values):
         set_values = {}
         # todo: get values for auto update fields
-        for field in self.tbl.fields.values():
-            fld = Field(self.tbl, field.name)
+        for field in self._tbl.fields.values():
+            fld = Field(self._tbl, field.name)
             if field.get('extra', None) == "auto_update":
                 set_values[field.name] = fld.replace_vars(field.default)
 
@@ -410,25 +416,25 @@ class Record:
         sets = [f"{key} = :{key}" for key, val in set_values.items()]
         set_str = ",\n".join(sets)
 
-        wheres = [f"{key} = :pk{i}" for i, key in enumerate(self.pk)]
+        wheres = [f"{key} = :pk{i}" for i, key in enumerate(self.pkey)]
         where_str = " and ".join(wheres)
-        where_vals = {f"pk{i}": val for i, val in enumerate(self.pk.values())}
+        where_vals = {f"pk{i}": val for i, val in enumerate(self.pkey.values())}
         params = set_values | where_vals
 
         sql = f"""
-        update {self.tbl.view}\n
+        update {self._tbl.view}\n
         set {set_str}\n
         where {where_str}
         """
 
-        with self.db.engine.connect() as conn:
+        with self._db.engine.connect() as conn:
             result = conn.execute(text(sql), params)
             conn.commit()
 
         # Update primary key
         for key, value in values.items():
-            if key in self.pk:
-                self.pk[key] = value
+            if key in self.pkey:
+                self.pkey[key] = value
 
         return result
 
@@ -439,16 +445,16 @@ class Record:
         with ON DELETE CASCADE on the foreign key
         """
 
-        wheres = [f"{key} = :{key}" for key in self.pk]
+        wheres = [f"{key} = :{key}" for key in self.pkey]
         where_str = " and ".join(wheres)
 
         sql = f"""
-        delete from {self.tbl.view}
+        delete from {self._tbl.view}
         where {where_str}
         """
 
-        with self.db.engine.connect() as conn:
-            result = conn.execute(text(sql), self.pk)
+        with self._db.engine.connect() as conn:
+            result = conn.execute(text(sql), self.pkey)
             conn.commit()
 
         return result

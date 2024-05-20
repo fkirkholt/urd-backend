@@ -6,13 +6,13 @@ from sqlalchemy import text
 class Field:
 
     def __init__(self, tbl, name):
-        self.tbl = tbl
-        self.db = tbl.db
+        self._tbl = tbl
+        self._db = tbl.db
         self.name = name
 
     def get(self):
         field = {key: val for key, val in vars(self).items()
-                 if key not in ['db', 'tbl']}
+                 if not key.startswith('_')}
 
         return Dict(field)
 
@@ -38,7 +38,7 @@ class Field:
         if type_:
             attrs['type'] = type_
 
-        html_attrs = self.get_attributes(self.tbl.name, self.name)
+        html_attrs = self.get_attributes(self._tbl.name, self.name)
         if 'data-type' in html_attrs:
             attrs['data-type'] = html_attrs['data-type']
             self.datatype = html_attrs['data-type']
@@ -48,12 +48,12 @@ class Field:
             attrs['data-href'] = html_attrs['data-href']
 
         self.nullable = (col.nullable == 1)
-        self.label = self.db.get_label(self.name)
+        self.label = self._db.get_label(self.name)
         self.attrs = attrs
 
         smallints = ['TINYINT', 'SMALLINT', 'MEDIUMINT']
 
-        fkey = self.tbl.get_fkey(self.name)
+        fkey = self._tbl.get_fkey(self.name)
         if fkey:
             self.fkey = fkey
             self.element = 'select'
@@ -62,13 +62,13 @@ class Field:
             ref_col = fkey.referred_columns[-1].strip('_')
             if col.name in [fkey.referred_table + '_' + ref_col,
                             fkey.referred_columns[-1]]:
-                self.label = self.db.get_label(fkey.referred_table)
+                self.label = self._db.get_label(fkey.referred_table)
         if (
             (hasattr(col, 'autoincrement') and col.autoincrement) or (
                 (self.datatype == 'int' and str(col.type) not in smallints) and
-                len(self.tbl.pkey.columns) and
-                col.name == self.tbl.pkey.columns[-1] and
-                col.name not in self.tbl.fkeys
+                len(self._tbl.pkey.columns) and
+                col.name == self._tbl.pkey.columns[-1] and
+                col.name not in self._tbl.fkeys
             )
         ):
             self.extra = "auto_increment"
@@ -103,7 +103,7 @@ class Field:
 
     def get_attributes(self, table_name, colname):
         """Get description based on term"""
-        attrs = self.db.html_attrs
+        attrs = self._db.html_attrs
         selector_1 = f'[data-field="{table_name}.{colname}"]'
         selector_2 = f'label[data-field="{table_name}.{colname}"]'
         attributes = {}
@@ -116,14 +116,14 @@ class Field:
 
     def get_options(self, condition, params):
 
-        fkey = self.tbl.get_fkey(self.name)
+        fkey = self._tbl.get_fkey(self.name)
 
-        if fkey and fkey.referred_table in self.db.tablenames:
+        if fkey and fkey.referred_table in self._db.tablenames:
             from_table = fkey.referred_table
             pkey_col = fkey.referred_columns[-1]
             alias = fkey.ref_table_alias
         else:
-            from_table = self.tbl.name
+            from_table = self._tbl.name
             pkey_col = self.name
             alias = self.name
 
@@ -136,11 +136,11 @@ class Field:
 
         sql = f"""
         select count(*)
-        from {self.db.schema}.{from_table} {self.name}
+        from {self._db.schema}.{from_table} {self.name}
         where {condition}
         """
 
-        with self.db.engine.connect() as cnxn:
+        with self._db.engine.connect() as cnxn:
             count = cnxn.execute(text(sql), params).first()[0]
 
         if (count > 200):
@@ -152,12 +152,12 @@ class Field:
         sql = f"""
         select distinct {value_field} as value,
                {self.view or value_field} as label
-        from   {self.db.schema}.{from_table} {alias}
+        from   {self._db.schema}.{from_table} {alias}
         where  {condition}
         order by {self.view or value_field}
         """
 
-        with self.db.engine.connect() as cnxn:
+        with self._db.engine.connect() as cnxn:
             options = cnxn.execute(text(sql), params).all()
 
         # Return list of recular python dicts so that it can be
@@ -172,9 +172,9 @@ class Field:
 
         self.view = None
 
-        if fkey.referred_table in self.db.tablenames:
+        if fkey.referred_table in self._db.tablenames:
 
-            ref_tbl = Table(self.db, fkey.referred_table)
+            ref_tbl = Table(self._db, fkey.referred_table)
             self.view = fkey.ref_table_alias + '.' + ref_tbl.pkey.columns[-1]
 
             if ref_tbl.is_hidden() is False:
@@ -186,7 +186,7 @@ class Field:
                     # other pk columns are usually foreign keys
                     cols = [f'{fkey.ref_table_alias}.{col}' for col in index.columns
                             if col not in ref_tbl.pkey.columns[0:-1]]
-                    if self.db.engine.name == 'oracle':
+                    if self._db.engine.name == 'oracle':
                         self.view = " || ', ' || ".join(cols)
                     else:
                         self.view = "concat_ws(', ', " + ', '.join(cols) + ")" 
@@ -203,6 +203,6 @@ class Field:
         elif "current_timestamp" in expr.lower():
             expr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         elif "current_user" in expr.lower():
-            expr = self.db.user.name
+            expr = self._db.user.name
 
         return expr

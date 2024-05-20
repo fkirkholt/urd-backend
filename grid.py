@@ -34,6 +34,39 @@ class Grid:
 
     def get(self, pkey_vals=None):
         """Return all metadata and data to display grid"""
+
+        return Dict({
+            'name': self.tbl.name,
+            'type': self.tbl.type,
+            'records': self.get_records(),
+            'count_records': self.get_rowcount(),
+            'fields': self.tbl.fields,
+            'grid': {
+                'columns': self.columns,
+                'sums': self.get_sums(),
+                'sort_columns': self.sort_columns,
+                'actions': ["show_file"] if "show_file" in self.actions else []
+            },
+            'form': self.get_form(),
+            'privilege': self.db.user.table_privilege(self.db.schema,
+                                                      self.tbl.name),
+            'hidden': self.tbl.is_hidden(),
+            'pkey': self.tbl.pkey.columns or None,
+            'fkeys': self.tbl.fkeys,
+            'indexes': self.tbl.indexes,
+            'label': self.db.get_label(self.tbl.name),
+            'actions': self.actions,
+            'limit': self.tbl.limit,
+            'offset': self.tbl.offset,
+            'selection': self.get_selected_idx(pkey_vals),
+            'conditions': self.cond.stmnts,
+            'expansion_column': self.get_expansion_column(),
+            'relations': self.tbl.relations,
+            'saved_filters': []  # Needed in frontend
+        })
+
+    def get_records(self):
+        """"Return records from values and display values"""
         selects = {}  # dict of select expressions
 
         for col in self.tbl.pkey.columns:
@@ -54,10 +87,8 @@ class Grid:
                 """
                 self.cond.prep_stmnts.append(expr)
 
-        actions = self.get_actions()
-
-        if actions:
-            for key, action in actions.items():
+        if self.actions:
+            for key, action in self.actions.items():
                 if (not action.disabled or isinstance(action.disabled, bool)):
                     continue
                 selects[key] = action.disabled
@@ -70,42 +101,6 @@ class Grid:
         display_values = self.get_display_values(selects)
 
         values = self.get_values(selects)
-        recs = self.get_records(display_values, values)
-
-        data = Dict({
-            'name': self.tbl.name,
-            'type': self.tbl.type,
-            'records': recs,
-            'count_records': self.get_rowcount(),
-            'fields': self.tbl.fields,
-            'grid': {
-                'columns': self.columns,
-                'sums': self.get_sums(),
-                'sort_columns': self.sort_columns,
-                'actions': ["show_file"] if "show_file" in actions else []
-            },
-            'form': self.get_form(),
-            'privilege': self.db.user.table_privilege(self.db.schema,
-                                                      self.tbl.name),
-            'hidden': self.tbl.is_hidden(),
-            'pkey': self.tbl.pkey.columns or None,
-            'fkeys': self.tbl.fkeys,
-            'indexes': self.tbl.indexes,
-            'label': self.db.get_label(self.tbl.name),
-            'actions': actions,
-            'limit': self.tbl.limit,
-            'offset': self.tbl.offset,
-            'selection': self.get_selected_idx(pkey_vals, selects),
-            'conditions': self.cond.stmnts,
-            'expansion_column': expansion_column,
-            'relations': self.tbl.relations,
-            'saved_filters': []  # Needed in frontend
-        })
-
-        return data
-
-    def get_records(self, display_values, values):
-        """"Return records from values and display values"""
         recs = []
         for row in display_values:
             cols = {k: {'text': text} for k, text in row.items()}
@@ -124,7 +119,7 @@ class Grid:
 
         return recs
 
-    def get_selected_idx(self, pkey_vals, selects):
+    def get_selected_idx(self, pkey_vals):
         """Return rowindex for record selected in frontend"""
         if not pkey_vals:
             return None
@@ -203,7 +198,8 @@ class Grid:
         else:
             return self.columns[0]
 
-    def get_actions(self):
+    @property
+    def actions(self):
         # Make action for displaying files
         filepath_idx_name = self.tbl.name.rstrip('_') + '_filepath_idx'
         filepath_idx = self.tbl.indexes.get(filepath_idx_name, None)

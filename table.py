@@ -245,16 +245,8 @@ class Table:
                 rel_tbl = Table(self.db, fkey.table_name)
                 for join in rel_tbl.joins:
                     # Don't add the join defining the 1:1 relation
-                    skip = False
-                    for col in rel_tbl.pkey.columns:
-                        if f' {col} on' in join:
-                            skip = True
-                    # if 'left join {self.db.schema}.{self.name}' not in join:
-                    if not skip:
+                    if f'left join {self.db.schema}.{self.name} ' not in join:
                         joins.append(join)
-                # joins = joins + rel_tbl.joins
-
-        # self._joins = "\n".join(joins)
 
         if (self.name + '_grid') in self.db.tablenames:
             join_view = "join " + self.grid_view + " on "

@@ -777,11 +777,13 @@ class Database:
                         fkey.name = fkey.table_name + '_'
                         fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
 
-                        ref_table_alias = fkey.constrained_columns[-1]
+                        fkey_col = fkey.constrained_columns[-1]
                         ref_col = fkey.referred_columns[-1].strip('_')
-                        if ref_table_alias in [fkey.referred_table + '_' + ref_col,
-                                               fkey.referred_columns[-1]]:
+                        if fkey_col in [fkey.referred_table + '_' + ref_col,
+                                        fkey.referred_columns[-1]]:
                             ref_table_alias = fkey.referred_table
+                        else:
+                            ref_table_alias = fkey.table_name.rstrip('_') + '_' + fkey_col.strip('_')
                         # In seldom cases there might be two foreign keys ending
                         # in same column
                         if fkey.table_name not in aliases:
@@ -812,11 +814,13 @@ class Database:
                             fkey.name = fkey.table_name + '_'
                             fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
 
-                        ref_table_alias = fkey.constrained_columns[-1]
+                        fkey_col = fkey.constrained_columns[-1]
                         ref_col = fkey.referred_columns[-1].strip('_')
-                        if ref_table_alias in [fkey.referred_table + '_' + ref_col,
-                                               fkey.referred_columns[-1]]:
+                        if fkey_col in [fkey.referred_table + '_' + ref_col,
+                                        fkey.referred_columns[-1]]:
                             ref_table_alias = fkey.referred_table
+                        else:
+                            ref_table_alias = fkey.table_name.rstrip('_') + '_' + fkey_col.strip('_')
                         # In seldom cases there might be two foreign keys ending
                         # in same column
                         if fkey.table_name not in aliases:

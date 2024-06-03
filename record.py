@@ -305,7 +305,7 @@ class Record:
             expr = f'"{rel.table_name}"."{foreign}" = :{mark}'
             grid.cond.prep_stmnts.append(expr)
             grid.cond.params[mark] = value
-            expr = f'"{rel.table}"."{foreign}" != "{rel.table}"."{primary}"'
+            expr = f'"{rel.table_name}"."{foreign}" != "{rel.table_name}"."{primary}"'
             grid.cond.prep_stmnts.append(expr)
 
         relation = grid.get()

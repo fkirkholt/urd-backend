@@ -507,7 +507,7 @@ class Table:
                 fkey_col = relation.constrained_columns[-1]
 
                 sql = f"""
-                select count(distinct({fkey_col})) from {relation.table}
+                select count(distinct({fkey_col})) from {relation.table_name}
                 """
 
                 with self.db.engine.connect() as cnxn:

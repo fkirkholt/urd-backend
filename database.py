@@ -379,10 +379,10 @@ class Database:
             if relation.get('hidden', False):
                 continue
 
-            if relation.table not in relation_tables:
-                relation_tables.append(relation.table)
+            if relation.table_name not in relation_tables:
+                relation_tables.append(relation.table_name)
                 relation_tables = self.get_relation_tables(
-                    relation.table, relation_tables)
+                    relation.table_name, relation_tables)
 
         return relation_tables
 

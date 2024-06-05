@@ -504,6 +504,7 @@ async def update_cache(base: str, config: str):
     dbo = Database(engine, base, cfg.uid)
     dbo.config = Dict(json.loads(config))
     dbo.config.update_cache = True
+    dbo.cache = None
     dbo.get_tables()
     dbo.get_contents()
 

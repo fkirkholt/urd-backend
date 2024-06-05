@@ -336,8 +336,8 @@ The following values for `data-format` are supported:
 - markdown
 
 If you set `data-type` as "json" and `data-format` as "yaml", then the
-data will be stored as json in the database, but you will to see
-the data as `yaml'.  This applies by default to the html attributes
+data will be stored as json in the database, but you will see
+the data as `yaml`.  This applies by default to the html attributes
 themselves.
 
 You can enter `data-type: date` if you have a text column in
@@ -383,7 +383,8 @@ insert into html_attributes values
 
 # Views
 
-Views are displayed in the same way as tables. To be able to display individual records in a view, you must define a primary key for the view.
+Views are displayed in the same way as tables. To be able to display individual
+records in a view, you must define a primary key for the view.
 This is done by entering attribute `data-pkey` in `html_attributes`.
 
 If the view has the same primary keys as the table the view is based on,

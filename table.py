@@ -13,7 +13,7 @@ from sqlalchemy import text
 class Table:
     """Contains methods for getting metadata for table"""
 
-    def __init__(self, db, tbl_name):
+    def __init__(self, db, tbl_name, alias=None):
         self.db = db
         self.name = tbl_name
         self.label = db.get_label(tbl_name)
@@ -23,6 +23,7 @@ class Table:
         self.grid_view = self.view
         if tbl_name + '_grid' in db.tablenames:
             self.grid_view = tbl_name + '_grid'
+        self.alias = alias or self.view
 
     @property
     def type(self):
@@ -225,7 +226,7 @@ class Table:
 
             # Get the ON statement in the join
             ons = [f'{fkey.ref_table_alias}.{fkey.referred_columns[idx]} = '
-                   f'{self.view}.{col}'
+                   f'{self.alias}.{col}'
                    for idx, col in enumerate(fkey.constrained_columns)]
             on_list = ' AND '.join(ons)
 
@@ -234,15 +235,16 @@ class Table:
 
         for key, fkey in self.relations.items():
             if fkey.relationship == '1:1':
-                alias = fkey.table_name
+                prefix = fkey.referred_table.rstrip('_') + '_'
+                alias = fkey.table_name.replace(prefix, '')
                 ons = [f"{alias}.{fkey.constrained_columns[idx]} = "
                        f"{self.view}.{col}"
                        for idx, col in enumerate(fkey.referred_columns)]
                 on_list = ' AND '.join(ons)
-                joins.append(f"left join {self.db.schema}.{fkey.table_name} "
+                joins.append(f"left join {self.db.schema}.{fkey.table_name} {alias} "
                              f"on {on_list}")
 
-                rel_tbl = Table(self.db, fkey.table_name)
+                rel_tbl = Table(self.db, fkey.table_name, alias=alias)
                 for join in rel_tbl.joins:
                     # Don't add the join defining the 1:1 relation
                     if f'left join {self.db.schema}.{self.name} ' not in join:
@@ -286,17 +288,20 @@ class Table:
 
         for key, rel in self.relations.items():
             rel_table = Table(self.db, rel.table_name)
+            prefix = rel.referred_table.rstrip('_') + '_'
+            alias = rel.table_name.replace(prefix, '')
 
             # accept index name based on main table
             if rel.relationship == '1:1' and idx_name in rel_table.indexes:
                 idx = rel_table.indexes[idx_name]
-                idx.table = rel.table_name
+                idx.table = alias
                 return idx
 
+            # accept index name based on relation table
             idx_name_rel = rel.table_name.rstrip('_') + '_access_code_idx'
             if rel.relationship == '1:1' and idx_name_rel in rel_table.indexes:
                 idx = rel_table.indexes[idx_name_rel]
-                idx.table = rel.table_name
+                idx.table = alias
                 return idx
 
         return None

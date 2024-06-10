@@ -30,7 +30,7 @@ class Database:
             self.schema = 'dbo' if len(path) == 1 else path[1]
             self.cat = path[0]
         elif engine.name in ('duckdb', 'sqlite'):
-            self.schema = 'main'
+            self.schema = self.schemas[0]
             self.cat = None
         else:
             self.schema = db_name
@@ -710,7 +710,8 @@ class Database:
             if self.engine.name == 'duckdb':
                 sql = "select * from duckdb_indexes()"
                 with self.engine.connect() as cnxn:
-                    rows = cnxn.execute(text(sql)).fetchall()
+                    result = cnxn.execute(text(sql))
+                    rows = result.mappings().fetchall()
                     for row in rows:
                         idx = Dict({
                             'table_name': row.table_name,
@@ -718,7 +719,7 @@ class Database:
                             'unique': row.is_unique
                         })
                         expr = row.sql
-                        x = re.search(r"\bon \w+\s?\(([^)]*)\)", expr)
+                        x = re.search(r"\bON \w+\s?\(([^)]*)\)", expr)
                         cols_delim = x.group(1).split(',')
                         idx.columns = [s.strip() for s in cols_delim]
                         self._indexes[row.table_name][idx.name] = idx
@@ -750,88 +751,39 @@ class Database:
             self._relations = Dict()
             aliases = {}
 
-            if self.engine.name == 'duckdb':
-                sql = """
-                select * from duckdb_constraints()
-                where constraint_type = 'FOREIGN KEY'
-                """
-                with self.engine.connect() as cnxn:
-                    rows = cnxn.execute(text(sql)).fetchall()
-                    for row in rows:
-                        fkey = Dict({
-                            'table_name': row.table_name,
-                            'constrained_columns': row.constraint_column_names,
-                            'referred_schema': 'main',
-                            'schema': 'main'
-                        })
-                        expr = row.constraint_text
-                        if expr:
-                            x = re.search(r"\bREFERENCES (\w+)", expr)
-                            fkey.referred_table = x.group(1)
-                            x = re.search(r"\bREFERENCES \w+\(([^)]*)\)", expr)
-                            cols_delim = x.group(1).split(',')
-                            fkey.referred_columns = [s.strip() for s in cols_delim]
-                        else:
-                            fkey.referred_table = fkey.table_name
-                            fkey.referred_columns = self.pkeys[fkey.table_name].columns
-                        fkey.name = fkey.table_name + '_'
-                        fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+            schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
 
-                        fkey_col = fkey.constrained_columns[-1]
-                        ref_col = fkey.referred_columns[-1].strip('_')
-                        if fkey_col in [fkey.referred_table + '_' + ref_col,
-                                        fkey.referred_columns[-1]]:
-                            ref_table_alias = fkey.referred_table
-                        else:
-                            ref_table_alias = fkey.table_name.rstrip('_') + '_' + fkey_col.strip('_')
-                        # In seldom cases there might be two foreign keys ending
-                        # in same column
-                        if fkey.table_name not in aliases:
-                            aliases[fkey.table_name] = []
-                        if ref_table_alias in aliases[fkey.table_name]:
-                            ref_table_alias = ref_table_alias + '2'
-                        fkey.ref_table_alias = ref_table_alias
-                        aliases[fkey.table_name].append(ref_table_alias)
+            for key, fkeys in schema_fkeys.items():
+                for fkey in fkeys:
+                    fkey = Dict(fkey)
+                    fkey.table_name = key[-1]
+                    fkey.schema = key[0] or self.db.schema
+                    if set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns):
+                        fkey.relationship = '1:1'
+                    else:
+                        fkey.relationship = '1:M'
 
-                        self._fkeys[fkey.table_name][fkey.name] = fkey
-                        self._relations[fkey.referred_table][fkey.name] = fkey
+                    fkey.name = fkey.table_name + '_'
+                    fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
 
-            else:
-                schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+                    fkey_col = fkey.constrained_columns[-1]
+                    ref_col = fkey.referred_columns[-1].strip('_')
+                    if fkey_col in [fkey.referred_table + '_' + ref_col,
+                                    fkey.referred_columns[-1]]:
+                        ref_table_alias = fkey.referred_table
+                    else:
+                        ref_table_alias = fkey.table_name.rstrip('_') + '_' + fkey_col.strip('_')
+                    # In seldom cases there might be two foreign keys ending
+                    # in same column
+                    if fkey.table_name not in aliases:
+                        aliases[fkey.table_name] = []
+                    if ref_table_alias in aliases[fkey.table_name]:
+                        ref_table_alias = ref_table_alias + '2'
+                    fkey.ref_table_alias = ref_table_alias
+                    aliases[fkey.table_name].append(ref_table_alias)
 
-                for key, fkeys in schema_fkeys.items():
-                    for fkey in fkeys:
-                        fkey = Dict(fkey)
-                        fkey.table_name = key[-1]
-                        fkey.schema = key[0] or self.db.schema
-                        if set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns):
-                            fkey.relationship = '1:1'
-                        else:
-                            fkey.relationship = '1:M'
-
-                        # Can't extract constraint names in SQLite
-                        if not fkey.name:
-                            fkey.name = fkey.table_name + '_'
-                            fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
-
-                        fkey_col = fkey.constrained_columns[-1]
-                        ref_col = fkey.referred_columns[-1].strip('_')
-                        if fkey_col in [fkey.referred_table + '_' + ref_col,
-                                        fkey.referred_columns[-1]]:
-                            ref_table_alias = fkey.referred_table
-                        else:
-                            ref_table_alias = fkey.table_name.rstrip('_') + '_' + fkey_col.strip('_')
-                        # In seldom cases there might be two foreign keys ending
-                        # in same column
-                        if fkey.table_name not in aliases:
-                            aliases[fkey.table_name] = []
-                        if ref_table_alias in aliases[fkey.table_name]:
-                            ref_table_alias = ref_table_alias + '2'
-                        fkey.ref_table_alias = ref_table_alias
-                        aliases[fkey.table_name].append(ref_table_alias)
-
-                        self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
-                        self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
+                    self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
+                    self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
 
         return self._fkeys
 

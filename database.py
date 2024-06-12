@@ -59,7 +59,10 @@ class Database:
         if attrs.get('cache.config', None):
             self.config = self.cache.config
         else:
-            self.config = Dict(Settings())
+            config = Settings()
+            self.config = Dict({
+                'norwegian_chars': config.norwegian_chars
+            })
 
     def init_html_attributes(self):
         """Get data from table html_attributes"""

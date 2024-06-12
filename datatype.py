@@ -63,6 +63,28 @@ class Datatype:
         else:
             raise ValueError(f"Type {self.type} not supported yet")
 
+    def get_duckdb_type(self):
+        if self.type == "str":
+            return "varchar(" + str(self.size) + ")" if self.size else "text"
+        elif self.type in ['date', 'time']:
+            return self.type
+        elif self.type == 'datetime':
+            return 'timestamp'
+        elif self.type == 'bool':
+            return 'boolean'
+        elif self.type == 'int':
+            return 'integer'
+        elif self.type == 'Decimal':
+            return f"numeric({str(self.size)})" if self.size else 'numeric'
+        elif self.type == 'float':
+            return 'real'
+        elif self.type == 'bytes':
+            return 'blob'
+        elif self.type == 'json':
+            return 'json'
+        else:
+            raise ValueError(f"Type {self.type} not supported yet")
+
     def get_postgres_type(self):
         if self.type == "str" and self.size:
             return "varchar(" + str(self.size) + ")"
@@ -127,6 +149,8 @@ class Datatype:
             return self.get_sqlserver_type()
         elif platform == "sqlite":
             return self.get_sqlite_type()
+        elif platform == 'duckdb':
+            return self.get_duckdb_type()
         elif platform == 'postgresql':
             return self.get_postgres_type()
         elif platform == 'oracle':

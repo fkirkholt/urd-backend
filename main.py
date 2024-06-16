@@ -92,9 +92,9 @@ def get_engine(cfg, db_name=None):
                         "database": cfg.database
                     }
                 )
-    elif cfg.system == 'sqlite' and cfg.database == 'urdr.db':
+    elif cfg.system == 'sqlite' and cfg_default.database == 'urdr.db':
         with engine.connect() as cnxn:
-            path = os.path.join(cfg.host, cfg.database)
+            path = os.path.join(cfg.host, cfg_default.database)
             cnxn.execute(text('ATTACH DATABASE "' + path + '" as urdr'))
 
     return engine

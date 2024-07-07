@@ -62,6 +62,7 @@ class Grid:
             'conditions': self.cond.stmnts,
             'expansion_column': self.get_expansion_column(),
             'relations': self.tbl.relations,
+            'fts': self.tbl.name + '_fts' in self.db.tablenames,
             'saved_filters': []  # Needed in frontend
         })
 
@@ -493,39 +494,45 @@ class Grid:
 
     def set_search_cond(self, query):
         """Set search conditions for grid queries"""
-        filters = query.split(" AND ")
+        filters = query.split(";")
         for fltr in filters:
             parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|"
                              r"IS NULL|IS NOT NULL)\s*", fltr, 2)
             if len(parts) == 1:
                 # Simple search in any text field
-                value = parts[0]
-                case_sensitive = value.lower() != value
-                value = '%' + value + "%"
-
                 conds = []
                 params = {}
-                for field in self.tbl.fields.values():
-                    if field.fkey:
-                        view = field.name if not field.view else field.view
-                        if case_sensitive:
-                            conds.append(f"{view} LIKE :{field.name}")
-                        else:
-                            conds.append(f"lower({view}) LIKE :{field.name}")
-                        params[field.name] = value
-                    elif field.datatype == "str":
-                        if case_sensitive:
-                            conds.append(f"{self.tbl.view}.{field.name}"
-                                         f" LIKE :{field.name}")
-                        else:
-                            conds.append(f"lower({self.tbl.view}.{field.name})"
-                                         f" LIKE :{field.name}")
-                        params[field.name] = value
+                if self.tbl.name + '_fts' in self.db.tablenames:
+                    fts = self.tbl.name + '_fts'
+                    sql = f"rowid in (select rowid from {fts}"
+                    sql += f" where {fts} match '{fltr}' order by rank)"
+                    conds.append(sql)
+                else:
+                    value = parts[0]
+                    case_sensitive = value.lower() != value
+                    value = '%' + value + "%"
+
+                    for field in self.tbl.fields.values():
+                        if field.fkey:
+                            view = field.name if not field.view else field.view
+                            if case_sensitive:
+                                conds.append(f"{view} LIKE :{field.name}")
+                            else:
+                                conds.append(f"lower({view}) LIKE :{field.name}")
+                            params[field.name] = value
+                        elif field.datatype == "str":
+                            if case_sensitive:
+                                conds.append(f"{self.tbl.view}.{field.name}"
+                                             f" LIKE :{field.name}")
+                            else:
+                                conds.append(f"lower({self.tbl.view}.{field.name})"
+                                             f" LIKE :{field.name}")
+                            params[field.name] = value
                 expr = "(" + " OR ".join(conds) + ")"
                 self.cond.prep_stmnts.append(expr)
                 self.cond.params.update(params)
             else:
-                field = parts[0]
+                field = parts[0].strip()
                 if "." not in field:
                     if field in self.tbl.fields:
                         tbl_name = self.tbl.view

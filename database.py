@@ -204,6 +204,8 @@ class Database:
         for tbl_name in self.tablenames:
             if tbl_name[-5:] == '_view' and tbl_name[:-5] in self.tablenames:
                 continue
+            if '_fts' in tbl_name:
+                continue
 
             hidden = tbl_name[0:1] == "_" or tbl_name == 'html_attributes'
 

@@ -547,7 +547,6 @@ class Grid:
                     if tbl_name + '_view' in self.db.tablenames:
                         field = f"{tbl_name}_view.{field_name}"
 
-                mark = field.replace('.', '_')
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
                 field_expr = field
@@ -557,13 +556,23 @@ class Grid:
                     case_sensitive = value.lower() != value
                     if (not case_sensitive and value.lower() != value.upper()):
                         field_expr = f"lower({field})"
-                    if operator == "IN":
-                        value = value.strip().split(",")
                     if value == "":
                         value = None
-                expr = f"{field_expr} {operator} :{mark}"
+                if operator == "IN":
+                    value = value.strip().split(",")
+                    placeholders = []
+                    for i, val in enumerate(value):
+                        mark = field.replace('.', '_') + str(i)
+                        placeholders.append(f":{mark}")
+                        if val.strip().replace('.', '', 1).isdigit():
+                            val = int(val)
+                        self.cond.params[mark] = val
+                    expr = f"{field_expr} IN (" + ', '.join(placeholders) + ')'
+                else:
+                    mark = field.replace('.', '_')
+                    expr = f"{field_expr} {operator} :{mark}"
+                    self.cond.params[mark] = value
                 self.cond.prep_stmnts.append(expr)
-                self.cond.params[mark] = value
 
     def get_cond_expr(self):
         """Return expression with all query conditions"""

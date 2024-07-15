@@ -41,10 +41,11 @@ def get_engine(cfg, db_name=None):
         driver = getattr(cfg, f'{cfg.system}_driver')
 
     if cfg.system == 'duckdb':
-        path = os.path.join(cfg.host, db_name)
+        db_name = db_name.split('.')[0]
+        path = os.path.join(cfg.host, db_name) + '.db'
         url = f"duckdb:///{path}"
     elif cfg.system == 'sqlite':
-        path = os.path.join(cfg.host, db_name)
+        path = os.path.join(cfg.host, db_name) + '.db'
         url = f"sqlite+{driver}:///{path}"
     elif cfg.system == 'oracle':
         parts = cfg.host.split('/')

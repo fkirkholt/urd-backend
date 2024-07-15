@@ -397,6 +397,9 @@ async def get_table(request: Request):
     table.limit = int(req.get('limit', 30))
     table.offset = int(req.get('offset', 0))
 
+    if req.get('sort', None):
+        grid.sort_columns = Dict(json.loads(req.sort))
+
     if req.get('filter', None):
         req['filter'] = urllib.parse.unquote(req['filter'])
         if req['filter'].startswith('where '):
@@ -404,9 +407,6 @@ async def get_table(request: Request):
             grid.cond.prep_stmnts.append(where)
         else:
             grid.set_search_cond(req['filter'])
-
-    if req.get('sort', None):
-        grid.sort_columns = Dict(json.loads(req.sort))
 
     if req.get('compressed', False):
         grid.compressed = False if req.compressed == 'false' else True

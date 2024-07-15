@@ -62,7 +62,8 @@ class Grid:
             'conditions': self.cond.stmnts,
             'expansion_column': self.get_expansion_column(),
             'relations': self.tbl.relations,
-            'fts': self.tbl.name + '_fts' in self.db.tablenames,
+            'fts': self.tbl.name + '_fts' in self.db.tablenames or
+                f'{self.db.cat}.fts_{self.db.schema}_{self.tbl.name}' in self.db.refl.get_schema_names(),
             'saved_filters': []  # Needed in frontend
         })
 
@@ -506,6 +507,7 @@ class Grid:
                 # Simple search in any text field
                 conds = []
                 params = {}
+                duck_fts_table = f"fts_{self.db.schema}_{self.tbl.name}"
                 if self.tbl.name + '_fts' in self.db.tablenames:
                     fts = self.tbl.name + '_fts'
                     sql = f"{fts} match '{fltr}'"
@@ -513,6 +515,16 @@ class Grid:
                     conds.append(sql)
                     if len(self.sort_columns) == 0:
                         self.sort_columns['rank'] = Dict({'col': 'rank', 'dir': 'asc', 'idx': 0})
+                elif f'{self.db.cat}.{duck_fts_table}' in self.db.refl.get_schema_names():
+                    sql = f"{duck_fts_table}.match_bm25({self.tbl.pkey.columns[0]}, '{fltr}') IS NOT NULL"
+                    conds.append(sql)
+                    self.tbl.fts = True
+                    if len(self.sort_columns) == 0:
+                        self.sort_columns['rank'] = Dict({
+                            'col': f"{duck_fts_table}.match_bm25({self.tbl.pkey.columns[0]}, '{fltr}')",
+                            'dir': 'asc',
+                            'idx': 0
+                        })
                 else:
                     value = parts[0]
                     case_sensitive = value.lower() != value

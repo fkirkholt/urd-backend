@@ -93,7 +93,8 @@ class Database:
         elif self.engine.name == 'duckdb' and (
             schema.endswith('.information_schema') or
             schema.startswith('system.') or
-            schema.startswith('temp.')
+            schema.startswith('temp.') or
+            '.fts_' in schema
         ):
             return False
         elif schema in system_schemas:

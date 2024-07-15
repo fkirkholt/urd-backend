@@ -296,8 +296,12 @@ class Grid:
 
         order = "order by "
         sort_fields = Dict()
-        for sort in self.sort_columns.values():
-            if sort.col in self.tbl.fields and not self.tbl.fields[sort.col].virtual:
+        for alias, sort in self.sort_columns.items():
+            if alias == 'rank':
+                tbl_name = 'fts'
+                order += f"{sort.col} {sort.dir}"
+                return order
+            elif sort.col in self.tbl.fields and not self.tbl.fields[sort.col].virtual:
                 tbl_name = self.tbl.view
             else:
                 tbl_name = self.tbl.name + '_grid'
@@ -504,9 +508,11 @@ class Grid:
                 params = {}
                 if self.tbl.name + '_fts' in self.db.tablenames:
                     fts = self.tbl.name + '_fts'
-                    sql = f"rowid in (select rowid from {fts}"
-                    sql += f" where {fts} match '{fltr}' order by rank)"
+                    sql = f"{fts} match '{fltr}'"
+                    self.tbl.fts = True
                     conds.append(sql)
+                    if len(self.sort_columns) == 0:
+                        self.sort_columns['rank'] = Dict({'col': 'rank', 'dir': 'asc', 'idx': 0})
                 else:
                     value = parts[0]
                     case_sensitive = value.lower() != value

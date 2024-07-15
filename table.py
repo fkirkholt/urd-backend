@@ -24,6 +24,7 @@ class Table:
         if tbl_name + '_grid' in db.tablenames:
             self.grid_view = tbl_name + '_grid'
         self.alias = alias or self.view
+        self.fts = False
 
     @property
     def type(self):
@@ -259,6 +260,11 @@ class Table:
             join_view = ""
 
         joins.append(join_view)
+
+        if self.fts and self.name + '_fts' in self.db.tablenames:
+            join = f"join {self.name}_fts fts on fts.rowid = {self.name}.rowid\n"
+            joins.append(join)
+        
         self._joins = joins
 
         return self._joins

@@ -85,7 +85,7 @@ class User:
         cfg = Settings()
         refl = inspect(self.engine)
         tbl_names = refl.get_table_names(schema)
-        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             db_path = self.engine.url.database
             db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
             urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
@@ -184,7 +184,7 @@ class User:
 
         cfg = Settings()
 
-        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             db_path = self.engine.url.database
             db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
             urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
@@ -256,7 +256,7 @@ class User:
             'update': schema_privilege['update'] or 0,
             'delete': schema_privilege.delete or 0
         })
-        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             db_path = self.engine.url.database
             db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
             urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
@@ -375,7 +375,7 @@ class User:
         self._is_admin[schema] = False
 
         cfg = Settings()
-        if self.engine.name == 'sqlite' and cfg.database == 'urdr.db':
+        if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             return 'sysadmin' in self.access_codes
         elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:

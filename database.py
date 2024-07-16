@@ -36,8 +36,8 @@ class Database:
             self.schema = db_name
             self.cat = None
 
-        if 'urdr' in self.refl.get_schema_names() or db_name == 'urdr.db':
-            schema = 'main' if db_name == 'urdr.db' else 'urdr'
+        if 'urdr' in self.refl.get_schema_names() or db_name == 'urdr':
+            schema = 'main' if db_name == 'urdr' else 'urdr'
             self.cte_access = f"""
             with recursive cte_access (code, parent) as (
                 select a1.code, a1.parent

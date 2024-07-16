@@ -72,7 +72,7 @@ def get_engine(cfg, db_name=None):
             detail="Invalid authentication"
         )
 
-    if cfg.system == 'sqlite' and db_name == 'urdr.db':
+    if cfg.system == 'sqlite' and db_name == 'urdr':
         with engine.connect() as conn:
             sql = """
             select count(*) from user
@@ -93,9 +93,9 @@ def get_engine(cfg, db_name=None):
                         "database": cfg.database
                     }
                 )
-    elif cfg.system == 'sqlite' and cfg_default.database == 'urdr.db':
+    elif cfg.system == 'sqlite' and cfg_default.database == 'urdr':
         with engine.connect() as cnxn:
-            path = os.path.join(cfg.host, cfg_default.database)
+            path = os.path.join(cfg.host, cfg_default.database + '.db')
             cnxn.execute(text('ATTACH DATABASE "' + path + '" as urdr'))
 
     return engine
@@ -164,7 +164,7 @@ def login(response: Response, system: str, server: str, username: str,
     cfg.host = server or 'localhost'
 
     # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
-    if cfg.system == 'sqlite' and cfg.database != 'urdr.db':
+    if cfg.system == 'sqlite' and cfg.database != 'urdr':
         cfg.timeout = None
     response.set_cookie(key="session", value=token(), expires=cfg.timeout)
 
@@ -190,8 +190,8 @@ def dblist(role: str = None):
     result = []
     useradmin = False
     if cfg.system in ('sqlite', 'duckdb'):
-        if cfg.database == 'urdr.db':
-            engine = get_engine(cfg, 'urdr.db')
+        if cfg.database == 'urdr':
+            engine = get_engine(cfg, 'urdr')
             user = User(engine, name=cfg.uid)
             rows = user.databases()
 
@@ -338,7 +338,7 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
             cnxn.commit()
 
         return {'data': 'Passord endret'}
-    elif cfg.system == 'sqlite' and cfg.database == 'urdr.db':
+    elif cfg.system == 'sqlite' and cfg.database == 'urdr':
         engine = get_engine(cfg, base)
         db_path = engine.url.database
         urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'

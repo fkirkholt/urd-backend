@@ -115,10 +115,24 @@ class Field:
         return attributes
 
     def get_options(self, condition, params):
+        from table import Table
 
         fkey = self._tbl.get_fkey(self.name)
 
+        parent = 'NULL'
+
         if fkey and fkey.referred_table in self._db.tablenames:
+            ref_tbl = Table(self._db, fkey.referred_table)
+            hierarchy = False
+            for rel in ref_tbl.relations.values():
+                if rel.table_name == ref_tbl.name:
+                    hierarchy = True
+                    break
+
+            if hierarchy:
+                fkey_parent = ref_tbl.get_parent_fk()
+                parent = fkey_parent.constrained_columns[-1]
+
             from_table = fkey.referred_table
             pkey_col = fkey.referred_columns[-1]
             alias = fkey.ref_table_alias
@@ -151,7 +165,8 @@ class Field:
 
         sql = f"""
         select distinct {value_field} as value,
-               {self.view or value_field} as label
+               {self.view or value_field} as label,
+               {parent} as parent
         from   {self._db.schema}.{from_table} {alias}
         where  {condition}
         order by {self.view or value_field}

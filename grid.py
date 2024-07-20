@@ -401,9 +401,10 @@ class Grid:
         if access_idx:
             sql += self.db.cte_access
             self.cond.params.uid = self.db.user.name
-            col = access_idx.table + '.' + access_idx.columns[-1]
-            stmt = f'({col} IS NULL or {col} in (select code from cte_access))'
-            self.cond.prep_stmnts.append(stmt)
+            for col in access_idx.columns:
+                col = access_idx.table + '.' + col
+                stmt = f'({col} IS NULL or {col} in (select code from cte_access))'
+                self.cond.prep_stmnts.append(stmt)
 
         order = self.make_order_by()
         conds = self.get_cond_expr()

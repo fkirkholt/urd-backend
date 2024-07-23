@@ -225,6 +225,15 @@ class Table:
             if fkey.referred_table not in self.db.tablenames:
                 continue
 
+            # Don't get joins for foreign keys defining 1:1-relations
+            # when the table itself is a foreign key join. These have an alias
+            # that is made from the referencing table and column 
+            if (
+                self.alias != self.view and
+                set(fkey.constrained_columns) < set(self.pkey.columns)
+            ):
+                continue
+
             # Get the ON statement in the join
             ons = [f'{fkey.ref_table_alias}.{fkey.referred_columns[idx]} = '
                    f'{self.alias}.{col}'
@@ -233,6 +242,21 @@ class Table:
 
             joins.append(f'left join {self.db.schema}.{fkey.referred_table} '
                          f'{fkey.ref_table_alias} on {on_list}')
+
+            # Join with 1:1 relation carrying access code
+            fkey_table = Table(self.db, fkey.referred_table)
+            access_idx = fkey_table.get_access_code_idx()
+            if access_idx and access_idx.table_name != fkey_table.name:
+                for key, rel_fkey in fkey_table.relations.items():
+                    if rel_fkey.table_name == access_idx.table_name:
+                        if rel_fkey.table_name == self.name:
+                            continue
+                        ons = [f"{rel_fkey.table_name}.{rel_fkey.constrained_columns[idx]} = "
+                               f"{fkey.ref_table_alias}.{col}"
+                               for idx, col in enumerate(rel_fkey.referred_columns)]
+                        on_list = ' AND '.join(ons)
+                        joins.append(f"left join {self.db.schema}.{rel_fkey.table_name} "
+                                     f"on {on_list}")
 
         for key, fkey in self.relations.items():
             if fkey.relationship == '1:1':
@@ -287,11 +311,14 @@ class Table:
     def get_access_code_idx(self):
         idx_name = self.name.rstrip('_') + '_access_code_idx'
 
+        # Check if access index is set on main table
         if idx_name in self.indexes:
             idx = self.indexes[idx_name]
-            idx.table = self.view
+            idx.table_name = self.name
+            idx.table_alias = self.view
             return idx
 
+        # Check if access index is set on extension table
         for key, rel in self.relations.items():
             rel_table = Table(self.db, rel.table_name)
             prefix = rel.referred_table.rstrip('_') + '_'
@@ -300,14 +327,16 @@ class Table:
             # accept index name based on main table
             if rel.relationship == '1:1' and idx_name in rel_table.indexes:
                 idx = rel_table.indexes[idx_name]
-                idx.table = alias
+                idx.table_name = rel_table.name
+                idx.table_alias = alias
                 return idx
 
             # accept index name based on relation table
             idx_name_rel = rel.table_name.rstrip('_') + '_access_code_idx'
             if rel.relationship == '1:1' and idx_name_rel in rel_table.indexes:
                 idx = rel_table.indexes[idx_name_rel]
-                idx.table = alias
+                idx.table_name = rel_table.name
+                idx.table_alias = alias
                 return idx
 
         return None

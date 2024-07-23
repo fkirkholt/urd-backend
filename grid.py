@@ -17,6 +17,7 @@ class Grid:
             'stmnts': []
         })
         self.compressed = False
+        self.access_check = False
 
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
@@ -336,8 +337,7 @@ class Grid:
                 cols.append(f'{self.tbl.grid_view}.{key}')
 
         sql = ''
-        access_idx = self.tbl.get_access_code_idx()
-        if access_idx:
+        if self.access_check:
             sql += self.db.cte_access
 
         select = ', '.join(cols)
@@ -367,8 +367,7 @@ class Grid:
         conds = self.get_cond_expr()
 
         sql = ''
-        access_idx = self.tbl.get_access_code_idx()
-        if access_idx:
+        if self.access_check:
             sql += self.db.cte_access
 
         if self.db.engine.name == 'sqlite':
@@ -391,6 +390,8 @@ class Grid:
     def get_display_values(self, selects):
         """Return display values for columns in grid"""
 
+        from table import Table
+
         alias_selects = {}
         for key, value in selects.items():
             alias_selects[key] = f'{value} as {key}'
@@ -399,12 +400,31 @@ class Grid:
         sql = ''
         access_idx = self.tbl.get_access_code_idx()
         if access_idx:
+            self.access_check = True
             sql += self.db.cte_access
             self.cond.params.uid = self.db.user.name
             for col in access_idx.columns:
-                col = access_idx.table + '.' + col
+                col = access_idx.table_alias + '.' + col
                 stmt = f'({col} IS NULL or {col} in (select code from cte_access))'
                 self.cond.prep_stmnts.append(stmt)
+
+        # Check access for foreign keys
+        for key, fkey in self.tbl.fkeys.items():
+            fkey_table = Table(self.db, fkey.referred_table)
+            fkey_access_idx = fkey_table.get_access_code_idx()
+            if fkey_access_idx:
+                self.access_check = True
+                if 'cte_access' not in sql:
+                    sql += self.db.cte_access
+                    self.cond.params.uid = self.db.user.name
+                for col in fkey_access_idx.columns:
+                    if fkey_access_idx.table_name == fkey.referred_table:
+                        alias = fkey.ref_table_alias
+                    else:
+                        alias = fkey_access_idx.table_name
+                    col = alias + '.' + col
+                    stmt = f'({col} IS NULL or {col} in (select code from cte_access))'
+                    self.cond.prep_stmnts.append(stmt)
 
         order = self.make_order_by()
         conds = self.get_cond_expr()

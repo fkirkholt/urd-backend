@@ -762,6 +762,7 @@ class Database:
             for key, fkeys in schema_fkeys.items():
                 for fkey in fkeys:
                     fkey = Dict(fkey)
+                    fkey.base = self.cat
                     fkey.table_name = key[-1]
                     fkey.schema = key[0] or self.db.schema
                     if set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns):

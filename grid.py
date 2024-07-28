@@ -273,6 +273,8 @@ class Grid:
                 continue
             if field.name == 'password':
                 continue
+            if field.datatype == 'str' and not field.size:
+                continue
             if field.datatype == 'str' and (field.size and field.size >= 255):
                 continue
             if field.datatype == 'json':

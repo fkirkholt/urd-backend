@@ -178,15 +178,20 @@ class Grid:
 
         for idx, col in enumerate(fkey.constrained_columns):
             prim = fkey.referred_columns[idx]
-            wheres.append(f"{col} != {prim} and {col} = {self.tbl.name}.{prim}")
+            if col == fkey.constrained_columns[-1]:
+                wheres.append(f"{col} != {prim} and {col} = {self.tbl.name}.{prim}")
+            else:
+                wheres.append(f"{col} = {self.tbl.name}.{prim}")
 
         where = ' and '.join(wheres)
 
-        return f"""(
+        sql = f"""(
             select count(*)
             from {self.db.schema}.{self.tbl.name} child_table
             where {where}
             )"""
+
+        return sql
 
     def get_expansion_column(self):
         """Return column that should expand a hierarchic table"""

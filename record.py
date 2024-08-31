@@ -77,7 +77,6 @@ class Record:
 
         return self._fields
 
-
     def get_relation_count(self):
         from database import Database
         from table import Table, Grid
@@ -122,7 +121,7 @@ class Record:
                 val = None if len(self.pkey) == 0 else values[rel.referred_columns[i]]
                 col = Column(self._tbl, tbl_rel.cols[colname])
 
-                mark = tbl_rel.view + '_' + colname
+                mark = tbl_rel.view.rstrip('_') + '_' + colname.lstrip('_')
                 expr = f'{tbl_rel.view}.{colname} = :{mark}'
                 if (
                     col.nullable and
@@ -214,7 +213,7 @@ class Record:
             values = self.get_values()
         for idx, col in enumerate(rel.constrained_columns):
             val = None if len(self.pkey) == 0 else values[rel.referred_columns[idx]]
-            mark = tbl_rel.view + '_' + col
+            mark = tbl_rel.view.rstrip('_') + '_' + col.lstrip('_')
             grid.cond.params[mark] = val
             if (
                 len(self.pkey) and tbl_rel.fields[col].nullable and
@@ -292,7 +291,6 @@ class Record:
     def get_children(self):
         from table import Grid
         grid = Grid(self._tbl)
-        grid.user_filtered = True
 
         rel = [rel for rel in self._tbl.relations.values()
                if rel.table_name == self._tbl.name][0]
@@ -301,7 +299,7 @@ class Record:
             foreign = rel.constrained_columns[idx]
             primary = rel.referred_columns[idx]
             value = self.fields[colname].value
-            mark = rel.table_name + '_' + foreign
+            mark = rel.table_name.rstrip('_') + '_' + foreign.lstrip('_')
             expr = f'"{rel.table_name}"."{foreign}" = :{mark}'
             grid.cond.prep_stmnts.append(expr)
             grid.cond.params[mark] = value

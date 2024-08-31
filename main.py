@@ -376,45 +376,46 @@ def db_info(base: str):
 
 
 @app.get("/table")
-async def get_table(request: Request):
-    req = Dict({item[0]: item[1]
-                for item in request.query_params.multi_items()})
-    engine = get_engine(cfg, req.base)
-    schema = req.get('schema', None)
+async def get_table(base: str, table: str, filter: str = None,
+                    limit: int = 30, offset: int = 0,
+                    show_all_levels: bool = False,
+                    schema: str = None, sort: str = None,
+                    compressed: bool = False, prim_key: str = None):
+    engine = get_engine(cfg, base)
     if cfg.system == 'postgresql' and schema:
-        base_path = req.base + '.' + req.schema
+        base_path = base + '.' + schema
     else:
-        base_path = req.base or schema
+        base_path = base or schema
     dbo = Database(engine, base_path, cfg.uid)
-    table = Table(dbo, req.table)
-    privilege = dbo.user.table_privilege(req.base, req.table)
+    tbl = Table(dbo, table)
+    privilege = dbo.user.table_privilege(base, table)
     if privilege.select == 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No access"
         )
-    grid = Grid(table)
-    table.limit = int(req.get('limit', 30))
-    table.offset = int(req.get('offset', 0))
+    grid = Grid(tbl)
+    grid.show_all_levels = show_all_levels
+    tbl.limit = limit
+    tbl.offset = offset
 
-    if req.get('sort', None):
-        grid.sort_columns = Dict(json.loads(req.sort))
+    if sort:
+        grid.sort_columns = Dict(json.loads(sort))
 
-    if req.get('filter', None):
-        req['filter'] = urllib.parse.unquote(req['filter'])
-        if req['filter'].startswith('where '):
-            where = req['filter'][6:].split(';')[0]
+    if filter:
+        filter = urllib.parse.unquote(filter)
+        if filter.startswith('where '):
+            where = filter[6:].split(';')[0]
             grid.cond.prep_stmnts.append(where)
         else:
-            grid.set_search_cond(req['filter'])
+            grid.set_search_cond(filter)
 
-    if req.get('compressed', False):
-        grid.compressed = False if req.compressed == 'false' else True
+    grid.compressed = compressed
 
     # todo: handle sort
     pkey_vals = None
-    if ('prim_key' in req and req.prim_key):
-        pkey_vals = json.loads(req.prim_key)
+    if prim_key:
+        pkey_vals = json.loads(prim_key)
 
     return {'data': grid.get(pkey_vals)}
 

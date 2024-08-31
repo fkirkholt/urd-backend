@@ -10,7 +10,6 @@ class Grid:
     def __init__(self, table):
         self.tbl = table
         self.db = table.db
-        self.user_filtered = False
         self.cond = Dict({
             'prep_stmnts': [],
             'params': {},
@@ -18,6 +17,7 @@ class Grid:
         })
         self.compressed = False
         self.access_check = False
+        self.show_all_levels = False
 
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
@@ -80,10 +80,14 @@ class Grid:
             fkey = self.tbl.get_parent_fk()
             rel_column = fkey.constrained_columns[-1]
             ref_column = fkey.referred_columns[-1]
-            selects['count_children'] = self.select_children_count(fkey)
+            if not self.show_all_levels:
+                selects['count_children'] = self.select_children_count(fkey)
 
-            # Filters on highest level if not filtered by user
-            if (not self.user_filtered and len(self.cond.prep_stmnts) == 0):
+            # Filters on highest level if not chosen to show all levels
+            if (
+                fkey.ref_table_alias not in self.cond.params and
+                self.show_all_levels is False
+            ):
                 expr = f"""
                     {self.tbl.view}.{rel_column} IS NULL
                     or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column}
@@ -371,6 +375,21 @@ class Grid:
 
     def get_rowcount(self):
         """Return rowcount for grid"""
+        expansion_column = self.get_expansion_column()
+        if expansion_column:
+            fkey = self.tbl.get_parent_fk()
+            rel_column = fkey.constrained_columns[-1]
+            ref_column = fkey.referred_columns[-1]
+            if (
+                fkey.ref_table_alias not in self.cond.params and
+                self.show_all_levels is False
+            ):
+                expr = f"""
+                    {self.tbl.view}.{rel_column} IS NULL
+                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column}
+                """
+                self.cond.prep_stmnts.append(expr)
+
         conds = self.get_cond_expr()
 
         sql = ''
@@ -615,7 +634,7 @@ class Grid:
                         self.cond.params[mark] = val
                     expr = f"{field_expr} IN (" + ', '.join(placeholders) + ')'
                 else:
-                    mark = field.replace('.', '_')
+                    mark = field.replace('.', '_').replace('__', '_')
                     expr = f"{field_expr} {operator} :{mark}"
                     self.cond.params[mark] = value
                 self.cond.prep_stmnts.append(expr)

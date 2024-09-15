@@ -527,7 +527,6 @@ class Database:
                         sub_tables[fkey.referred_table] = []
 
                     sub_tables[fkey.referred_table].append(tbl_name)
-                    break
 
         return sub_tables
 

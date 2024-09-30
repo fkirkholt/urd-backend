@@ -547,6 +547,7 @@ class Grid:
 
     def set_search_cond(self, query):
         """Set search conditions for grid queries"""
+        from table import Table
         filters = query.split(";")
         for fltr in filters:
             parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|"
@@ -598,26 +599,32 @@ class Grid:
                 self.cond.prep_stmnts.append(expr)
                 self.cond.params.update(params)
             else:
-                field = parts[0].strip()
-                if "." not in field:
-                    if field in self.tbl.fields:
+                field_expr = parts[0].strip()
+                if "." not in field_expr:
+                    if field_expr in self.tbl.fields:
                         tbl_name = self.tbl.view
                     else:
                         tbl_name = self.tbl.name + '_grid'
-                    field = tbl_name + "." + field
+                    field = self.tbl.fields[field_expr]
+                    field_expr = tbl_name + "." + field_expr
                 else:
-                    # Use view instead of original table if exists
-                    field_parts = field.split('.')
-                    tbl_name = field_parts[0]
+                    field_parts = field_expr.split('.')
+                    tbl_alias = field_parts[0]
                     field_name = field_parts[1]
-                    if tbl_name + '_view' in self.db.tablenames:
-                        field = f"{tbl_name}_view.{field_name}"
+                    field = None
+                    for fkey in self.tbl.fkeys.values():
+                        if fkey.ref_table_alias == tbl_alias:
+                            tbl = Table(self.db, fkey.referred_table)
+                            field = tbl.fields[field_name] 
 
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
-                field_expr = field
-                if value.replace('.', '', 1).isdigit():
-                    value = int(value)
+
+                if (
+                    (field and field.datatype in ['int', 'Decimal']) or
+                    (not field and value.replace('.', '', 1).isdigit())
+                ):
+                    value = float(value)
                 else:
                     case_sensitive = value.lower() != value
                     if (not case_sensitive and value.lower() != value.upper()):
@@ -635,7 +642,7 @@ class Grid:
                         self.cond.params[mark] = val
                     expr = f"{field_expr} IN (" + ', '.join(placeholders) + ')'
                 else:
-                    mark = field.replace('.', '_').replace('__', '_')
+                    mark = field_expr.replace('.', '_').replace('__', '_')
                     expr = f"{field_expr} {operator} :{mark}"
                     self.cond.params[mark] = value
                 self.cond.prep_stmnts.append(expr)

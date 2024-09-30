@@ -18,6 +18,7 @@ class Grid:
         self.compressed = False
         self.access_check = False
         self.show_all_levels = False
+        self.is_relation = False
 
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
@@ -86,11 +87,11 @@ class Grid:
             # Filters on highest level if not chosen to show all levels
             if (
                 fkey.ref_table_alias not in self.cond.params and
-                self.show_all_levels is False
+                self.show_all_levels is False and not self.is_relation
             ):
                 expr = f"""
-                    {self.tbl.view}.{rel_column} IS NULL
-                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column}
+                    ({self.tbl.view}.{rel_column} IS NULL
+                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column})
                 """
                 self.cond.prep_stmnts.append(expr)
 
@@ -382,11 +383,11 @@ class Grid:
             ref_column = fkey.referred_columns[-1]
             if (
                 fkey.ref_table_alias not in self.cond.params and
-                self.show_all_levels is False
+                self.show_all_levels is False and not self.is_relation
             ):
                 expr = f"""
-                    {self.tbl.view}.{rel_column} IS NULL
-                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column}
+                    ({self.tbl.view}.{rel_column} IS NULL
+                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column})
                 """
                 self.cond.prep_stmnts.append(expr)
 

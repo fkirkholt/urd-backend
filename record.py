@@ -143,10 +143,12 @@ class Record:
                 if (colname[0] == '_' or colname[0:6] == 'const_') and col.default:
                     show_if = {rel.referred_columns[i]: col.default}
 
+            grid.is_relation = True
             count_records = grid.get_rowcount() if len(self.pkey) else 0
 
             count_inherited = 0
             if count_null_conds:
+                grid2.is_relation = True
                 count_inherited = grid2.get_rowcount()
 
             relation = Dict({
@@ -229,6 +231,7 @@ class Record:
                 grid.cond.prep_stmnts.append(expr)
             conds[col] = val
 
+        grid.is_relation = True
         relation = grid.get()
         relation.conds = conds
         relation.relationship = rel.relationship
@@ -307,6 +310,7 @@ class Record:
                 expr = f'"{rel.table_name}"."{foreign}" != "{rel.table_name}"."{primary}"'
                 grid.cond.prep_stmnts.append(expr)
 
+        grid.is_relation = True
         relation = grid.get()
 
         return relation['records']

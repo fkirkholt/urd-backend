@@ -778,7 +778,7 @@ class Database:
                                     fkey.referred_columns[-1]]:
                         ref_table_alias = fkey.referred_table
                     else:
-                        ref_table_alias = fkey.table_name.rstrip('_') + '_' + fkey_col.strip('_')
+                        ref_table_alias = fkey_col.strip('_')
                     # In seldom cases there might be two foreign keys ending
                     # in same column
                     if fkey.table_name not in aliases:

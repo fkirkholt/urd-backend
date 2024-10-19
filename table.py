@@ -6,8 +6,8 @@ from record import Record
 from column import Column
 from field import Field
 from grid import Grid
+from util import prepare, to_rec
 from sqlglot import parse_one, exp
-from sqlalchemy import text
 
 
 class Table:
@@ -64,7 +64,10 @@ class Table:
                 if col['name'] == colname:
                     pkey_col = Dict(col)
                     break
-            pkey_col_type = pkey_col.type.python_type.__name__
+            if type(pkey_col.type) is str:
+                pkey_col_type = self.db.refl.expr.to_urd_type(pkey_col.type)
+            else:
+                pkey_col_type = pkey_col.type.python_type.__name__
             if hasattr(pkey_col.type, 'length'):
                 pkey_col_length = pkey_col.type.length
 
@@ -117,9 +120,9 @@ class Table:
         return subordinate
 
     def count_rows(self):
-        sql = f'select count(*) from "{self.name}"'
+        sql, _ = prepare(f'select count(*) from "{self.name}"')
         with self.db.engine.connect() as cnxn:
-            return cnxn.execute(text(sql)).first()[0]
+            return cnxn.execute(sql).fetchone()[0]
 
     def is_hidden(self):
         """Decide if this is a hidden table"""
@@ -546,12 +549,12 @@ class Table:
             for name, relation in relations.items():
                 fkey_col = relation.constrained_columns[-1]
 
-                sql = f"""
+                sql, _ = prepare(f"""
                 select count(distinct({fkey_col})) from {relation.table_name}
-                """
+                """)
 
                 with self.db.engine.connect() as cnxn:
-                    count = cnxn.execute(text(sql)).first()[0]
+                    count = cnxn.execute(sql).first()[0]
 
                 relations[name].use = count/self.rowcount if self.rowcount > 0 else 0
 
@@ -634,23 +637,25 @@ class Table:
             sql = f"select * from {self.name}"
 
         with self.db.engine.connect() as cnxn:
-            rows = cnxn.execute(text(sql)).mappings()
+            sql, _ = prepare(sql)
+            rows = cnxn.execute(sql).fetchall()
+            recs = [to_rec(row) for row in rows]
 
         if select_recs:
             insert += f'insert into {self.name}\n'
-            insert += 'select ' + ', '.join(rows.keys())
+            insert += 'select ' + ', '.join(recs.keys())
             insert += f' from {self.db.schema}.{self.name};\n'
         else:
             if dialect != 'oracle':
                 insert += f'insert into {self.name} values '
             i = 0
-            for row in rows:
+            for rec in recs:
                 if (i > 0 and i % 1000 == 0) or dialect == 'oracle':
                     insert += f'insert into {self.name} values ('
                 else:
                     insert += '('
                 i += 1
-                for colname, val in row.items():
+                for colname, val in rec.items():
                     col = self.fields[colname]
                     if (self.name == 'meta_data' and colname == 'cache'):
                         val = ''
@@ -686,20 +691,22 @@ class Table:
         """
 
         with self.db.engine.connect() as cnxn:
-            rows = cnxn.execute(text(sql)).mappings()
+            sql, _ = prepare(sql)
+            rows = cnxn.execute(sql).fetchall()
         for row in rows:
-            if row[colname] is None:
+            rec = to_rec(row)
+            if rec[colname] is None:
                 continue
             wheres = []
             params = {}
             for key in self.pkey.columns:
                 wheres.append(key + '= :' + key)
-                params[key] = row[key]
+                params[key] = rec[key]
 
             where = ', '.join(wheres)
 
             try:
-                value = pypandoc.convert_text(row[colname], to_format,
+                value = pypandoc.convert_text(rec[colname], to_format,
                                               format=from_format)
             except Exception as e:
                 print('kunne ikke konvertere ' + params[-1])
@@ -713,8 +720,9 @@ class Table:
             where {where}
             """
 
-            with self.db.engine.connect() as conn:
-                conn.execute(text(sql), params)
-                conn.commit()
+            with self.db.engine.connect() as cnxn:
+                sql, params = prepare(sql, params)
+                cnxn.execute(sql, params)
+                cnxn.commit()
 
         return 'success'

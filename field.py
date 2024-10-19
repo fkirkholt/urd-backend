@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from addict import Dict
 from sqlalchemy import text
+from util import prepare, to_rec
 
 
 class Field:
@@ -17,11 +18,14 @@ class Field:
         return Dict(field)
 
     def set_attrs_from_col(self, col):
-        try:
-            self.datatype = col.type.python_type.__name__
-        except Exception:
-            self.datatype = ('int' if str(col.type).startswith('YEAR')
-                             else 'unknown')
+        if type(col.type) is str: # odbc engine
+            self.datatype = self._db.refl.expr.to_urd_type(col.type)
+        else:
+            try:
+                self.datatype = col.type.python_type.__name__
+            except Exception:
+                self.datatype = ('int' if str(col.type).startswith('YEAR')
+                                 else 'unknown')
 
         if hasattr(col, 'size'):
             self.size = col.size
@@ -155,7 +159,8 @@ class Field:
         """
 
         with self._db.engine.connect() as cnxn:
-            count = cnxn.execute(text(sql), params).first()[0]
+            sql, params = prepare(sql, params)
+            count = cnxn.execute(sql, params).fetchone()[0]
 
         if (count > 200):
             return False
@@ -173,11 +178,12 @@ class Field:
         """
 
         with self._db.engine.connect() as cnxn:
-            options = cnxn.execute(text(sql), params).all()
+            sql, params = prepare(sql, params)
+            rows = cnxn.execute(sql, params).fetchall()
 
         # Return list of recular python dicts so that it can be
         # json serialized and put in cache
-        return [dict(row._mapping) for row in options]
+        return [to_rec(row) for row in rows]
 
     def get_view(self, fkey):
         """ Decide what should be shown in options """

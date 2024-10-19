@@ -1,7 +1,7 @@
 import re
 import math
 from addict import Dict
-from sqlalchemy import text
+from util import prepare, to_rec
 
 
 class Grid:
@@ -164,9 +164,9 @@ class Grid:
         {rec_cond};
         """
 
-        params = self.cond.params | params
+        sql, params = prepare(sql, self.cond.params | params)
         with self.db.engine.connect() as cnxn:
-            row = cnxn.execute(text(sql), params).fetchone()
+            row = cnxn.execute(sql, params).fetchone()
         idx = row[0] if row else None
         if idx is not None:
             page_nr = math.floor(idx / self.tbl.limit)
@@ -245,7 +245,7 @@ class Grid:
         if has_view:
             view_name = self.tbl.name + '_grid'
             view = Table(self.db, view_name)
-            cols = self.db.refl.get_columns(view_name)
+            cols = self.db.refl.get_columns(view_name, self.db.schema)
             self._columns = [col['name'] for col in cols]
             for field_name, field in view.fields.items():
                 if field_name not in self.tbl.fields:
@@ -366,11 +366,13 @@ class Grid:
             sql += f"offset {self.tbl.offset} rows\n"
             sql += f"fetch next {self.tbl.limit} rows only"
         else:
-            sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
+            sql += f"limit {self.tbl.limit}" if self.tbl.limit else ''
+            sql += f" offset {self.tbl.offset}"
 
         with self.db.engine.connect() as cnxn:
-            result = cnxn.execute(text(sql), self.cond.params)
-            records = result.mappings().fetchall()
+            sql, params = prepare(sql, self.cond.params)
+            rows = cnxn.execute(sql, params).fetchall()
+            records = [to_rec(row) for row in rows]
 
         return records
 
@@ -410,7 +412,8 @@ class Grid:
             sql = f"select count(*) from (\n{sql}\nlimit 1000)"
 
         with self.db.engine.connect() as cnxn:
-            count = cnxn.execute(text(sql), self.cond.params).first()[0]
+            sql, params = prepare(sql, self.cond.params)
+            count = cnxn.execute(sql, params).fetchone()[0]
 
         return count
 
@@ -469,8 +472,9 @@ class Grid:
             sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
         with self.db.engine.connect() as cnxn:
-            result = cnxn.execute(text(sql), self.cond.params)
-            records = result.mappings().fetchall()
+            sql, params = prepare(sql, self.cond.params)
+            rows = cnxn.execute(sql, params).fetchall()
+            records = [to_rec(row) for row in rows]
 
         return records
 
@@ -488,7 +492,6 @@ class Grid:
             return sums
 
         cond = self.get_cond_expr()
-        params = self.cond.params
         joins = [join for join in self.tbl.joins
                  if self.tbl.name + '_grid' not in join]
 
@@ -507,12 +510,14 @@ class Grid:
         sql += '' if not cond else "where " + cond + "\n"
 
         with self.db.engine.connect() as cnxn:
-            row = cnxn.execute(text(sql), params).mappings().first()
+            sql, params = prepare(sql, self.cond.params)
+            row = cnxn.execute(sql, params).fetchone()
+            rec = to_rec(row)
 
             if row:
-                for col in row:
+                for col in rec:
                     if col not in self.tbl.pkey.columns:
-                        sums[col] = row[col]
+                        sums[col] = rec[col]
 
         return sums
 

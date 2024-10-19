@@ -6,12 +6,16 @@ from graphlib import TopologicalSorter
 from sqlalchemy import text, inspect, exc
 import sqlglot
 import simplejson as json
+import pyodbc
 from addict import Dict
 from settings import Settings
 from table import Table
 from grid import Grid
 from user import User
 from datatype import Datatype
+from odbc_engine import ODBC_Engine
+from reflection import Reflection
+from util import prepare, to_rec
 
 
 class Database:
@@ -20,7 +24,6 @@ class Database:
     def __init__(self, engine, db_name, uid):
         self.engine = engine
         self.identifier = db_name
-        self.refl = inspect(engine)
         self.user = User(engine, name=uid)
         path = db_name.split('.')
         if engine.name == 'postgresql':
@@ -35,6 +38,7 @@ class Database:
         else:
             self.schema = db_name
             self.cat = None
+        self.refl = Reflection(engine, self.cat) if type(engine) is ODBC_Engine else inspect(engine)
 
         if 'urdr' in self.refl.get_schema_names() or db_name == 'urdr':
             schema = 'main' if db_name == 'urdr' else 'urdr'
@@ -74,7 +78,8 @@ class Database:
             """
             try:
                 with self.engine.connect() as cnxn:
-                    rows = cnxn.execute(text(sql))
+                    sql, _ = prepare(sql)
+                    rows = cnxn.execute(sql)
                 for row in rows:
                     attrs[row.selector] = json.loads(row.attrs)
             except Exception as e:
@@ -158,7 +163,8 @@ class Database:
         """
 
         with self.engine.connect() as cnxn:
-            cnxn.execute(text(sql))
+            sql, _ = prepare(sql)
+            cnxn.execute(sql)
             cnxn.commit()
 
         self.tablenames.append('html_attributes')
@@ -175,7 +181,8 @@ class Database:
         """
 
         with self.engine.connect() as cnxn:
-            cnxn.execute(text(sql))
+            sql, _ = prepare(sql)
+            cnxn.execute(sql)
             cnxn.commit()
 
         # Refresh attributes
@@ -199,7 +206,7 @@ class Database:
         ):
             self.create_html_attributes()
 
-        tbl_names = self.user.tables(self.schema)
+        tbl_names = self.user.tables(self.cat, self.schema)
         view_names = self.refl.get_view_names(self.schema)
 
         for tbl_name in self.tablenames:
@@ -287,7 +294,8 @@ class Database:
                 'user': self.user.name
             }
             with self.engine.connect() as cnxn:
-                rows = cnxn.execute(text(sql), params).fetchall()
+                sql, params = prepare(sql, params)
+                rows = cnxn.execute(sql, params).fetchall()
             self._schemas = [row[0] for row in rows]
         else:
             self._schemas = list(filter(self.filter_schema,
@@ -318,11 +326,11 @@ class Database:
             )
             """
             with self.engine.connect() as cnxn:
-                params = {'cat': self.cat, 'schema': self.schema}
-                rows = cnxn.execute(text(sql), params).fetchall()
+                sql, params = prepare(sql, {'cat': self.cat, 'schema': self.schema})
+                rows = cnxn.execute(sql, params).fetchall()
             self._tablenames = [row[0] for row in rows]
         else:
-            table_names = self.user.tables(self.schema)
+            table_names = self.user.tables(self.cat, self.schema)
             view_names = self.refl.get_view_names(self.schema)
             self._tablenames = table_names + view_names
 
@@ -330,6 +338,8 @@ class Database:
 
     @property
     def columns(self):
+        """ Return all columns in database grouped by table name """
+
         if not hasattr(self, '_columns'):
             self._columns = Dict()
             columns = self.refl.get_multi_columns(self.schema)
@@ -616,7 +626,8 @@ class Database:
             """
 
             with self.engine.connect() as cnxn:
-                count = cnxn.execute(text(sql), {'selector': 'base'}).first()[0]
+                sql, params = prepare(sql, {'selector': 'base'})
+                count = cnxn.execute(sql, params).fetchone()[0]
 
             cache = {
                 "tables": self.tables,
@@ -641,11 +652,11 @@ class Database:
                 """
 
             with self.engine.connect() as cnxn:
-                params = {
+                sql, params = prepare(sql, {
                     'attrs': attrs_txt,
                     'selector': 'base'
-                }
-                cnxn.execute(text(sql), params)
+                })
+                cnxn.execute(sql, params)
                 cnxn.commit()
 
         return contents
@@ -664,7 +675,8 @@ class Database:
             """
 
             with self.engine.connect() as cnxn:
-                rows = cnxn.execute(text(sql), {'schema': self.schema})
+                sql, params = prepare(sql, {'schema': self.schema})
+                rows = cnxn.execute(sql, params)
                 for row in rows:
                     self._comments[row.table_name] = row.table_comment
         else:
@@ -687,7 +699,8 @@ class Database:
                 where constraint_type = 'PRIMARY KEY'
                 """
                 with self.engine.connect() as cnxn:
-                    rows = cnxn.execute(text(sql)).fetchall()
+                    sql, _ = prepare(sql)
+                    rows = cnxn.execute(sql).fetchall()
                     for row in rows:
                         pkey = Dict({
                             'table_name': row.table_name,
@@ -713,10 +726,9 @@ class Database:
         if not hasattr(self, '_indexes'):
             self._indexes = Dict()
             if self.engine.name == 'duckdb':
-                sql = "select * from duckdb_indexes()"
+                sql, _ = prepare("select * from duckdb_indexes()")
                 with self.engine.connect() as cnxn:
-                    result = cnxn.execute(text(sql))
-                    rows = result.mappings().fetchall()
+                    rows = cnxn.execute(sql).fetchall()
                     for row in rows:
                         idx = Dict({
                             'table_name': row.table_name,
@@ -810,27 +822,48 @@ class Database:
             return None
         t1 = time.time()
         with self.engine.connect() as cnxn:
-            try:
-                result = cnxn.execute(text(query.string))
-            except exc.StatementError as ex:
-                query.time = round(time.time() - t1, 4)
-                query.success = False
-                query.result = 'ERROR: {}'.format(ex.orig)
+            sql, _ = prepare(sql)
+            if type(self.engine) is ODBC_Engine:
+                try:
+                    result = cnxn.execute(sql)
+                except pyodbc.Error as ex:
+                    sqlstate = ex.args[1]
+                    sqlstate = sqlstate.replace('[HY000]', '')
+                    sqlstate = sqlstate.replace('[SQLite]', '')
+                    sqlstate = sqlstate.replace('(1)', '')
+                    sqlstate = sqlstate.replace('(SQLExecDirectW)', '')
+                    query.time = round(time.time() - t1, 4)
+                    query.success = False
+                    query.result = 'ERROR: ' + sqlstate.strip()
 
-                return query
+                    return query
+            else:
+                try:
+                    result = cnxn.execute(sql)
+                except exc.StatementError as ex:
+                    query.time = round(time.time() - t1, 4)
+                    query.success = False
+                    query.result = 'ERROR: {}'.format(ex.orig)
+
+                    return query
 
             query.success = True
             query.time = round(time.time() - t1, 4)
 
-            # if cursor.description:
-            if result.returns_rows:
-                if limit:
-                    query.data = result.mappings().fetchmany(limit)
-                else:
-                    query.data = result.mappings().fetchall()
+            if type(self.engine) is ODBC_Engine:
+                returns_rows = result.description
+            else:
+                returns_rows = result.returns_rows
 
+            if returns_rows:
+                if limit:
+                    rows = result.fetchmany(limit)
+                else:
+                    rows = result.fetchall()
+
+                query.data = [to_rec(row) for row in rows]
                 # Find the table selected from
-                query.table = str(sqlglot.parse_one(sql)
+                query.table = str(sqlglot.parse_one(query.string)
                                   .find(sqlglot.exp.Table))
             else:
                 rowcount = result.rowcount

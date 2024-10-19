@@ -5,6 +5,7 @@ from addict import Dict
 from datetime import datetime
 from sqlalchemy import text
 from column import Column
+from util import prepare, to_rec
 
 
 class Record:
@@ -261,8 +262,9 @@ class Record:
         """
 
         with self._db.engine.connect() as cnxn:
-            row = cnxn.execute(text(sql), params).mappings().fetchone()
-        self._cache.vals = row
+            sql, params = prepare(sql, params)
+            row = cnxn.execute(sql, params).fetchone()
+        self._cache.vals = to_rec(row)
 
         return self._cache.vals
 
@@ -287,9 +289,10 @@ class Record:
         sql += " where " + cond
 
         with self._db.engine.connect() as cnxn:
-            row = cnxn.execute(text(sql), self.pkey).mappings().fetchone()
+            sql, params = prepare(sql, self.pkey)
+            row = cnxn.execute(sql, params).fetchone()
 
-        return row
+        return to_rec(row)
 
     def get_children(self):
         from table import Grid
@@ -329,7 +332,8 @@ class Record:
         """
 
         with self.engine.connect() as cnxn:
-            row = cnxn.execute(text(sql), self.pkey).first()
+            sql, params = prepare(sql, self.pkey)
+            row = cnxn.execute(sql, params).fetchone()
 
         return os.path.normpath(row.path)
 
@@ -360,7 +364,8 @@ class Record:
             sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
             with self._db.engine.connect() as cnxn:
-                values[inc_col] = cnxn.execute(text(sql), params).first()[0]
+                sql, params = prepare(sql, params)
+                values[inc_col] = cnxn.execute(sql, params).fetchone()[0]
             self.pkey[inc_col] = values[inc_col]
 
         # Array of values to be inserted
@@ -384,9 +389,10 @@ class Record:
         values ({', '.join([f":{key}" for key in inserts])})
         """
 
-        with self._db.engine.connect() as conn:
-            conn.execute(text(sql), inserts)
-            conn.commit()
+        with self._db.engine.connect() as cnxn:
+            sql, inserts = prepare(sql, inserts)
+            cnxn.execute(sql, inserts)
+            cnxn.commit()
 
         return self.pkey
 
@@ -430,9 +436,10 @@ class Record:
         where {where_str}
         """
 
-        with self._db.engine.connect() as conn:
-            result = conn.execute(text(sql), params)
-            conn.commit()
+        with self._db.engine.connect() as cnxn:
+            sql, params = prepare(sql, params)
+            result = cnxn.execute(sql, params)
+            cnxn.commit()
 
         # Update primary key
         for key, value in values.items():
@@ -456,8 +463,9 @@ class Record:
         where {where_str}
         """
 
-        with self._db.engine.connect() as conn:
-            result = conn.execute(text(sql), self.pkey)
-            conn.commit()
+        with self._db.engine.connect() as cnxn:
+            sql, params = prepare(sql, self.pkey)
+            result = cnxn.execute(sql, params)
+            cnxn.commit()
 
         return result

@@ -8,12 +8,13 @@ from starlette import status
 import io
 import urllib.parse
 import re
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from settings import Settings
 from database import Database
 from table import Table, Grid
 from record import Record
 from field import Field
+from util import prepare
 import json
 import os
 import hashlib
@@ -22,6 +23,7 @@ from jose import jwt
 import time
 import xattr
 from user import User
+from odbc_engine import ODBC_Engine
 
 
 cfg = Settings()
@@ -37,6 +39,8 @@ mod = os.path.getmtime("static/js/dist/bundle.js")
 
 def get_engine(cfg, db_name=None):
     # driver = cfg.driver[cfg.db_system]
+    if cfg.use_odbc:
+        return ODBC_Engine(cfg, db_name)
     if cfg.system != 'duckdb':
         driver = getattr(cfg, f'{cfg.system}_driver')
 
@@ -73,15 +77,15 @@ def get_engine(cfg, db_name=None):
         )
 
     if cfg.system == 'sqlite' and db_name == 'urdr':
-        with engine.connect() as conn:
+        with engine.connect() as cnxn:
             sql = """
             select count(*) from user
             where id = :id and password = :pwd
             """
 
             hashed_pwd = hashlib.sha256(cfg.pwd.encode('utf-8')).hexdigest()
-            params = {'id': cfg.uid, 'pwd': hashed_pwd}
-            count = conn.execute(text(sql), params).first()[0]
+            sql, params = prepare(sql, {'id': cfg.uid, 'pwd': hashed_pwd})
+            count = cnxn.execute(sql, params).fetchone()[0]
 
             if count == 0:
                 raise HTTPException(
@@ -96,7 +100,8 @@ def get_engine(cfg, db_name=None):
     elif cfg.system == 'sqlite' and cfg_default.database == 'urdr':
         with engine.connect() as cnxn:
             path = os.path.join(cfg.host, cfg_default.database + '.db')
-            cnxn.execute(text('ATTACH DATABASE "' + path + '" as urdr'))
+            sql, _ = prepare('ATTACH DATABASE "' + path + '" as urdr')
+            cnxn.execute(sql)
 
     return engine
 
@@ -219,17 +224,20 @@ def dblist(role: str = None):
     else:
         engine = get_engine(cfg)
         if role:
-            with engine.connect() as conn:
-                conn.execute(text('set default role ' + role))
+            with engine.connect() as cnxn:
+                sql, _ = prepare('set default role ' + role)
+                cnxn.execute(sql)
         elif cfg.system in ['mysql', 'mariadb']:
-            sql = 'select current_role()'
-            with engine.connect() as conn:
-                rows = conn.execute(text(sql)).fetchall()
+            with engine.connect() as cnxn:
+                sql, _ = prepare('select current_role()')
+                rows = cnxn.execute(sql).fetchall()
                 role = (None if len(rows) == 0 else rows[0][0]
                         if len(rows) == 1 else 'ALL')
 
                 if role:
-                    conn.execute(text('set role ' + role))
+                    sql, _ = prepare('set role ' + role)
+                    cnxn.execute(sql)
+                    cnxn.commit()
 
         user = User(engine)
         rows = user.databases()
@@ -244,7 +252,8 @@ def dblist(role: str = None):
         # Find if user has useradmin privileges
         if cfg.system in ['mysql', 'mariadb']:
             with engine.connect() as cnxn:
-                rows = cnxn.execute(text('show grants')).fetchall()
+                sql, _ = prepare('show grants')
+                rows = cnxn.execute(sql).fetchall()
             for row in rows:
                 stmt = row[0]
                 matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+",
@@ -280,7 +289,8 @@ def userlist():
               and user not in ('PUBLIC', 'root', 'mariadb.sys', '')
             order by user
             """
-            rows = cnxn.execute(text(sql)).fetchall()
+            sql, _ = prepare(sql)
+            rows = cnxn.execute(sql).fetchall()
 
             for row in rows:
                 user = Dict()
@@ -295,7 +305,8 @@ def userlist():
               and not length(authentication_string)
               and user != 'PUBLIC'
             """
-            rows = cnxn.execute(text(sql)).fetchall()
+            sql, _ = prepare(sql)
+            rows = cnxn.execute(sql).fetchall()
 
             for row in rows:
                 roles.append(row.name)
@@ -319,7 +330,8 @@ def change_role(user: str, host: str, role: str, grant: bool):
     else:
         sql = f'revoke {role} from {user}@{host}'
     with engine.connect() as cnxn:
-        cnxn.execute(text(sql))
+        sql, _ = prepare(sql)
+        cnxn.execute(sql)
         cnxn.commit()
 
 
@@ -333,8 +345,8 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
             return {'data': 'Påloggingsdata mangler. Kontakt administrator.'}
         engine = get_engine(cfg2)
         with engine.connect() as cnxn:
-            sql = f"alter user {cfg.uid}@{cfg.host} identified by '{new_pwd}'"
-            cnxn.execute(text(sql))
+            sql, _ = prepare(f"alter user {cfg.uid}@{cfg.host} identified by '{new_pwd}'")
+            cnxn.execute(sql)
             cnxn.commit()
 
         return {'data': 'Passord endret'}
@@ -344,9 +356,9 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
         urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
         sql = f"update {urdr}.user set password = :pwd where id = :uid"
         pwd = hashlib.sha256(new_pwd.encode('utf-8')).hexdigest()
-        params = {'uid': cfg.uid, 'pwd': pwd}
         with engine.connect() as cnxn:
-            cnxn.execute(text(sql), params)
+            sql, params = prepare(sql, {'uid': cfg.uid, 'pwd': pwd})
+            cnxn.execute(sql, params)
             cnxn.commit()
         return {'data': 'Passord endret'}
 
@@ -358,9 +370,9 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
 def create_user(name: str, pwd: str):
     engine = get_engine(cfg)
     if cfg.system in ['mysql', 'mariadb']:
-        sql = f"create user '{name}'@'{cfg.host}' identified by '{pwd}'"
+        sql, _ = prepare(f"create user '{name}'@'{cfg.host}' identified by '{pwd}'")
         with engine.connect() as cnxn:
-            cnxn.execute(text(sql))
+            cnxn.execute(sql)
             cnxn.commit()
 
         return userlist()
@@ -388,7 +400,7 @@ async def get_table(base: str, table: str, filter: str = None,
         base_path = base or schema
     dbo = Database(engine, base_path, cfg.uid)
     tbl = Table(dbo, table)
-    privilege = dbo.user.table_privilege(base, table)
+    privilege = dbo.user.table_privilege(dbo.schema, table)
     if privilege.select == 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -516,7 +528,6 @@ async def update_cache(base: str, config: str):
 @app.get('/table_sql')
 def export_sql(base: str, dialect: str, table_defs: bool, list_recs: bool,
                data_recs: bool, select_recs: bool, table: str = None):
-    # Fiks alle slike connections
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     if table:

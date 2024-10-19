@@ -1,6 +1,6 @@
 from addict import Dict
 from datatype import Datatype
-from sqlalchemy import text
+from util import prepare
 
 
 class Column:
@@ -9,9 +9,17 @@ class Column:
         self.db = tbl.db
         self.tbl = tbl
         col = Dict(col)
+        if col.default == 'NULL':
+            col.default = None
         self.type = col.type
         for attr in col.keys():
             setattr(self, attr, col[attr])
+        if 'column_size' in col or 'display_size' in col:
+            self.size = col.get('column_size', col.display_size)
+        if 'scale' in col:
+            self.scale = col.scale
+            self.precision = col.precision
+        # These are from SQLAlchemy
         if hasattr(col.type, 'length'):
             self.size = col.type.length
         if hasattr(col.type, 'display_width'):
@@ -27,7 +35,8 @@ class Column:
         """
 
         with self.db.engine.connect() as cnxn:
-            return cnxn.execute(text(sql)).fetchval()
+            sql, _ = prepare(sql)
+            return cnxn.execute(sql).fetcone()[0]
 
     def create_index(self, col_type):
         if col_type not in ['blob', 'clob', 'text']:
@@ -43,7 +52,8 @@ class Column:
             """
 
         with self.db.engine.connect() as cnxn:
-            cnxn.execute(text(sql))
+            sql, _ = prepare(sql)
+            cnxn.execute(sql)
             cnxn.commit()
 
     def check_use(self):
@@ -57,7 +67,8 @@ class Column:
         """
 
         with self.db.engine.connect() as cnxn:
-            count = cnxn.execute(text(sql)).first()[0]
+            sql, _ = prepare(sql)
+            count = cnxn.execute(sql).fetchone()[0]
 
         rowcount = self.tbl.rowcount
         use = (rowcount - count)/rowcount
@@ -78,7 +89,8 @@ class Column:
         """
 
         with self.db.engine.connect() as cnxn:
-            max_in_group = cnxn.execute(text(sql)).first()[0]
+            sql, _ = prepare(sql)
+            max_in_group = cnxn.execute(sql).fetchone()[0]
 
         frequency = max_in_group/self.tbl.rowcount
 

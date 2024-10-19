@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     database: str | None = None
     uid: str | None = None
     pwd: str | None = None
+    use_odbc: bool = False
     mysql_driver: str = 'mysqlconnector'
     mariadb_driver: str = 'mysqlconnector'
     postgresql_driver: str = 'psycopg2'

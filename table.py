@@ -1,6 +1,7 @@
 """Module for handling tables"""
 import datetime
 import pypandoc
+import os
 from addict import Dict
 from record import Record
 from column import Column
@@ -351,30 +352,61 @@ class Table:
 
         return tbl_names
 
-    def get_csv(self, columns):
-        selects = {}
-        for colname in columns:
-            selects[colname] = self.name + '.' + colname
+    def write_tsv(self, filepath, columns = None):
+        if columns:
+            select = ', '.join(columns)
+        else:
+            select = '*'
 
-        grid = Grid(self)
-        records = grid.get_values(selects)
+        blobcolumns = []
+        for fieldname in self.fields:
+            field = self.fields[fieldname]
+            if field.datatype == 'bytes':
+                foldername = self.name + '.' + field.name
+                path = os.path.join(os.path.dirname(filepath), '../documents', foldername)
+                os.makedirs(path, exist_ok=True)
+                blobcolumns.append(field.name)
 
-        content = ';'.join(columns) + '\n'
+        file = open(filepath, 'w')
+        sql = f"select {select} from " + self.name
+        with self.db.engine.connect() as cnxn:
+            sql, _ = prepare(sql)
+            rows = cnxn.execute(sql)
+            n = 0
+            for row in rows:
+                n += 1
+                rec = to_rec(row)
+                if n == 1:
+                    file.write('\t'.join(rec.keys()) + '\n')
+                values = []
+                num_files = 0
+                for col, val in rec.items():
+                    if col in blobcolumns:
+                        num_files += 1
+                        dir = os.path.dirname(filepath)
+                        if self.pkey:
+                            pkey_vals = []
+                            for pkey_col in self.pkey.columns:
+                                pkey_vals.append(str(rec[pkey_col]))
+                            filename = '-'.join(pkey_vals) + '.data'
+                        else:
+                            filename = str(num_files) + '.data'
 
-        for rec in records:
-            values = []
-            for col, val in rec.items():
-                if type(val) is str:
-                    val = val.replace('"', '""')
-                    val = "'" + val + "'"
-                elif val is None:
-                    val = ''
-                else:
-                    val = str(val)
-                values.append(val)
-            content += ';'.join(values) + '\n'
+                        foldername = self.name + '.' + col
+                        path = os.path.join(dir, '../documents', foldername, filename)
+                        with open(path, 'wb') as blobfile:
+                            blobfile.write(val)
+                        val = 'documents/' + foldername + '/' + filename
+                    if type(val) is str:
+                        val = val.replace('\t', ' ')
+                        val = val.replace('\n', ' ')
+                    elif val is None:
+                        val = ''
+                    else:
+                        val = str(val)
+                    values.append(val)
+                file.write('\t'.join(values) + '\n')
 
-        return content
 
     def save(self, records: list):
         """Save new and updated records in table"""
@@ -600,12 +632,13 @@ class Table:
 
         return ddl
 
-    def export_records(self, dialect, select_recs, fkey=None):
+    def write_inserts(self, file, dialect, select_recs, fkey=None):
         """Export records as sql
 
         Parameters:
         select_recs: If records should be selected from existing database
         """
+
         insert = ''
         if fkey and self.db.engine.name in ['mysql', 'postgresql', 'sqlite']:
             cols = self.db.refl.get_columns(self.name, self.db.schema)
@@ -638,18 +671,16 @@ class Table:
 
         with self.db.engine.connect() as cnxn:
             sql, _ = prepare(sql)
-            rows = cnxn.execute(sql).fetchall()
-            recs = [to_rec(row) for row in rows]
+            rows = cnxn.execute(sql)
 
-        if select_recs:
-            insert += f'insert into {self.name}\n'
-            insert += 'select ' + ', '.join(recs.keys())
-            insert += f' from {self.db.schema}.{self.name};\n'
-        else:
+            sql, _ = prepare('select count(*) from ' + self.name)
+            rowcount = cnxn.execute(sql).fetchone()[0]
+
             if dialect != 'oracle':
                 insert += f'insert into {self.name} values '
             i = 0
-            for rec in recs:
+            for row in rows:
+                rec = to_rec(row)
                 if (i > 0 and i % 1000 == 0) or dialect == 'oracle':
                     insert += f'insert into {self.name} values ('
                 else:
@@ -668,18 +699,19 @@ class Table:
                     elif val is None:
                         val = 'null'
                     insert += str(val) + ','
-                if i % 1000 == 0 or dialect == 'oracle':
+                if i % 1000 == 0 or i == rowcount or dialect == 'oracle':
                     insert = insert[:-1] + ');\n\n'
                 else:
                     insert = insert[:-1] + "),\n"
+                file.write(insert)
+                insert = ''
             if dialect == 'oracle':
                 pass
             elif i == 0:
                 insert = '\n'.join(insert.split('\n')[:-1])
-            elif i % 1000 != 0:
-                insert = insert[:-2] + ';\n\n'
+                file.write(insert)
 
-        return insert
+        return 'success'
 
     def convert(self, colname, from_format, to_format):
 

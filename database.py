@@ -65,7 +65,8 @@ class Database:
         else:
             config = Settings()
             self.config = Dict({
-                'norwegian_chars': config.norwegian_chars
+                'norwegian_chars': config.norwegian_chars,
+                'exportdir': config.exportdir
             })
 
     def init_html_attributes(self):
@@ -875,7 +876,17 @@ class Database:
 
         return query
 
-    def export_as_sql(self, dialect: str, table_defs: bool, list_recs: bool,
+    def export_as_tsv(self, tables: str, dir: str):
+        for tbl_name in tables: 
+            table = Table(self, tbl_name)
+            table.offset = 0
+            table.limit = None
+            filepath = os.path.join(dir, tbl_name + '.tsv')
+            result = table.write_tsv(filepath)
+
+        return True
+    
+    def export_as_sql(self, filepath: str, dialect: str, table_defs: bool, list_recs: bool,
                       data_recs: bool, select_recs: bool):
         """Create sql for exporting a database
 
@@ -905,47 +916,59 @@ class Database:
         sorter = TopologicalSorter(graph)
         ordered_tables = tuple(sorter.static_order())
 
-        if table_defs:
-            for view_name in self.refl.get_view_names(self.schema):
-                if dialect == 'oracle':
-                    ddl += f"drop view {view_name};\n"
-                else:
-                    ddl += f"drop view if exists {view_name};\n"
-
-            for tbl_name in reversed(ordered_tables):
-                if dialect == 'oracle':
-                    ddl += f"drop table {tbl_name};\n"
-                else:
-                    ddl += f"drop table if exists {tbl_name};\n"
-
-        for tbl_name in ordered_tables:
-            if tbl_name is None:
-                continue
-            if tbl_name == 'sqlite_sequence':
-                continue
-            table = Table(self, tbl_name)
+        with open(filepath, 'w') as file:
             if table_defs:
-                ddl += table.export_ddl(dialect)
-            if list_recs or data_recs:
-                self_ref = None
-                if tbl_name in self_referring:
-                    self_ref = self_referring[tbl_name]
-                if (
-                    (table.type == 'list' and list_recs) or
-                    (table.type != 'list' and data_recs)
-                ):
-                    ddl += table.export_records(dialect, select_recs, self_ref)
+                for view_name in self.refl.get_view_names(self.schema):
+                    if dialect == 'oracle':
+                        ddl += f"drop view {view_name};\n"
+                    else:
+                        ddl += f"drop view if exists {view_name};\n"
 
-        if table_defs:
-            i = 0
-            for view_name in self.refl.get_view_names(self.schema):
-                if i == 0:
-                    print('\n')
-                i += 1
-                view_def = self.refl.get_view_definition(view_name, self.schema)
-                ddl += view_def + ";\n\n"
+                for tbl_name in reversed(ordered_tables):
+                    if dialect == 'oracle':
+                        ddl += f"drop table {tbl_name};\n"
+                    else:
+                        ddl += f"drop table if exists {tbl_name};\n"
 
-        return ddl
+                file.write(ddl)
+                ddl = ''
+
+            for tbl_name in ordered_tables:
+                if tbl_name is None:
+                    continue
+                if tbl_name == 'sqlite_sequence':
+                    continue
+                if '_fts' in tbl_name:
+                    continue
+                table = Table(self, tbl_name)
+                if table_defs:
+                    file.write(table.export_ddl(dialect))
+                if list_recs or data_recs:
+                    self_ref = None
+                    if tbl_name in self_referring:
+                        self_ref = self_referring[tbl_name]
+                    if (
+                        (table.type == 'list' and list_recs) or
+                        (table.type != 'list' and data_recs)
+                    ):
+                        if select_recs:
+                            file.write(f'insert into {table.name}\n')
+                            file.write(f'select * from {dbo.schema}.{table.name};\n')
+                        else:
+                            table.write_inserts(file, dialect, select_recs, fkey=self_ref)
+
+            if table_defs:
+                i = 0
+                for view_name in self.refl.get_view_names(self.schema):
+                    if i == 0:
+                        print('\n')
+                    i += 1
+                    view_def = self.refl.get_view_definition(view_name, self.schema)
+                    ddl += f'create {view_name} as {view_def} \n\n'
+
+                file.write(ddl)
+
+        return 'success'
 
     def export_as_kdrs_xml(self, version, descr):
         xml = "<views>\n"

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     oracle_driver: str = 'cx_oracle'
     mssql_driver: str = 'pyodbc'
     norwegian_chars: bool = True
+    exportdir: str | None = None
 
     class Config:
         env_prefix = 'urdr_'

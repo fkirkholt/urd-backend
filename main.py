@@ -8,6 +8,8 @@ from starlette import status
 import io
 import urllib.parse
 import re
+import tempfile
+import shutil
 from sqlalchemy import create_engine
 from settings import Settings
 from database import Database
@@ -24,6 +26,7 @@ import time
 import xattr
 from user import User
 from odbc_engine import ODBC_Engine
+from starlette.background import BackgroundTask
 
 
 cfg = Settings()
@@ -36,6 +39,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/dist/bundle.js")
 
+
+def cleanup(temp_file):
+        os.remove(temp_file)
 
 def get_engine(cfg, db_name=None):
     # driver = cfg.driver[cfg.db_system]
@@ -525,45 +531,91 @@ async def update_cache(base: str, config: str):
     return {'sucess': True, 'msg': "Cache oppdatert"}
 
 
-@app.get('/table_sql')
-def export_sql(base: str, dialect: str, table_defs: bool, list_recs: bool,
+@app.get('/export_sql')
+def export_sql(dest: str, base: str, dialect: str, table_defs: bool, list_recs: bool,
                data_recs: bool, select_recs: bool, table: str = None):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
+    download = True if dest == 'download' else False
+    if download:
+        tempdir = tempfile.TemporaryDirectory()
+        dest = tempdir.name
+    else:
+        os.makedirs(dest, exist_ok=True)
+
     if table:
         table = Table(dbo, table)
-        if table_defs:
-            ddl = table.export_ddl(dialect)
-        if (
-            (table.type == 'list' and list_recs) or
-            (table.type != 'list' and data_recs)
-        ):
-            ddl += table.export_records(dialect, select_recs)
-        filename = table.name
+        filepath = os.path.join(dest, table.name + '.sql')
+        with open(filepath, 'w') as file:
+            if table_defs:
+                ddl = table.export_ddl(dialect)
+                file.write(ddl)
+            if (
+                (table.type == 'list' and list_recs) or
+                (table.type != 'list' and data_recs)
+            ):
+                if select_recs:
+                    file.write(f'insert into {table.name}\n')
+                    file.write(f'select * from {dbo.schema}.{table.name};\n')
+                else:
+                    table.write_inserts(file, dialect, select_recs)
+            filename = table.name + '.sql'
     else:
-        ddl = dbo.export_as_sql(dialect, table_defs, list_recs, data_recs, select_recs)
-        filename = base + '.' + dialect
-    response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
-    response.headers["Content-Disposition"] = \
-        f"attachment; filename={filename}.sql"
+        filepath = os.path.join(dest, base + '.' + dialect + '.sql')
+        result = dbo.export_as_sql(filepath, dialect, table_defs, list_recs, data_recs, select_recs)
+        filename = base + '.' + dialect + '.sql'
+
+    if download:
+        with open(filepath, 'r') as file:
+            ddl = file.read()
+
+        response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
+        response.headers["Content-Disposition"] = \
+            f"attachment; filename={filename}"
+    else:
+        response = 'done'
 
     return response
 
 
-@app.get('/table_csv')
-def export_csv(base: str, table: str, fields: str):
+@app.get('/export_tsv')
+def export_tsv(base: str, objects: str, dest: str, table: str = None):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
-    table = Table(dbo, table)
-    table.offset = 0
-    table.limit = None
-    columns = json.loads(urllib.parse.unquote(fields))
-    csv = table.get_csv(columns)
-    response = StreamingResponse(io.StringIO(csv), media_type="txt/csv")
-    response.headers['Content-Disposition'] = \
-        f'attachment; filename={table.name}.csv'
-
-    return response
+    download = True if dest == 'download' else False
+    if download:
+        tempdir = tempfile.TemporaryDirectory()
+        dest = tempdir.name
+    else:
+        if not os.path.exists(dest):
+            os.makedirs(dest)
+    if table:
+        table = Table(dbo, table)
+        table.offset = 0
+        table.limit = None
+        columns = json.loads(urllib.parse.unquote(objects))
+        filepath = os.path.join(dest, 'data', table.name + '.tsv')
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        docpath = os.path.join(dest, 'documents')
+        os.makedirs(docpath, exist_ok=True)
+        result = table.write_tsv(filepath, columns=columns)
+        if download:
+            with open(filepath, 'r') as file:
+                tsv = file.read()
+            response = StreamingResponse(io.StringIO(tsv), media_type="text/tab-separated-values")
+            response.headers['Content-Disposition'] = \
+                f'attachment; filename={table.name}.tsv'
+            return response
+    else:
+        tables = json.loads(urllib.parse.unquote(objects))
+        result = dbo.export_as_tsv(tables, dest)
+        if download:
+            zip_file_path = dest
+            path = shutil.make_archive(dest, 'zip', dest)
+            print('path', path)
+            return FileResponse(path, media_type="application/zip", background=BackgroundTask(cleanup, path))
+               
+    return 'done'
 
 
 @app.get('/kdrs_xml')

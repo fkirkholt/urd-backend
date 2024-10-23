@@ -256,8 +256,17 @@ class Record:
         cond = " and ".join(conds)
         params = {key: val for key, val in self.pkey.items()}
 
+        selects = []
+        for key, field in self._tbl.fields.items():
+            if field.datatype == 'bytes':
+                selects.append(f"length({field.name}) || ' bytes' as {field.name}")
+                continue
+            selects.append(field.name)
+
+        select = ', '.join(selects)
+
         sql = f"""
-        select * from {self._db.schema}.{self._tbl.view}\n
+        select {select} from {self._db.schema}.{self._tbl.view}\n
         where {cond}
         """
 

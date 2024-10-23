@@ -289,6 +289,8 @@ class Grid:
                 continue
             if field.datatype == 'json':
                 continue
+            if field.datatype == 'bytes':
+                continue
             if (
                 [field.name] == self.tbl.pkey.columns
                 and field.datatype == "int"

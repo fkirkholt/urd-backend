@@ -41,7 +41,8 @@ mod = os.path.getmtime("static/js/dist/bundle.js")
 
 
 def cleanup(temp_file):
-        os.remove(temp_file)
+    os.remove(temp_file)
+
 
 def get_engine(cfg, db_name=None):
     # driver = cfg.driver[cfg.db_system]
@@ -562,7 +563,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool, list_recs: 
             filename = table.name + '.sql'
     else:
         filepath = os.path.join(dest, base + '.' + dialect + '.sql')
-        result = dbo.export_as_sql(filepath, dialect, table_defs, list_recs, data_recs, select_recs)
+        dbo.export_as_sql(filepath, dialect, table_defs, list_recs, data_recs, select_recs)
         filename = base + '.' + dialect + '.sql'
 
     if download:
@@ -598,7 +599,7 @@ def export_tsv(base: str, objects: str, dest: str, table: str = None):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         docpath = os.path.join(dest, 'documents')
         os.makedirs(docpath, exist_ok=True)
-        result = table.write_tsv(filepath, columns=columns)
+        table.write_tsv(filepath, columns=columns)
         if download:
             with open(filepath, 'r') as file:
                 tsv = file.read()
@@ -608,13 +609,12 @@ def export_tsv(base: str, objects: str, dest: str, table: str = None):
             return response
     else:
         tables = json.loads(urllib.parse.unquote(objects))
-        result = dbo.export_as_tsv(tables, dest)
+        dbo.export_as_tsv(tables, dest)
         if download:
-            zip_file_path = dest
             path = shutil.make_archive(dest, 'zip', dest)
-            print('path', path)
-            return FileResponse(path, media_type="application/zip", background=BackgroundTask(cleanup, path))
-               
+            return FileResponse(path, media_type="application/zip",
+                                background=BackgroundTask(cleanup, path))
+
     return 'done'
 
 

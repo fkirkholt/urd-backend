@@ -96,7 +96,7 @@ class Column:
 
         return frequency
 
-    def get_def(self, dialect):
+    def get_def(self, dialect, blob_to_varchar=False):
         """Get column definition"""
         size = self.size if hasattr(self, 'size') else None
         if hasattr(self, 'precision') and self.precision is not None:
@@ -105,6 +105,9 @@ class Column:
                 size += "," + str(self.scale)
         datatype = Datatype(self.type.python_type.__name__, size)
         native_type = datatype.to_native_type(self.db.engine.name)
+        # Used to hold file path when exporting blobs as files
+        if blob_to_varchar and native_type == 'blob':
+            native_type = 'varchar(200)'
         coldef = f"    {self.name} {native_type}"
         if not self.nullable:
             coldef += " NOT NULL"

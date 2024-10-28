@@ -600,7 +600,7 @@ class Table:
         cols = self.db.refl.get_columns(self.name, self.db.schema)
         for col in cols:
             column = Column(self, col)
-            coldef = column.get_def(dialect)
+            coldef = column.get_def(dialect, blob_to_varchar=True)
             coldefs.append(coldef)
         ddl += ",\n".join(coldefs)
         if (self.pkey.columns and self.pkey.columns != ['rowid']):

@@ -395,9 +395,10 @@ class Table:
 
                         foldername = self.name + '.' + col
                         path = os.path.join(dir, '../documents', foldername, filename)
-                        with open(path, 'wb') as blobfile:
-                            blobfile.write(val)
-                        val = 'documents/' + foldername + '/' + filename
+                        if val is not None:
+                            with open(path, 'wb') as blobfile:
+                                blobfile.write(val)
+                            val = 'documents/' + foldername + '/' + filename
                     if type(val) is str:
                         val = val.replace('\t', ' ')
                         val = val.replace('\n', ' ')

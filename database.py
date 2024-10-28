@@ -877,12 +877,12 @@ class Database:
         return query
 
     def export_as_tsv(self, tables: str, dir: str):
-        for tbl_name in tables: 
+        for tbl_name in tables:
             table = Table(self, tbl_name)
             table.offset = 0
             table.limit = None
-            filepath = os.path.join(dir, tbl_name + '.tsv')
-            result = table.write_tsv(filepath)
+            filepath = os.path.join(dir, 'data', tbl_name + '.tsv')
+            table.write_tsv(filepath)
 
         return True
     

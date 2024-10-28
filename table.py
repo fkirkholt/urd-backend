@@ -358,6 +358,7 @@ class Table:
         else:
             select = '*'
 
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         blobcolumns = []
         for fieldname in self.fields:
             field = self.fields[fieldname]

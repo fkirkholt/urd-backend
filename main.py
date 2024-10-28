@@ -618,6 +618,13 @@ def export_tsv(base: str, objects: str, dest: str, table: str = None):
     return 'done'
 
 
+@app.put('/import_tsv')
+def import_tsv(base: str, dir: str):
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base, cfg.uid)
+    dbo.import_tsv(dir)
+
+
 @app.get('/kdrs_xml')
 def export_kdrs_xml(base: str, version: str, descr: str):
     engine = get_engine(cfg, base)

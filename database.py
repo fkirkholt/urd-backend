@@ -2,8 +2,10 @@
 import os
 import time
 import re
+import subprocess
+from pathlib import Path
 from graphlib import TopologicalSorter
-from sqlalchemy import text, inspect, exc
+from sqlalchemy import inspect, exc
 import sqlglot
 import simplejson as json
 import pyodbc
@@ -885,7 +887,22 @@ class Database:
             table.write_tsv(filepath)
 
         return True
-    
+
+    def import_tsv(self, dir: str):
+        for filename in os.listdir(dir):
+            tbl_name = Path(filename).stem
+            filepath = os.path.join(dir, filename)
+            result = subprocess.run(['sqlite3',
+                                     self.engine.url.database,
+                                     '-cmd',
+                                     '.mode tabs',
+                                     '.headers on',
+                                     '.import ' + filepath + ' ' + tbl_name],
+                                    capture_output=True)
+
+            print('result', result)
+
+
     def export_as_sql(self, filepath: str, dialect: str, table_defs: bool, list_recs: bool,
                       data_recs: bool, select_recs: bool):
         """Create sql for exporting a database

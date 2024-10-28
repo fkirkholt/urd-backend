@@ -56,7 +56,7 @@ class ODBC_Engine:
         self.string = cnxnstr
         self.url = Dict({
             'username': cfg.uid,
-            'database': db_name
+            'database': path if cfg.system == 'sqlite' else db_name
         })
 
     def connect(self):

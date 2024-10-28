@@ -340,7 +340,7 @@ class Record:
         where {cond}
         """
 
-        with self.engine.connect() as cnxn:
+        with self._db.engine.connect() as cnxn:
             sql, params = prepare(sql, self.pkey)
             row = cnxn.execute(sql, params).fetchone()
 

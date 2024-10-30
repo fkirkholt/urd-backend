@@ -603,6 +603,12 @@ class Table:
             column = Column(self, col)
             coldef = column.get_def(dialect, blob_to_varchar=True)
             coldefs.append(coldef)
+            if str(column.type).lower() == 'blob':
+                self.indexes[f'{self.name}_{column.name}_filepath_idx'] = Dict({
+                    'name': f'{self.name}_{column.name}_filepath_idx',
+                    'columns': [column.name],
+                    'unique': False
+                })
         ddl += ",\n".join(coldefs)
         if (self.pkey.columns and self.pkey.columns != ['rowid']):
             ddl += f",\n    primary key ({', '.join(self.pkey.columns)})"

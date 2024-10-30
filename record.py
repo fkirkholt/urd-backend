@@ -327,8 +327,11 @@ class Record:
 
         return relation['records']
 
-    def get_file_path(self):
-        filepath_idx_name = self._tbl.name + '_filepath_idx'
+    def get_file_path(self, colname):
+        if colname:
+            filepath_idx_name = self._tbl.name + '_' + colname + '_filepath_idx'
+        else:
+            filepath_idx_name = self._tbl.name + '_filepath_idx'
         filepath_idx = self._tbl.indexes.get(filepath_idx_name, None)
         select = " || '/' || ".join(filepath_idx.columns)
         conds = [f"{key} = :{key}" for key in self.pkey]

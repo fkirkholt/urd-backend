@@ -638,13 +638,13 @@ def export_kdrs_xml(base: str, version: str, descr: str):
 
 
 @app.get('/file')
-def get_file(base: str, table: str, pkey: str):
+def get_file(base: str, table: str, pkey: str, column: str = None):
     pkey = json.loads(urllib.parse.unquote(pkey))
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)
     rec = Record(dbo, tbl, pkey)
-    path = rec.get_file_path()
+    path = rec.get_file_path(column)
     path = os.path.join(cfg.host, path)
 
     return FileResponse(path)

@@ -24,6 +24,7 @@ from addict import Dict
 from jose import jwt
 import time
 import xattr
+import pyodbc
 from user import User
 from odbc_engine import ODBC_Engine
 from starlette.background import BackgroundTask
@@ -63,6 +64,11 @@ def get_engine(cfg, db_name=None):
         url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{parts[0]}"
         if len(parts) > 1:
             url += '?service_name=' + parts[1]
+    elif cfg.system == 'mssql':
+        drivers = [x for x in pyodbc.drivers() if 'SQL Server' in x]
+        odbc_driver = drivers[0].replace(' ', '+')
+        url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}/{db_name}"
+        url += f"?driver={odbc_driver}&TrustServerCertificate=Yes"
     else:
         url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}"
         if db_name:

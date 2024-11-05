@@ -546,8 +546,12 @@ class Table:
         """Store Dict of 'has many' relations as attribute of table object"""
         table_name = self.name
         if self.type == 'view':
-            view_def = (self.db.refl
-                        .get_view_definition(self.name, self.db.schema))
+            try:
+                view_def = (self.db.refl
+                            .get_view_definition(self.name, self.db.schema))
+            except Exception as e:
+                view_def = None
+                print(e)
 
             if view_def:
                 # get dialect for SQLGlot

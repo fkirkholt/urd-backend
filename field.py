@@ -207,7 +207,9 @@ class Field:
                     # other pk columns are usually foreign keys
                     cols = [f'{fkey.ref_table_alias}.{col}' for col in index.columns
                             if col not in ref_tbl.pkey.columns[0:-1]]
-                    if self._db.engine.name in ['oracle', 'sqlite']:
+                    if len(cols) == 1:
+                        self.view = cols[0]
+                    elif self._db.engine.name in ['oracle', 'sqlite']:
                         self.view = " || ', ' || ".join(cols)
                     else:
                         self.view = "concat_ws(', ', " + ', '.join(cols) + ")" 

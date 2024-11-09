@@ -7,6 +7,7 @@ class Reflection:
         self.engine = engine
         self.expr = Expression(engine.name)
         self.cat = catalog
+        self.fkeys = None
 
     def get_schema_names(self):
         """Get all schemata in database"""
@@ -18,7 +19,6 @@ class Reflection:
                 rows = cnxn.execute(sql).fetchall()
                 for row in rows:
                     schema_names.append(row[1])
-
 
         if self.engine.name == 'postgres':
             # sql = self.expr.schemata()
@@ -145,7 +145,15 @@ class Reflection:
 
         return result
 
+    def get_foreign_keys(self, tbl_name, schema):
+        if self.fkeys is None:
+            self.fkeys = self.get_multi_foreign_keys(schema)
+
+        return self.fkeys[schema, tbl_name]
+
     def get_multi_foreign_keys(self, schema):
+        if self.fkeys:
+            return self.fkeys
         all_fkeys = Dict()
         with self.engine.connect() as cnxn:
             crsr = cnxn.cursor()
@@ -192,6 +200,8 @@ class Reflection:
                         fkeys[name].referred_schema = row.pktable_schem
                         fkeys[name].referred_table = row.pktable_name
                     all_fkeys[schema, tbl_name] = fkeys.values()
+
+        self.fkeys = all_fkeys
 
         return all_fkeys
 

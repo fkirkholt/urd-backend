@@ -755,7 +755,8 @@ class Database:
                         idx.columns = idx.pop('column_names')
                         idx.pop('dialect_options', None)
 
-                        self._indexes[table][idx.name] = idx
+                        if idx.name and idx.columns != [None]:
+                            self._indexes[table][idx.name] = idx
 
                 for table in self.pkeys:
                     pkey = self.pkeys[table]
@@ -970,7 +971,7 @@ class Database:
                     ):
                         if select_recs:
                             file.write(f'insert into {table.name}\n')
-                            file.write(f'select * from {dbo.schema}.{table.name};\n')
+                            file.write(f'select * from {self.schema}.{table.name};\n')
                         else:
                             table.write_inserts(file, dialect, select_recs, fkey=self_ref)
 
@@ -980,8 +981,14 @@ class Database:
                     if i == 0:
                         print('\n')
                     i += 1
-                    view_def = self.refl.get_view_definition(view_name, self.schema)
-                    ddl += f'create {view_name} as {view_def} \n\n'
+                    try:
+                        # Fails in mssql if user hasn't got permission VIEW DEFINITION
+                        view_def = self.refl.get_view_definition(view_name, self.schema)
+                    except Exception as e:
+                        view_def = None
+                        print(e)
+                    if view_def:
+                        ddl += f'create {view_name} as {view_def}; \n\n'
 
                 file.write(ddl)
 

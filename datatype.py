@@ -42,12 +42,15 @@ class Datatype:
             return 'bit'
         elif self.type == 'bytes':
             return 'varbinary(max)'
+        elif self.type == 'geometry':
+            return 'geometry'
         else:
             raise ValueError(f"Type {self.type} not supported yet")
 
     def get_sqlite_type(self):
         if self.type in ["str"]:
-            return "varchar(" + str(self.size) + ")" if self.size else "text"
+            return ("varchar(" + str(self.size) + ")"
+                    if (self.size and self.size <= 4000) else "text")
         elif self.type in ["date", "datetime", "time"]:
             return self.type
         elif self.type in ["int", "bool"]:

@@ -353,13 +353,9 @@ class Table:
         return tbl_names
 
     def write_tsv(self, filepath, columns = None):
-        if columns:
-            select = ', '.join(columns)
-        else:
-            select = '*'
-
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         blobcolumns = []
+        selects = {}
         for fieldname in self.fields:
             field = self.fields[fieldname]
             if field.datatype == 'bytes':
@@ -367,6 +363,12 @@ class Table:
                 path = os.path.join(os.path.dirname(filepath), '../documents', foldername)
                 os.makedirs(path, exist_ok=True)
                 blobcolumns.append(field.name)
+            if not columns or field.name in columns:
+                selects[field.name] = field.name
+                if field.datatype == 'geometry':
+                    selects[field.name] = f"{field.name}.ToString() as {field.name}"
+
+        select = ', '.join(selects.values())
 
         file = open(filepath, 'w')
         sql = f"select {select} from " + self.name
@@ -408,6 +410,9 @@ class Table:
                         val = str(val)
                     values.append(val)
                 file.write('\t'.join(values) + '\n')
+            file.close()
+            if n == 0:
+                os.remove(filepath)
 
 
     def save(self, records: list):
@@ -605,7 +610,8 @@ class Table:
         cols = self.db.refl.get_columns(self.name, self.db.schema)
         for col in cols:
             column = Column(self, col)
-            coldef = column.get_def(dialect, blob_to_varchar=True)
+            coldef = column.get_def(dialect, blob_to_varchar=True,
+                                    geometry_to_text=True)
             coldefs.append(coldef)
             if str(column.type).lower() == 'blob':
                 self.indexes[f'{self.name}_{column.name}_filepath_idx'] = Dict({

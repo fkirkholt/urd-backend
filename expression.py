@@ -142,22 +142,24 @@ class Expression:
 
     def to_urd_type(self, type_):
         type_ = type_.lower()
-        if re.search("char|text|clob", type_):
+        if re.search("char|text|clob|xml|sysname|uniqueidentifier", type_):
             return "str"
         elif re.search("bool|bit|tinyint", type_):
             return "bool"
         elif re.search("int|number", type_):
             return "int"
         elif re.search("double|decimal|numeric", type_):
-            return "decimal"
-        elif re.search("float", type_):
+            return "Decimal"
+        elif re.search("float|real", type_):
             return "float"
         elif re.search("date|time", type_):
             return "date"
         elif re.search("json", type_):
             return "json"
-        elif type_ == "blob":
-            return "binary"
+        elif re.search("blob|image|binary", type_):
+            return "bytes"
+        elif type_ == "geometry":
+            return "geometry"
         elif type_ == "":
             # view columns are often int
             return "int"

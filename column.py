@@ -96,18 +96,25 @@ class Column:
 
         return frequency
 
-    def get_def(self, dialect, blob_to_varchar=False):
+    def get_def(self, dialect, blob_to_varchar=False, geometry_to_text=False):
         """Get column definition"""
         size = self.size if hasattr(self, 'size') else None
         if hasattr(self, 'precision') and self.precision is not None:
             size = str(self.precision)
             if hasattr(self, 'scale') and self.scale is not None:
                 size += "," + str(self.scale)
-        datatype = Datatype(self.type.python_type.__name__, size)
-        native_type = datatype.to_native_type(self.db.engine.name)
+        if type(self.type) is str: # odbc engine
+            datatype = Datatype(self.db.refl.expr.to_urd_type(self.type), size)
+        else:
+            datatype = Datatype(self.type.python_type.__name__, size)
         # Used to hold file path when exporting blobs as files
-        if blob_to_varchar and native_type == 'blob':
+        if blob_to_varchar and datatype.type == 'bytes':
             native_type = 'varchar(200)'
+        elif geometry_to_text and datatype.type == 'geometry':
+            native_type = 'text'
+        else:
+            native_type = datatype.to_native_type(dialect)
+
         coldef = f"    {self.name} {native_type}"
         if not self.nullable:
             coldef += " NOT NULL"

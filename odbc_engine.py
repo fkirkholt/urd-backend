@@ -11,6 +11,7 @@ class ODBC_Engine:
     def __init__(self, cfg, db_name=None):
         self.name = cfg.system
         self.host = cfg.host
+        self.driver_name = self.name if self.name != 'mssql' else 'sql server'
         driver = self.get_driver()
         cnxnstr = 'Driver={' + driver + '};'
         if cfg.system == 'postgresql' and db_name is None:
@@ -27,8 +28,8 @@ class ODBC_Engine:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + cfg.uid + ';Pwd=' + cfg.pwd + ';'
         pyodbc.lowercase = True
-        if self.name == 'sql server':
-            cnxnstr += 'ENCRYPT=no;MARS_Connection=yes;'
+        if self.name == 'mssql':
+            cnxnstr += 'Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes'
             pyodbc.lowercase = False
         if self.name == 'sqlite':
             pyodbc.lowercase = False
@@ -66,7 +67,7 @@ class ODBC_Engine:
 
     def get_driver(self):
         """Get ODBC driver"""
-        drivers = [d for d in pyodbc.drivers() if self.name in d.lower()]
+        drivers = [d for d in pyodbc.drivers() if self.driver_name in d.lower()]
         drivers.sort(reverse=True, key=lambda x: 'unicode' in x.lower())
 
         try:

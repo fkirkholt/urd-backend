@@ -898,10 +898,10 @@ class Database:
                                      '-cmd',
                                      '.mode tabs',
                                      '.headers on',
-                                     '.import ' + filepath + ' ' + tbl_name],
+                                     ".import '| tail -n +2 " + filepath + "' " + tbl_name],
                                     capture_output=True)
 
-            print('result', result)
+            print('imported', filename)
 
 
     def export_as_sql(self, filepath: str, dialect: str, table_defs: bool, list_recs: bool,

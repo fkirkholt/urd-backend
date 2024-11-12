@@ -9,6 +9,7 @@ from sqlalchemy import inspect, exc
 import sqlglot
 import simplejson as json
 import pyodbc
+from fastapi import HTTPException
 from addict import Dict
 from settings import Settings
 from table import Table
@@ -896,11 +897,16 @@ class Database:
             result = subprocess.run(['sqlite3',
                                      self.engine.url.database,
                                      '-cmd',
-                                     '.mode tabs',
-                                     '.headers on',
+                                     '.mode ascii',
+                                     '.separator "\t" "\n"',
                                      ".import '| tail -n +2 " + filepath + "' " + tbl_name],
                                     capture_output=True)
 
+            if result.returncode:
+                print('result', result)
+                raise HTTPException(
+                    status_code=404, detail="Import failed for " + filename
+                )
             print('imported', filename)
 
 

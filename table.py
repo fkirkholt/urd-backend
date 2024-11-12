@@ -401,6 +401,8 @@ class Table:
                             with open(path, 'wb') as blobfile:
                                 blobfile.write(val)
                             val = 'documents/' + foldername + '/' + filename
+                    if type(val) is bool:
+                        val = int(val)
                     if type(val) is str:
                         val = val.replace('\t', ' ')
                         val = val.replace('\n', ' ')

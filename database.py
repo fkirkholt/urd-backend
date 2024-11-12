@@ -870,6 +870,14 @@ class Database:
                 # Find the table selected from
                 query.table = str(sqlglot.parse_one(query.string)
                                   .find(sqlglot.exp.Table))
+
+                # Get table name in correct case
+                tbl_names = self.refl.get_table_names(self.schema)
+                for tbl_name in tbl_names:
+                    if tbl_name.lower() == query.table.lower():
+                        query.table = tbl_name
+                        break
+
             else:
                 rowcount = result.rowcount
 

@@ -53,8 +53,10 @@ class Datatype:
                     if (self.size and self.size <= 4000) else "text")
         elif self.type in ["date", "datetime", "time"]:
             return self.type
-        elif self.type in ["int", "bool"]:
+        elif self.type == "int":
             return "integer"
+        elif self.type == "bool":
+            return "boolean"
         elif self.type == "Decimal":
             return f"numeric({str(self.size)})" if self.size else "numeric"
         elif self.type == "float":

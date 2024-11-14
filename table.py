@@ -599,8 +599,11 @@ class Table:
                 """)
 
                 with self.db.engine.connect() as cnxn:
-                    count = cnxn.execute(sql).first()[0]
+                    sql, _ = prepare(sql)
+                    count = cnxn.execute(sql).fetchone()[0]
 
+                if not hasattr(self, 'rowcount'):
+                    self.rowcount = self.count_rows()
                 relations[name].use = count/self.rowcount if self.rowcount > 0 else 0
 
         self._relations = relations

@@ -53,8 +53,12 @@ class Column:
 
         with self.db.engine.connect() as cnxn:
             sql, _ = prepare(sql)
-            cnxn.execute(sql)
-            cnxn.commit()
+
+            try:
+                cnxn.execute(sql)
+                cnxn.commit()
+            except Exception as e:
+                print(e)
 
     def check_use(self):
         """Check ratio of columns that's not null"""

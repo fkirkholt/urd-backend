@@ -618,7 +618,17 @@ class Table:
             coldef = column.get_def(dialect, blob_to_varchar=True,
                                     geometry_to_text=True)
             coldefs.append(coldef)
-            if str(column.type).lower() == 'blob':
+
+            if type(column.type) is str:  # odbc engine
+                datatype = self.db.refl.expr.to_urd_type(col.type)
+            else:
+                try:
+                    datatype = col.type.python_type.__name__
+                except Exception:
+                    datatype = ('int' if str(col.type).startswith('YEAR')
+                                else 'unknown')
+
+            if datatype == 'bytes':
                 self.indexes[f'{self.name}_{column.name}_filepath_idx'] = Dict({
                     'name': f'{self.name}_{column.name}_filepath_idx',
                     'columns': [column.name],

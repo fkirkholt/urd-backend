@@ -12,7 +12,6 @@ def prepare(sql, params={}):
     if cfg.use_odbc:
         p = re.compile(r'(?<!:)\:\w*\b')
         placeholders = p.findall(sql)
-        print('placeholders', placeholders)
         sql_prep = re.sub(r'(?<!:)\:\w*\b', '?', sql)
         if type(params) is not list:
             params_prep = []
@@ -23,8 +22,6 @@ def prepare(sql, params={}):
     else:
         sql_prep = text(sql)
 
-    print('sql_prep', sql_prep)
-    print('params_prep', params_prep)
     return sql_prep, params_prep
 
 

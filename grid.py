@@ -618,11 +618,14 @@ class Grid:
                     field_parts = field_expr.split('.')
                     tbl_alias = field_parts[0]
                     field_name = field_parts[1]
-                    field = None
-                    for fkey in self.tbl.fkeys.values():
-                        if fkey.ref_table_alias == tbl_alias:
-                            tbl = Table(self.db, fkey.referred_table)
-                            field = tbl.fields[field_name] 
+                    if tbl_alias == self.tbl.name:
+                        field = self.tbl.fields[field_name]
+                    else:
+                        field = None
+                        for fkey in self.tbl.fkeys.values():
+                            if fkey.ref_table_alias == tbl_alias:
+                                tbl = Table(self.db, fkey.referred_table)
+                                field = tbl.fields[field_name] 
 
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")

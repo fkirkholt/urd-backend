@@ -63,14 +63,14 @@ class Table:
             cols = self.db.columns[self.name]
             for col in cols:
                 if col['name'] == colname:
-                    pkey_col = Dict(col)
+                    pkey_col = Column(self, col)
                     break
             if type(pkey_col.type) is str:
                 pkey_col_type = self.db.refl.expr.to_urd_type(pkey_col.type)
             else:
                 pkey_col_type = pkey_col.type.python_type.__name__
-            if hasattr(pkey_col.type, 'length'):
-                pkey_col_length = pkey_col.type.length
+            if hasattr(pkey_col, 'size'):
+                pkey_col_length = pkey_col.size
 
         self._type = self.main_type
 
@@ -83,11 +83,13 @@ class Table:
         elif (
             (pkey_col_type == 'str' and pkey_col_length and pkey_col_length < 10) or (
                 pkey_col and (
-                    'TINYINT' in str(pkey_col.type) or
-                    'SMALLINT' in str(pkey_col.type) or
-                    'MEDIUMINT' in str(pkey_col.type) or (
-                        'NUMERIC' in str(pkey_col.type) and
-                        (pkey_col.type.scale is not None or pkey_col.type.precision < 10)
+                    'tinyint' in str(pkey_col.type).lower() or
+                    'smallint' in str(pkey_col.type).lower() or
+                    'mediumint' in str(pkey_col.type).lower() or (
+                        'numeric' in str(pkey_col.type) and (
+                            getattr(pkey_col, 'scale', None) or
+                            pkey_col.precision < 10
+                        )
                     )
                 )
             )

@@ -112,6 +112,7 @@ class Reflection:
             col.type = row.type_name
             col.nullable = row.nullable
             col.default = row.column_def
+            col.size = row.column_size
             if (schema, row.table_name) not in result:
                 result[(schema, row.table_name)] = []
             result[(schema, row.table_name)].append(col)
@@ -140,7 +141,7 @@ class Reflection:
             col.type = row.type_name
             col.nullable = row.nullable
             col.default = row.column_def
-            col.column_size = row.column_size
+            col.size = row.column_size
             result.append(col)
 
         return result

@@ -14,8 +14,8 @@ class Column:
         self.type = col.type
         for attr in col.keys():
             setattr(self, attr, col[attr])
-        if 'column_size' in col or 'display_size' in col:
-            self.size = col.get('column_size', col.display_size)
+        if 'size' in col:
+            self.precision = col.size
         if 'scale' in col:
             self.scale = col.scale
             self.precision = col.precision

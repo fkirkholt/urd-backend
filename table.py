@@ -407,6 +407,8 @@ class Table:
                         val = int(val)
                     if type(val) is str:
                         val = val.replace('\t', ' ')
+                        val = val.replace('\r\n', ' ')
+                        val = val.replace('\r', ' ')
                         val = val.replace('\n', ' ')
                     elif val is None:
                         val = ''

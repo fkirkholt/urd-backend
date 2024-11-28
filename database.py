@@ -2,14 +2,14 @@
 import os
 import time
 import re
-import subprocess
+import csv
+import sys
 from pathlib import Path
 from graphlib import TopologicalSorter
 from sqlalchemy import inspect, exc
 import sqlglot
 import simplejson as json
 import pyodbc
-from fastapi import HTTPException
 from addict import Dict
 from settings import Settings
 from table import Table
@@ -899,24 +899,46 @@ class Database:
         return True
 
     def import_tsv(self, dir: str):
+
+        # Increase CSV field size limit to maximim possible
+        # https://stackoverflow.com/a/15063941
+        field_size_limit = sys.maxsize
+
+        while True:
+            try:
+                csv.field_size_limit(field_size_limit)
+                break
+            except OverflowError:
+                field_size_limit = int(field_size_limit / 10)
+
         for filename in os.listdir(dir):
             tbl_name = Path(filename).stem
             filepath = os.path.join(dir, filename)
-            result = subprocess.run(['sqlite3',
-                                     self.engine.url.database,
-                                     '-cmd',
-                                     '.mode ascii',
-                                     '.separator "\t" "\n"',
-                                     ".import '| tail -n +2 " + filepath + "' " + tbl_name],
-                                    capture_output=True)
 
-            if result.returncode:
-                print('result', result)
-                raise HTTPException(
-                    status_code=404, detail="Import failed for " + filename
-                )
-            print('imported', filename)
+            cols = self.refl.get_columns(tbl_name, self.schema)
+            mandatory = [col.name for col in cols if not col.nullable]
+            
+            with open(filepath) as file:
+                print('importing', filename)
+                records = csv.DictReader(file, delimiter="\t")
 
+                with self.engine.connect() as cnxn:
+
+                    i = 0
+                    for rec in records:
+                        i += 1
+                        if i == 1:
+                            # Don't import header line
+                            continue
+                        count = len(rec)
+                        placeholders = '?,' * (count-1) + '?'
+                        sql = f'insert into {tbl_name} values ({placeholders})'
+                        sql, _ = prepare(sql)
+                        vals = [v if (v != '' or k in mandatory) else None
+                                for k, v in rec.items()]
+                        cnxn.execute(sql, vals)
+
+                    cnxn.commit()
 
     def export_as_sql(self, filepath: str, dialect: str, table_defs: bool, list_recs: bool,
                       data_recs: bool, select_recs: bool):

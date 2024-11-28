@@ -8,18 +8,25 @@ class Column:
     def __init__(self, tbl, col):
         self.db = tbl.db
         self.tbl = tbl
+        self.size = None
         col = Dict(col)
         if col.default == 'NULL':
             col.default = None
         self.type = col.type
         for attr in col.keys():
             setattr(self, attr, col[attr])
-        if 'size' in col:
-            self.precision = col.size
-        if 'scale' in col:
-            self.scale = col.scale
-            self.precision = col.precision
-        # These are from SQLAlchemy
+        # Get size, scale and precision for odbc connection
+        if type(col.type) is str and '(' in col.type:
+            urd_type = self.db.refl.expr.to_urd_type(col.type)
+            size = col.type.split('(')[1].strip(')')
+            if urd_type == 'str':
+                self.size = int(size)
+            else:
+                size_parts = size.split(',')
+                self.precision = int(size_parts[0])
+                if len(size_parts) == 2:
+                    self.scale = int(size_parts[1])
+        # Get size, scale and precision for SQLAlchemy
         if hasattr(col.type, 'length'):
             self.size = col.type.length
         if hasattr(col.type, 'display_width'):

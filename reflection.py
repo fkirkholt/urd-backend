@@ -141,7 +141,6 @@ class Reflection:
             col.type = row.type_name
             col.nullable = row.nullable
             col.default = row.column_def
-            col.size = row.column_size
             result.append(col)
 
         return result

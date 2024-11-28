@@ -121,16 +121,17 @@ class Datatype:
             return "json"
 
     def get_oracle_type(self):
+
         if (self.type == "str" and (not self.size or self.size > 4000)):
             return "clob"
         elif self.type == "str":
             return "varchar(" + str(self.size) + ")"
-        elif (self.type == "int" and self.size > 11):
+        elif (self.type == "int" and self.size and self.size > 11):
             return "number(" + str(self.size) + ", 0)"
         elif self.type == "int":
             return "integer"
         elif self.type == "float":
-            if ',' in self.size:
+            if self.size and ',' in self.size:
                 return f"number({self.size})"
             elif self.size:
                 return "float(" + str(self.size) + ")"

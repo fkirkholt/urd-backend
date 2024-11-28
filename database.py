@@ -924,12 +924,7 @@ class Database:
 
                 with self.engine.connect() as cnxn:
 
-                    i = 0
                     for rec in records:
-                        i += 1
-                        if i == 1:
-                            # Don't import header line
-                            continue
                         count = len(rec)
                         placeholders = '?,' * (count-1) + '?'
                         sql = f'insert into {tbl_name} values ({placeholders})'

@@ -967,6 +967,10 @@ class Database:
         ordered_tables = tuple(sorter.static_order())
 
         with open(filepath, 'w') as file:
+            if dialect == 'oracle':
+                file.write("SET DEFINE OFF;\n")
+                file.write("SET FEEDBACK OFF;\n")
+                file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
             if table_defs:
                 for view_name in self.refl.get_view_names(self.schema):
                     if dialect == 'oracle':
@@ -982,6 +986,9 @@ class Database:
 
                 file.write(ddl)
                 ddl = ''
+
+            if dialect == 'oracle':
+                file.write('WHENEVER SQLERROR EXIT 1;\n')
 
             for tbl_name in ordered_tables:
                 if tbl_name is None:
@@ -1001,6 +1008,8 @@ class Database:
                         (table.type == 'list' and list_recs) or
                         (table.type != 'list' and data_recs)
                     ):
+                        if dialect == 'oracle':
+                            file.write(f'prompt inserts into {table.name}\n')
                         if select_recs:
                             file.write(f'insert into {table.name}\n')
                             file.write(f'select * from {self.schema}.{table.name};\n')

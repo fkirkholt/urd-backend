@@ -732,8 +732,11 @@ class Table:
                         val = "'" + val.replace("'", "''") + "'"
                     elif isinstance(val, datetime.date):
                         val = "'" + str(val) + "'"
-                    elif (col.datatype == 'bool' and type(val) is int):
-                        val = 'FALSE' if val == 0 else 'TRUE'
+                    elif (col.datatype == 'bool' and dialect == 'oracle'):
+                        if val is False:
+                            val = 0
+                        elif val is True:
+                            val = 1
                     elif val is None:
                         val = 'null'
                     insert += str(val) + ','

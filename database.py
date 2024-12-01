@@ -935,8 +935,9 @@ class Database:
 
                     cnxn.commit()
 
-    def export_as_sql(self, filepath: str, dialect: str, table_defs: bool, list_recs: bool,
-                      data_recs: bool, select_recs: bool):
+    def export_as_sql(self, filepath: str, dialect: str, table_defs: bool,
+                      no_fkeys: bool, list_recs: bool, data_recs: bool,
+                      select_recs: bool):
         """Create sql for exporting a database
 
         Parameters:
@@ -991,7 +992,7 @@ class Database:
                     continue
                 table = Table(self, tbl_name)
                 if table_defs:
-                    file.write(table.export_ddl(dialect))
+                    file.write(table.export_ddl(dialect, no_fkeys))
                 if list_recs or data_recs:
                     self_ref = None
                     if tbl_name in self_referring:

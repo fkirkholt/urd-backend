@@ -612,7 +612,7 @@ class Table:
 
         self._relations = relations
 
-    def export_ddl(self, dialect):
+    def export_ddl(self, dialect, no_fkeys):
         """Return ddl for table"""
         ddl = f"\ncreate table {self.name} (\n"
         coldefs = []
@@ -642,11 +642,12 @@ class Table:
         if (self.pkey.columns and self.pkey.columns != ['rowid']):
             ddl += f",\n    primary key ({', '.join(self.pkey.columns)})"
 
-        for fkey in self.fkeys.values():
-            ddl += ",\n    foreign key ("
-            ddl += ", ".join(fkey.constrained_columns) + ") "
-            ddl += f"references {fkey.referred_table}("
-            ddl += ", ".join(fkey.referred_columns) + ")"
+        if not no_fkeys:
+            for fkey in self.fkeys.values():
+                ddl += ",\n    foreign key ("
+                ddl += ", ".join(fkey.constrained_columns) + ") "
+                ddl += f"references {fkey.referred_table}("
+                ddl += ", ".join(fkey.referred_columns) + ")"
         ddl += ");\n\n"
 
         index_written = False

@@ -543,8 +543,9 @@ async def update_cache(base: str, config: str):
 
 
 @app.get('/export_sql')
-def export_sql(dest: str, base: str, dialect: str, table_defs: bool, list_recs: bool,
-               data_recs: bool, select_recs: bool, table: str = None):
+def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
+               no_fkeys: bool, list_recs: bool, data_recs: bool,
+               select_recs: bool, table: str = None):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     download = True if dest == 'download' else False
@@ -573,7 +574,8 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool, list_recs: 
             filename = table.name + '.sql'
     else:
         filepath = os.path.join(dest, base + '.' + dialect + '.sql')
-        dbo.export_as_sql(filepath, dialect, table_defs, list_recs, data_recs, select_recs)
+        dbo.export_as_sql(filepath, dialect, table_defs, no_fkeys,
+                          list_recs, data_recs, select_recs)
         filename = base + '.' + dialect + '.sql'
 
     if download:

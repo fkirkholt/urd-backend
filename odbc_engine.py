@@ -27,7 +27,6 @@ class ODBC_Engine:
             if len(srv_parts) == 2:
                 cnxnstr += 'Port=' + srv_parts[1] + ';'
         cnxnstr += 'Uid=' + cfg.uid + ';Pwd=' + cfg.pwd + ';'
-        pyodbc.lowercase = True
         if self.name == 'mssql':
             cnxnstr += 'Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes'
             pyodbc.lowercase = False

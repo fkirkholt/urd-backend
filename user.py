@@ -370,9 +370,8 @@ class User:
             if row.db_owner == self.name:
                 self._is_admin[schema] = True
 
-        elif self.engine.name == 'oracle':
-            if self.user.name == self.db.schema:
-                self._is_admin['schema'] = True
+        elif self.engine.name == 'oracle' and self.name == schema:
+            self._is_admin[schema] = True
         else:
             self._is_admin[schema] = True
 

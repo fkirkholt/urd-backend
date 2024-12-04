@@ -137,9 +137,10 @@ class Expression:
     def indexes(self):
         if self.platform == 'oracle':
             return """
-            select i.index_name,
-            case uniqueness when 'NONUNIQUE' then 1 else 0 end as non_unique,
-            lower(column_name) as column_name, column_position, i.table_name
+            select i.index_name as "index_name",
+            case uniqueness when 'NONUNIQUE' then 1 else 0 end as "non_unique",
+            column_name as "column_name", column_position as "column_position",
+            i.table_name as "table_name"
             from all_indexes i
             join all_ind_columns col on col.index_name = i.index_name
             where i.table_owner = ?
@@ -286,10 +287,10 @@ class Expression:
     def columns(self):
         if self.platform == 'oracle':
             return """
-            select  lower(table_name) as table_name,
-                    lower(column_name) as column_name,
-                    data_type as type_name, data_length as column_size,
-                    case nullable when 'Y' then 1 else 0 end as nullable
+            select  table_name as "table_name",
+                    column_name as "column_name",
+                    data_type as "type_name", data_length as "column_size",
+                    case nullable when 'Y' then 1 else 0 end as "nullable"
             from all_tab_columns
             where owner = ? and table_name = nvl(?, table_name) and
                   column_name = nvl(?, column_name)

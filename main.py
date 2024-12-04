@@ -559,8 +559,16 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
         table = Table(dbo, table)
         filepath = os.path.join(dest, table.name + '.sql')
         with open(filepath, 'w') as file:
+            if dialect == 'oracle':
+                file.write("SET DEFINE OFF;\n")
+                file.write("SET FEEDBACK OFF;\n")
+                file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
             if table_defs:
-                ddl = table.export_ddl(dialect)
+                if dialect == 'oracle':
+                    ddl = f'drop table {table.name};\n'
+                else:
+                    ddl = f'drop table if exists {table.name};\n'
+                ddl += table.export_ddl(dialect, no_fkeys)
                 file.write(ddl)
             if (
                 (table.type == 'list' and list_recs) or
@@ -570,6 +578,8 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     file.write(f'insert into {table.name}\n')
                     file.write(f'select * from {dbo.schema}.{table.name};\n')
                 else:
+                    if dialect == 'oracle':
+                        file.write('WHENEVER SQLERROR EXIT 1;\n')
                     table.write_inserts(file, dialect, select_recs)
             filename = table.name + '.sql'
     else:

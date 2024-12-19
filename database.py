@@ -1015,6 +1015,8 @@ class Database:
                             file.write(f'select * from {self.schema}.{table.name};\n')
                         else:
                             table.write_inserts(file, dialect, select_recs, fkey=self_ref)
+                if table_defs:
+                    file.write(table.get_indexes_ddl())
 
             if table_defs:
                 i = 0

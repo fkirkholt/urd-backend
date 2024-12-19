@@ -650,6 +650,10 @@ class Table:
                 ddl += ", ".join(fkey.referred_columns) + ")"
         ddl += ");\n\n"
 
+        return ddl
+
+    def get_indexes_ddl(self):
+        ddl = ''
         index_written = False
         for idx in self.indexes.values():
             if idx.unique and idx.columns == self.pkey.columns:
@@ -714,13 +718,28 @@ class Table:
             sql, _ = prepare('select count(*) from ' + self.name)
             rowcount = cnxn.execute(sql).fetchone()[0]
 
-            if dialect != 'oracle':
+            if dialect == 'oracle':
+                insert += f'insert into {self.name}\n'
+            else:
                 insert += f'insert into {self.name} values '
             i = 0
+            # Insert time grows exponentially with number of inserts
+            # per `insert all` in Oracle after a certain value.
+            # This value is around 50 for version 19c
+            max = 50 if dialect == 'oracle' else 1000;
             for row in rows:
                 rec = to_rec(row)
-                if (i > 0 and i % 1000 == 0) or dialect == 'oracle':
-                    insert += f'insert into {self.name} values ('
+                if (i > 0 and i % max == 0):
+                    if dialect == 'oracle':
+                        if i % 10000 == 0:
+                            insert += 'commit;\n\n'
+                            insert += f'prompt {i} of {rowcount}\n'
+                        insert += f'insert into {self.name}\n'
+                        insert += 'select '
+                    else:
+                        insert += f'insert into {self.name} values ('
+                elif dialect == 'oracle':
+                    insert += 'select '
                 else:
                     insert += '('
                 i += 1
@@ -740,8 +759,13 @@ class Table:
                     elif val is None:
                         val = 'null'
                     insert += str(val) + ','
-                if i % 1000 == 0 or i == rowcount or dialect == 'oracle':
-                    insert = insert[:-1] + ');\n\n'
+                if i % max == 0 or i == rowcount:
+                    if dialect == 'oracle':
+                        insert = insert[:-1] + ' from dual;\n\n'
+                    else:
+                        insert = insert[:-1] + ');\n\n'
+                elif dialect == 'oracle':
+                    insert = insert[:-1] + ' from dual union all\n'
                 else:
                     insert = insert[:-1] + "),\n"
                 file.write(insert)

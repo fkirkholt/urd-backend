@@ -581,6 +581,9 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     if dialect == 'oracle':
                         file.write('WHENEVER SQLERROR EXIT 1;\n')
                     table.write_inserts(file, dialect, select_recs)
+            if table_defs:
+                ddl = table.get_indexes_ddl()
+                file.write(ddl)
             filename = table.name + '.sql'
     else:
         filepath = os.path.join(dest, base + '.' + dialect + '.sql')

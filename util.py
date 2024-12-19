@@ -27,7 +27,11 @@ def prepare(sql, params={}):
 
 def to_rec(row):
     if cfg.use_odbc:
-        cols = [col[0] for col in row.cursor_description]
+        # Fixes additional characters at end of column names
+        # This happens with special unicode characters in column name
+        cols = [col[0] if '\x00' not in col[0]
+                else col[0][:col[0].index('\x00')]
+                for col in row.cursor_description]
         return Dict(zip(cols, row))
     else:
         return Dict(dict(row._mapping))

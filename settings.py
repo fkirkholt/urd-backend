@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     sqlite_driver: str = 'pysqlite'
     oracle_driver: str = 'cx_oracle'
     mssql_driver: str = 'pyodbc'
-    norwegian_chars: bool = True
+    norwegian_chars: bool = False
     exportdir: str | None = None
 
     class Config:

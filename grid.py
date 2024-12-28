@@ -595,8 +595,10 @@ class Grid:
                 value = parts[2].replace("*", "%")
 
                 if (
-                    (field and field.datatype in ['int', 'Decimal']) or
-                    (not field and value.replace('.', '', 1).isdigit())
+                    value and (
+                        (field and field.datatype in ['int', 'Decimal']) or
+                        (not field and value.replace('.', '', 1).isdigit())
+                    )
                 ):
                     value = float(value)
                 else:
@@ -617,8 +619,10 @@ class Grid:
                     expr = f"{field_expr} IN (" + ', '.join(placeholders) + ')'
                 else:
                     mark = field_expr.replace('.', '_').replace('__', '_')
-                    expr = f"{field_expr} {operator} :{mark}"
-                    self.cond.params[mark] = value
+                    expr = f"{field_expr} {operator}"
+                    if operator not in ['IS NULL', 'IS NOT NULL']:
+                        expr += f" :{mark}"
+                        self.cond.params[mark] = value
                 self.cond.prep_stmnts.append(expr)
 
     def get_cond_expr(self):

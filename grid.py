@@ -17,7 +17,6 @@ class Grid:
         })
         self.compressed = False
         self.access_check = False
-        self.show_all_levels = False
         self.is_relation = False
 
     def get_select_expression(self, col):
@@ -79,21 +78,7 @@ class Grid:
         expansion_column = self.get_expansion_column()
         if expansion_column:
             fkey = self.tbl.get_parent_fk()
-            rel_column = fkey.constrained_columns[-1]
-            ref_column = fkey.referred_columns[-1]
-            if not self.show_all_levels:
-                selects['count_children'] = self.select_children_count(fkey)
-
-            # Filters on highest level if not chosen to show all levels
-            if (
-                fkey.ref_table_alias not in self.cond.params and
-                self.show_all_levels is False and not self.is_relation
-            ):
-                expr = f"""
-                    ({self.tbl.view}.{rel_column} IS NULL
-                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column})
-                """
-                self.cond.prep_stmnts.append(expr)
+            selects['count_children'] = self.select_children_count(fkey)
 
         if self.actions:
             for key, action in self.actions.items():
@@ -183,10 +168,7 @@ class Grid:
 
         for idx, col in enumerate(fkey.constrained_columns):
             prim = fkey.referred_columns[idx]
-            if col == fkey.constrained_columns[-1]:
-                wheres.append(f"{col} != {prim} and {col} = {self.tbl.name}.{prim}")
-            else:
-                wheres.append(f"{col} = {self.tbl.name}.{prim}")
+            wheres.append(f"{col} = {self.tbl.name}.{prim}")
 
         where = ' and '.join(wheres)
 
@@ -199,17 +181,13 @@ class Grid:
         return sql
 
     def get_expansion_column(self):
-        """Return column that should expand a hierarchic table"""
-        self_relation = False
+        """Return column that defines a hierarchic table"""
         for rel in self.tbl.relations.values():
             if rel.table_name == self.tbl.name:
-                self_relation = True
-                break
 
-        if not self_relation:
-            return None
-        else:
-            return self.columns[0]
+                return rel.constrained_columns[-1]
+
+        return None
 
     @property
     def actions(self):
@@ -380,20 +358,6 @@ class Grid:
 
     def get_rowcount(self):
         """Return rowcount for grid"""
-        expansion_column = self.get_expansion_column()
-        if expansion_column:
-            fkey = self.tbl.get_parent_fk()
-            rel_column = fkey.constrained_columns[-1]
-            ref_column = fkey.referred_columns[-1]
-            if (
-                fkey.ref_table_alias not in self.cond.params and
-                self.show_all_levels is False and not self.is_relation
-            ):
-                expr = f"""
-                    ({self.tbl.view}.{rel_column} IS NULL
-                    or {self.tbl.view}.{rel_column} = {self.tbl.view}.{ref_column})
-                """
-                self.cond.prep_stmnts.append(expr)
 
         conds = self.get_cond_expr()
 

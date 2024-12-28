@@ -407,7 +407,6 @@ def db_info(base: str):
 @app.get("/table")
 async def get_table(base: str, table: str, filter: str = None,
                     limit: int = 30, offset: int = 0,
-                    show_all_levels: bool = False,
                     schema: str = None, sort: str = None,
                     compressed: bool = False, prim_key: str = None):
     engine = get_engine(cfg, base)
@@ -424,7 +423,6 @@ async def get_table(base: str, table: str, filter: str = None,
             detail="No access"
         )
     grid = Grid(tbl)
-    grid.show_all_levels = show_all_levels
     tbl.limit = limit
     tbl.offset = offset
 

@@ -318,9 +318,6 @@ class Record:
             expr = f'"{rel.table_name}"."{foreign}" = :{mark}'
             grid.cond.prep_stmnts.append(expr)
             grid.cond.params[mark] = value
-            if colname == rel.referred_columns[-1]:
-                expr = f'"{rel.table_name}"."{foreign}" != "{rel.table_name}"."{primary}"'
-                grid.cond.prep_stmnts.append(expr)
 
         grid.is_relation = True
         relation = grid.get()

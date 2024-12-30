@@ -888,16 +888,6 @@ class Database:
 
         return query
 
-    def export_as_tsv(self, tables: str, dir: str):
-        for tbl_name in tables:
-            table = Table(self, tbl_name)
-            table.offset = 0
-            table.limit = None
-            filepath = os.path.join(dir, 'data', tbl_name + '.tsv')
-            table.write_tsv(filepath)
-
-        return True
-
     def import_tsv(self, dir: str):
 
         # Increase CSV field size limit to maximim possible
@@ -935,21 +925,9 @@ class Database:
 
                     cnxn.commit()
 
-    def export_as_sql(self, filepath: str, dialect: str, table_defs: bool,
-                      no_fkeys: bool, list_recs: bool, data_recs: bool,
-                      select_recs: bool):
-        """Create sql for exporting a database
-
-        Parameters:
-        dialect: The sql dialect used (mysql, postgresql, sqlite)
-        include_recs: If records should be included
-        select_recs: If included records should be selected from
-                     existing database
-        """
-        ddl = ''
+    def sorted_tbl_names(self):
         graph = {}
         self_referring = {}
-
         tbl_names = self.refl.get_table_names(self.schema)
 
         # Make graph to use in topologic sort
@@ -966,76 +944,7 @@ class Database:
         sorter = TopologicalSorter(graph)
         ordered_tables = tuple(sorter.static_order())
 
-        with open(filepath, 'w') as file:
-            if dialect == 'oracle':
-                file.write("SET DEFINE OFF;\n")
-                file.write("SET FEEDBACK OFF;\n")
-                file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
-            if table_defs:
-                for view_name in self.refl.get_view_names(self.schema):
-                    if dialect == 'oracle':
-                        ddl += f"drop view {view_name};\n"
-                    else:
-                        ddl += f"drop view if exists {view_name};\n"
-
-                for tbl_name in reversed(ordered_tables):
-                    if dialect == 'oracle':
-                        ddl += f"drop table {tbl_name};\n"
-                    else:
-                        ddl += f"drop table if exists {tbl_name};\n"
-
-                file.write(ddl)
-                ddl = ''
-
-            if dialect == 'oracle':
-                file.write('WHENEVER SQLERROR EXIT 1;\n')
-
-            for tbl_name in ordered_tables:
-                if tbl_name is None:
-                    continue
-                if tbl_name == 'sqlite_sequence':
-                    continue
-                if '_fts' in tbl_name:
-                    continue
-                table = Table(self, tbl_name)
-                if table_defs:
-                    file.write(table.export_ddl(dialect, no_fkeys))
-                if list_recs or data_recs:
-                    self_ref = None
-                    if tbl_name in self_referring:
-                        self_ref = self_referring[tbl_name]
-                    if (
-                        (table.type == 'list' and list_recs) or
-                        (table.type != 'list' and data_recs)
-                    ):
-                        if dialect == 'oracle':
-                            file.write(f'prompt inserts into {table.name}\n')
-                        if select_recs:
-                            file.write(f'insert into {table.name}\n')
-                            file.write(f'select * from {self.schema}.{table.name};\n')
-                        else:
-                            table.write_inserts(file, dialect, select_recs, fkey=self_ref)
-                if table_defs:
-                    file.write(table.get_indexes_ddl())
-
-            if table_defs:
-                i = 0
-                for view_name in self.refl.get_view_names(self.schema):
-                    if i == 0:
-                        print('\n')
-                    i += 1
-                    try:
-                        # Fails in mssql if user hasn't got permission VIEW DEFINITION
-                        view_def = self.refl.get_view_definition(view_name, self.schema)
-                    except Exception as e:
-                        view_def = None
-                        print(e)
-                    if view_def:
-                        ddl += f'create {view_name} as {view_def}; \n\n'
-
-                file.write(ddl)
-
-        return 'success'
+        return (ordered_tables, self_referring)
 
     def export_as_kdrs_xml(self, version, descr):
         xml = "<views>\n"

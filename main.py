@@ -544,62 +544,155 @@ async def update_cache(base: str, config: str):
 def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                no_fkeys: bool, list_recs: bool, data_recs: bool,
                select_recs: bool, table: str = None):
+    """Create sql for exporting a database
+
+    Parameters:
+    dialect: The sql dialect used (mysql, postgresql, sqlite)
+    include_recs: If records should be included
+    select_recs: If included records should be selected from
+                 existing database
+    """
+
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     download = True if dest == 'download' else False
     if download:
-        tempdir = tempfile.TemporaryDirectory()
-        dest = tempdir.name
+        dest = tempfile.gettempdir()
     else:
         os.makedirs(dest, exist_ok=True)
 
-    if table:
-        table = Table(dbo, table)
-        filepath = os.path.join(dest, table.name + '.sql')
-        with open(filepath, 'w') as file:
-            if dialect == 'oracle':
-                file.write("SET DEFINE OFF;\n")
-                file.write("SET FEEDBACK OFF;\n")
-                file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
-            if table_defs:
+    def event_stream(dbo, dest, dialect, table_defs, no_fkeys, list_recs,
+                     data_recs, select_recs, table):
+        if table:
+            table = Table(dbo, table)
+            filepath = os.path.join(dest, table.name + '.sql')
+            with open(filepath, 'w') as file:
                 if dialect == 'oracle':
-                    ddl = f'drop table {table.name};\n'
-                else:
-                    ddl = f'drop table if exists {table.name};\n'
-                ddl += table.export_ddl(dialect, no_fkeys)
-                file.write(ddl)
-            if (
-                (table.type == 'list' and list_recs) or
-                (table.type != 'list' and data_recs)
-            ):
-                if select_recs:
-                    file.write(f'insert into {table.name}\n')
-                    file.write(f'select * from {dbo.schema}.{table.name};\n')
-                else:
+                    file.write("SET DEFINE OFF;\n")
+                    file.write("SET FEEDBACK OFF;\n")
+                    file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
+                if table_defs:
                     if dialect == 'oracle':
-                        file.write('WHENEVER SQLERROR EXIT 1;\n')
-                    table.write_inserts(file, dialect, select_recs)
-            if table_defs:
-                ddl = table.get_indexes_ddl()
-                file.write(ddl)
-            filename = table.name + '.sql'
-    else:
-        filepath = os.path.join(dest, base + '.' + dialect + '.sql')
-        dbo.export_as_sql(filepath, dialect, table_defs, no_fkeys,
-                          list_recs, data_recs, select_recs)
-        filename = base + '.' + dialect + '.sql'
+                        ddl = f'drop table {table.name};\n'
+                    else:
+                        ddl = f'drop table if exists {table.name};\n'
+                    ddl += table.export_ddl(dialect, no_fkeys)
+                    file.write(ddl)
+                if (
+                    (table.type == 'list' and list_recs) or
+                    (table.type != 'list' and data_recs)
+                ):
+                    if select_recs:
+                        file.write(f'insert into {table.name}\n')
+                        file.write(f'select * from {dbo.schema}.{table.name};\n')
+                    else:
+                        if dialect == 'oracle':
+                            file.write('WHENEVER SQLERROR EXIT 1;\n')
+                        table.write_inserts(file, dialect, select_recs)
+                if table_defs:
+                    ddl = table.get_indexes_ddl()
+                    file.write(ddl)
+        else:
+            ddl = ''
+            filepath = os.path.join(dest, base + '.' + dialect + '.sql')
+            ordered_tables, self_referring = dbo.sorted_tbl_names()
 
-    if download:
-        with open(filepath, 'r') as file:
-            ddl = file.read()
+            with open(filepath, 'w') as file:
+                if dialect == 'oracle':
+                    file.write("SET DEFINE OFF;\n")
+                    file.write("SET FEEDBACK OFF;\n")
+                    file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
+                if table_defs:
+                    for view_name in dbo.refl.get_view_names(dbo.schema):
+                        if dialect == 'oracle':
+                            ddl += f"drop view {view_name};\n"
+                        else:
+                            ddl += f"drop view if exists {view_name};\n"
 
-        response = StreamingResponse(io.StringIO(ddl), media_type="txt/plain")
-        response.headers["Content-Disposition"] = \
-            f"attachment; filename={filename}"
-    else:
-        response = 'done'
+                    for tbl_name in reversed(ordered_tables):
+                        if dialect == 'oracle':
+                            ddl += f"drop table {tbl_name};\n"
+                        else:
+                            ddl += f"drop table if exists {tbl_name};\n"
 
-    return response
+                    file.write(ddl)
+                    ddl = ''
+
+                if dialect == 'oracle':
+                    file.write('WHENEVER SQLERROR EXIT 1;\n')
+
+                count = len(ordered_tables)
+                i = 0
+                for tbl_name in ordered_tables:
+                    i += 1
+                    progress = round(i/count * 100)
+                    data = json.dumps({'msg': tbl_name, 'progress': progress})
+                    yield f"data: {data}\n\n"
+
+                    if tbl_name is None:
+                        continue
+                    if tbl_name == 'sqlite_sequence':
+                        continue
+                    if '_fts' in tbl_name:
+                        continue
+                    table = Table(dbo, tbl_name)
+                    if table_defs:
+                        file.write(table.export_ddl(dialect, no_fkeys))
+                    if list_recs or data_recs:
+                        self_ref = None
+                        if tbl_name in self_referring:
+                            self_ref = self_referring[tbl_name]
+                        if (
+                            (table.type == 'list' and list_recs) or
+                            (table.type != 'list' and data_recs)
+                        ):
+                            if dialect == 'oracle':
+                                file.write(f'prompt inserts into {table.name}\n')
+                            if select_recs:
+                                file.write(f'insert into {table.name}\n')
+                                file.write(f'select * from {dbo.schema}.{table.name};\n')
+                            else:
+                                table.write_inserts(file, dialect, select_recs, fkey=self_ref)
+                    if table_defs:
+                        file.write(table.get_indexes_ddl())
+
+                if table_defs:
+                    i = 0
+                    for view_name in dbo.refl.get_view_names(dbo.schema):
+                        if i == 0:
+                            ddl += '\n'
+                        i += 1
+                        try:
+                            # Fails in mssql if user hasn't got permission VIEW DEFINITION
+                            view_def = dbo.refl.get_view_definition(view_name, dbo.schema)
+                        except Exception as e:
+                            view_def = None
+                            print(e)
+                        if view_def:
+                            ddl += f'create {view_name} as {view_def}; \n\n'
+
+                    file.write(ddl)
+
+        if download:
+            new_path = os.path.join(tempfile.gettempdir(),
+                                    os.path.basename(filepath))
+            os.rename(filepath, new_path)
+            data = json.dumps({'msg': 'done', 'path': new_path})
+            yield f"data: {data}\n\n"
+        else:
+            data = json.dumps({'msg': 'done'})
+            yield f"data: {data}\n\n"
+
+    event_generator = event_stream(dbo, dest, dialect, table_defs, no_fkeys,
+                                   list_recs, data_recs, select_recs, table)
+    return StreamingResponse(event_generator, media_type="text/event-stream")
+
+
+@app.get('/download')
+def download_file(path: str, media_type: str):
+    filename = os.path.basename(path)
+    return FileResponse(path, media_type=media_type, filename=filename,
+                        background=BackgroundTask(cleanup, path))
 
 
 @app.get('/export_tsv')
@@ -613,32 +706,50 @@ def export_tsv(base: str, objects: str, dest: str, table: str = None):
     else:
         if not os.path.exists(dest):
             os.makedirs(dest)
-    if table:
-        table = Table(dbo, table)
-        table.offset = 0
-        table.limit = None
-        columns = json.loads(urllib.parse.unquote(objects))
-        filepath = os.path.join(dest, 'data', table.name + '.tsv')
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        docpath = os.path.join(dest, 'documents')
-        os.makedirs(docpath, exist_ok=True)
-        table.write_tsv(filepath, columns=columns)
-        if download:
-            with open(filepath, 'r') as file:
-                tsv = file.read()
-            response = StreamingResponse(io.StringIO(tsv), media_type="text/tab-separated-values")
-            response.headers['Content-Disposition'] = \
-                f'attachment; filename={table.name}.tsv'
-            return response
-    else:
-        tables = json.loads(urllib.parse.unquote(objects))
-        dbo.export_as_tsv(tables, dest)
-        if download:
-            path = shutil.make_archive(dest, 'zip', dest)
-            return FileResponse(path, media_type="application/zip",
-                                background=BackgroundTask(cleanup, path))
 
-    return 'done'
+    def event_stream(dbo, objects, dest, table):
+        if table:
+            table = Table(dbo, table)
+            table.offset = 0
+            table.limit = None
+            columns = json.loads(urllib.parse.unquote(objects))
+            filepath = os.path.join(dest, 'data', table.name + '.tsv')
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            docpath = os.path.join(dest, 'documents')
+            os.makedirs(docpath, exist_ok=True)
+            table.write_tsv(filepath, columns=columns)
+            new_path = os.path.join(tempfile.gettempdir(), table.name + '.tsv')
+            os.rename(filepath, new_path)
+            data = json.dumps({'msg': 'done', 'path': new_path})
+
+            yield f"data: {data}\n\n"
+            return new_path
+        else:
+            tables = json.loads(urllib.parse.unquote(objects))
+            i = 0
+            count = len(tables)
+            for tbl_name in tables:
+                i += 1
+                progress = round(i/count * 100) 
+                data = json.dumps({'msg': tbl_name, 'progress': progress})
+                yield f"data: {data}\n\n"
+                table = Table(dbo, tbl_name)
+                table.offset = 0
+                table.limit = None
+                filepath = os.path.join(dest, 'data', tbl_name + '.tsv')
+                table.write_tsv(filepath)
+            if download:
+                path = shutil.make_archive(dest, 'zip', dest)
+                os.rename(path, '/tmp/data.zip')
+                data = json.dumps({'msg': 'done', 'path': '/tmp/data.zip'})
+
+                yield f"data: {data}\n\n"
+            else:
+                data = json.dumps({'msg': 'done'})
+                yield f"data: {data}\n\n"
+
+    return StreamingResponse(event_stream(dbo, objects, dest, table),
+                             media_type="text/event-stream")
 
 
 @app.put('/import_tsv')

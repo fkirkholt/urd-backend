@@ -752,11 +752,12 @@ def export_tsv(base: str, objects: str, dest: str, table: str = None):
                              media_type="text/event-stream")
 
 
-@app.put('/import_tsv')
+@app.get('/import_tsv')
 def import_tsv(base: str, dir: str):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
-    dbo.import_tsv(dir)
+
+    return StreamingResponse(dbo.import_tsv(dir), media_type="text/event-stream")
 
 
 @app.get('/kdrs_xml')

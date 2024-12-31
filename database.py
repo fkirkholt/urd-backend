@@ -901,8 +901,16 @@ class Database:
             except OverflowError:
                 field_size_limit = int(field_size_limit / 10)
 
-        for filename in os.listdir(dir):
+        filenames = os.listdir(dir)
+        filecount = len(filenames)
+
+        i = 0
+        for filename in filenames:
             tbl_name = Path(filename).stem
+            i += 1
+            progress = round(i/filecount * 100)
+            data = json.dumps({'msg': tbl_name, 'progress': progress})
+            yield f"data: {data}\n\n"
             filepath = os.path.join(dir, filename)
 
             cols = self.refl.get_columns(tbl_name, self.schema)
@@ -924,6 +932,9 @@ class Database:
                         cnxn.execute(sql, vals)
 
                     cnxn.commit()
+
+        data = json.dumps({'msg': 'done'})
+        yield f"data: {data}\n\n"
 
     def sorted_tbl_names(self):
         graph = {}

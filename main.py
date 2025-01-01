@@ -527,17 +527,38 @@ def dialog_cache(request: Request):
     })
 
 
-@app.put('/urd/update_cache')
+@app.get('/urd/update_cache')
 async def update_cache(base: str, config: str):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     dbo.config = Dict(json.loads(config))
     dbo.config.update_cache = True
     dbo.cache = None
-    dbo.get_tables()
-    dbo.get_contents()
+    dbo.tables = Dict()
+    def event_stream():
+        if ('html_attributes' not in dbo.tablenames):
+            dbo.create_html_attributes()
+        tbl_count = len(dbo.tablenames)
+        i = 0
+        for tbl_name in dbo.tablenames:
+            i += 1
+            progress = round(i/tbl_count * 100) 
+            data = json.dumps({'msg': tbl_name, 'progress': progress})
+            yield f"data: {data}\n\n"
 
-    return {'sucess': True, 'msg': "Cache oppdatert"}
+            if tbl_name[-5:] == '_view' and tbl_name[:-5] in dbo.tablenames:
+                continue
+            if '_fts' in tbl_name:
+                continue
+
+            table = Table(dbo, tbl_name)
+            dbo.tables[tbl_name] = table.get()
+
+        dbo.get_contents()
+        data = json.dumps({'msg': 'done'})
+        yield f"data: {data}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get('/export_sql')

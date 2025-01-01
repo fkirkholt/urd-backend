@@ -204,12 +204,6 @@ class Database:
 
         self.tables = Dict()
 
-        if (
-            self.config.update_cache and
-            'html_attributes' not in self.tablenames
-        ):
-            self.create_html_attributes()
-
         tbl_names = self.user.tables(self.cat, self.schema)
         view_names = self.refl.get_view_names(self.schema)
 
@@ -219,67 +213,9 @@ class Database:
             if '_fts' in tbl_name:
                 continue
 
-            hidden = tbl_name[0:1] == "_" or tbl_name == 'html_attributes'
-
             table = Table(self, tbl_name)
-            grid = Grid(table)
 
-            table.main_type = 'table' if tbl_name in (tbl_names) else 'view'
-
-            # Hides table if user has marked the table to be hidden
-            if 'hidden' in self.config.tables[tbl_name]:
-                if hidden != self.config.tables[tbl_name].hidden:
-                    hidden = self.config.tables[tbl_name].hidden
-                else:
-                    del self.config.tables[tbl_name].hidden
-                    if not self.config.tables[tbl_name]:
-                        del self.config.tables[tbl_name]
-
-            # Change table type if set in config
-            if 'type' in self.config.tables[tbl_name]:
-                if table.type != self.config.tables[tbl_name].type:
-                    table.type = self.config.tables[tbl_name].type
-                else:
-                    del self.config.tables[tbl_name].type
-                    if not self.config.tables[tbl_name]:
-                        del self.config.tables[tbl_name]
-
-            if self.config.update_cache:
-                table.rowcount = table.count_rows()
-                space = ' ' * (30 - len(tbl_name))
-                print('Table: ', f"{tbl_name}{space}({table.rowcount})")
-
-            view = tbl_name
-            if tbl_name + '_view' in view_names:
-                view = tbl_name + '_view'
-
-            if self.engine.name == 'sqlite' or tbl_name not in self.comments:
-                comment = None
-            else:
-                comment = self.comments[tbl_name]
-
-            self.tables[tbl_name] = Dict({
-                'name': tbl_name,
-                'type': table.type,
-                'view': view,
-                'icon': None,
-                'label': self.get_label(tbl_name),
-                'rowcount': (None if not self.config.update_cache
-                             else table.rowcount),
-                'pkey': table.pkey,
-                'description': comment,
-                'fkeys': table.fkeys,
-                # Get more info about relations for cache, including use
-                'relations': table.relations,
-                'indexes': table.indexes,
-                'hidden': hidden,
-                # fields are needed only when creating cache
-                'fields': (None if not self.config.update_cache
-                           else table.fields),
-                'grid': None if not self.config.update_cache else {
-                    'columns': grid.columns
-                }
-            })
+            self.tables[tbl_name] = table.get()
 
         return self.tables
 

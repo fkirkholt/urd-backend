@@ -27,6 +27,67 @@ class Table:
         self.alias = alias or self.view
         self.fts = False
 
+    def get(self):
+        grid = Grid(self)
+
+        tbl_names = self.db.user.tables(self.db.cat, self.db.schema)
+        view_names = self.db.refl.get_view_names(self.db.schema)
+
+        self.main_type = 'table' if self.name in (tbl_names) else 'view'
+
+        hidden = self.name[0:1] == "_" or self.name == 'html_attributes'
+
+        # Hides table if user has marked the table to be hidden
+        if 'hidden' in self.db.config.tables[self.name]:
+            if hidden != self.db.config.tables[self.name].hidden:
+                hidden = self.db.config.tables[self.name].hidden
+            else:
+                del self.db.config.tables[self.name].hidden
+                if not self.db.config.tables[self.name]:
+                    del self.db.config.tables[self.name]
+
+        # Change table type if set in config
+        if 'type' in self.db.config.tables[self.name]:
+            if table.type != self.db.config.tables[self.name].type:
+                table.type = self.db.config.tables[self.name].type
+            else:
+                del self.db.config.tables[self.name].type
+                if not self.db.config.tables[self.name]:
+                    del self.db.config.tables[self.name]
+
+        view = self.name
+        if self.name + '_view' in view_names:
+            view = self.name + '_view'
+
+        if self.db.engine.name == 'sqlite' or self.name not in self.db.comments:
+            comment = None
+        else:
+            comment = self.db.comments[tbl_name]
+
+        return Dict({
+            'name': self.name,
+            'type': self.type,
+            'view': view,
+            'icon': None,
+            'label': self.db.get_label(self.name),
+            'rowcount': (None if not self.db.config.update_cache
+                         else self.rowcount),
+            'pkey': self.pkey,
+            'description': comment,
+            'fkeys': self.fkeys,
+            # Get more info about relations for cache, including use
+            'relations': self.relations,
+            'indexes': self.indexes,
+            'hidden': hidden,
+            # fields are needed only when creating cache
+            'fields': (None if not self.db.config.update_cache
+                       else self.fields),
+            'grid': None if not self.db.config.update_cache else {
+                'columns': grid.columns
+            }
+        })
+
+
     @property
     def type(self):
         """Return type of table"""
@@ -122,10 +183,14 @@ class Table:
 
         return subordinate
 
-    def count_rows(self):
-        sql, _ = prepare(f'select count(*) from "{self.name}"')
-        with self.db.engine.connect() as cnxn:
-            return cnxn.execute(sql).fetchone()[0]
+    @property
+    def rowcount(self):
+        if not hasattr(self, '_rowcount'):
+            sql, _ = prepare(f'select count(*) from "{self.name}"')
+            with self.db.engine.connect() as cnxn:
+                self._rowcount = cnxn.execute(sql).fetchone()[0]
+
+        return self._rowcount
 
     def is_hidden(self):
         """Decide if this is a hidden table"""
@@ -606,8 +671,6 @@ class Table:
                     sql, _ = prepare(sql)
                     count = cnxn.execute(sql).fetchone()[0]
 
-                if not hasattr(self, 'rowcount'):
-                    self.rowcount = self.count_rows()
                 relations[name].use = count/self.rowcount if self.rowcount > 0 else 0
 
         self._relations = relations

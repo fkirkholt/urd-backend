@@ -690,7 +690,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                             view_def = None
                             print(e)
                         if view_def:
-                            ddl += f'create {view_name} as {view_def}; \n\n'
+                            ddl += f'{view_def}; \n\n'
 
                     file.write(ddl)
 

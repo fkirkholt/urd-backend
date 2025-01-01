@@ -850,7 +850,7 @@ class Database:
             filepath = os.path.join(dir, filename)
 
             cols = self.refl.get_columns(tbl_name, self.schema)
-            mandatory = [col.name for col in cols if not col.nullable]
+            mandatory = [col['name'] for col in cols if not col['nullable']]
             
             with open(filepath) as file:
                 print('importing', filename)
@@ -859,13 +859,12 @@ class Database:
                 with self.engine.connect() as cnxn:
 
                     for rec in records:
-                        count = len(rec)
-                        placeholders = '?,' * (count-1) + '?'
+                        placeholders = ','.join([':' + k for k in rec])
                         sql = f'insert into {tbl_name} values ({placeholders})'
-                        sql, _ = prepare(sql)
-                        vals = [v if (v != '' or k in mandatory) else None
-                                for k, v in rec.items()]
-                        cnxn.execute(sql, vals)
+                        params = {k: (v if v != '' or k in mandatory else None)
+                                  for k, v in rec.items()}
+                        sql, params = prepare(sql, params)
+                        cnxn.execute(sql, params)
 
                     cnxn.commit()
 

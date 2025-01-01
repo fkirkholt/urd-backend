@@ -681,6 +681,7 @@ class Table:
         coldefs = []
         cols = self.db.refl.get_columns(self.name, self.db.schema)
         for col in cols:
+            col = Dict(col)
             column = Column(self, col)
             coldef = column.get_def(dialect, blob_to_varchar=True,
                                     geometry_to_text=True)
@@ -694,6 +695,7 @@ class Table:
                 except Exception:
                     datatype = ('int' if str(col.type).startswith('YEAR')
                                 else 'unknown')
+                    print('type not recognized', col.type)
 
             if datatype == 'bytes':
                 self.indexes[f'{self.name}_{column.name}_filepath_idx'] = Dict({

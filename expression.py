@@ -349,5 +349,9 @@ class Expression:
             WHERE   TABLE_SCHEMA    = ?
             AND     TABLE_NAME      = ?;
             """
+        elif self.platform == 'sqlite':
+            return """
+            select sql from sqlite_master where name = ?
+            """
         else:
             return None

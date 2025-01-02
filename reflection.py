@@ -241,7 +241,9 @@ class Reflection:
         crsr = self.engine.connect().cursor()
         sql = self.expr.view_definition()
         view_def = None
-        if sql:
+        if self.engine.name == 'sqlite':
+            view_def = crsr.execute(sql, tbl_name).fetchone()[0]
+        elif sql:
             params = [schema, tbl_name]
             view_def = crsr.execute(sql, params).fetchone()[0]
 

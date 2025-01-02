@@ -687,10 +687,13 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                             # Fails in mssql if user hasn't got permission VIEW DEFINITION
                             view_def = dbo.refl.get_view_definition(view_name, dbo.schema)
                         except Exception as e:
-                            view_def = None
+                            view_def = f"-- ERROR: Couldn't get definition for view {view_name} "
                             print(e)
                         if view_def:
                             ddl += f'{view_def}; \n\n'
+                        else:
+                            ddl += f"-- View definition not supported for {dbo.engine.name} yet\n"
+                        print('ddl', ddl)
 
                     file.write(ddl)
 

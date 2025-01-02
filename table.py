@@ -568,7 +568,8 @@ class Table:
             if (
                 self.db.config and self.db.config.column_use and
                 col.name not in self.pkey.columns and
-                not self.name.startswith('meta_')
+                not self.name.startswith('meta_') and
+                self.type != 'view'
                 # table not in group named '...'
                 # and (
                 #     not contents['...'] or ('tables.' + self.name) not in \

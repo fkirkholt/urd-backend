@@ -48,8 +48,8 @@ class Table:
 
         # Change table type if set in config
         if 'type' in self.db.config.tables[self.name]:
-            if table.type != self.db.config.tables[self.name].type:
-                table.type = self.db.config.tables[self.name].type
+            if self.type != self.db.config.tables[self.name].type:
+                self.type = self.db.config.tables[self.name].type
             else:
                 del self.db.config.tables[self.name].type
                 if not self.db.config.tables[self.name]:

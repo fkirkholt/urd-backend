@@ -115,12 +115,12 @@ class Table:
         pkey_col_type = None
         pkey_col_length = None
 
-        # Find data type for first pkey column
+        # Find data type for last pkey column
         if (
             self.pkey and len(self.pkey.columns) and
             self.pkey.columns != ['rowid']
         ):
-            colname = self.pkey.columns[0]
+            colname = self.pkey.columns[-1]
             cols = self.db.columns[self.name]
             for col in cols:
                 if col['name'] == colname:

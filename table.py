@@ -175,14 +175,6 @@ class Table:
 
         return self._type
 
-    def is_subordinate(self):
-        subordinate = False
-        for colname in self.pkey.columns:
-            if self.get_fkey(colname):
-                subordinate = True
-
-        return subordinate
-
     @property
     def rowcount(self):
         if not hasattr(self, '_rowcount'):

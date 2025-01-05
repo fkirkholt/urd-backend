@@ -342,6 +342,13 @@ class Database:
 
         return relation_tables
 
+    def is_subordinate(self, tbl_name):
+        for tables in self.sub_tables.values():
+            if tbl_name in tables:
+                return True
+
+        return False
+
     def get_tbl_groups_urdr(self):
         """Group tables by prefix or relations
 
@@ -369,8 +376,7 @@ class Database:
             # Don't include tables that are subordinate to other tables
             # i.e. the primary key also has a foreign key
             # These are handled in get_content_node
-            tbl = Table(self, tbl_name)
-            if tbl.is_subordinate():
+            if self.is_subordinate(tbl_name):
                 continue
 
             placed = False
@@ -473,6 +479,10 @@ class Database:
                     ):
                         continue
 
+                    ref_tbl = Table(self, fkey.referred_table)
+                    if ref_tbl.type == 'list' and tbl.type != 'list':
+                        continue
+
                     if fkey.referred_table not in sub_tables:
                         sub_tables[fkey.referred_table] = []
 
@@ -525,12 +535,12 @@ class Database:
 
         contents = Dict()
 
+        self.sub_tables = self.get_sub_tables()
+
         if (not self.config.update_cache or self.config.urd_structure):
             tbl_groups = self.get_tbl_groups_urdr()
         else:
             tbl_groups = self.get_tbl_groups()
-
-        self.sub_tables = self.get_sub_tables()
 
         for group_name, table_names in tbl_groups.items():
             if len(table_names) == 1:  # and group_name != "meta":

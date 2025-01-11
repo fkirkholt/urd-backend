@@ -588,7 +588,14 @@ class Grid:
                         for fkey in self.tbl.fkeys.values():
                             if fkey.ref_table_alias == tbl_alias:
                                 tbl = Table(self.db, fkey.referred_table)
-                                field = tbl.fields[field_name] 
+                                field = tbl.fields[field_name]
+                        for fkey in self.tbl.relations.values():
+                            if fkey.relationship == '1:1':
+                                prefix = fkey.referred_table.rstrip('_') + '_'
+                                alias = fkey.table_name.replace(prefix, '')
+                                if alias == tbl_alias:
+                                    tbl = Table(self.db, fkey.table_name)
+                                    field = tbl.fields[field_name]
 
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")

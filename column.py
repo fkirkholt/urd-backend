@@ -134,15 +134,16 @@ class Column:
             if 'current_timestamp()' in default:
                 default = default.replace('current_timestamp()',
                                           'CURRENT_TIMESTAMP')
-            if 'curdate()' in default:
+            elif 'curdate()' in default:
                 default = default.replace('curdate()', 'CURRENT_DATE')
-            if 'current_user()' in default:
+            elif 'current_user()' in default:
                 default = default.replace('current_user()', 'CURRENT_USER')
-            if 'ON UPDATE' in default and dialect != 'mysql':
+            elif 'ON UPDATE' in default and dialect != 'mysql':
                 default = default.split('ON UPDATE')[0]
-
-            if dialect == 'mysql' and default in ('CURRENT_DATE', 'CURRENT_USER'):
+            elif dialect == 'mysql' and default in ('CURRENT_DATE', 'CURRENT_USER'):
                 default = '(' + default + ')'
+            elif self.db.refl.expr.to_urd_type(self.type) == 'str':
+                default = "'" + default + "'"
 
             coldef += " DEFAULT " + default
 

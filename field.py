@@ -198,7 +198,7 @@ class Field:
             ref_tbl = Table(self._db, fkey.referred_table)
             self.view = fkey.ref_table_alias + '.' + ref_tbl.pkey.columns[-1]
 
-            if ref_tbl.is_hidden() is False:
+            if ref_tbl.is_hidden() is False and ref_tbl.type != 'list':
                 self.expandable = True
 
             for index in ref_tbl.indexes.values():

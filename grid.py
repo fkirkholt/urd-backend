@@ -346,8 +346,7 @@ class Grid:
             sql += f"offset {self.tbl.offset} rows\n"
             sql += f"fetch next {self.tbl.limit} rows only"
         else:
-            sql += f"limit {self.tbl.limit}" if self.tbl.limit else ''
-            sql += f" offset {self.tbl.offset}"
+            sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
         with self.db.engine.connect() as cnxn:
             sql, params = prepare(sql, self.cond.params)

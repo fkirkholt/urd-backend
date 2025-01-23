@@ -212,7 +212,7 @@ class Field:
                     elif self._db.engine.name in ['oracle', 'sqlite']:
                         self.view = " || ', ' || ".join(cols)
                     else:
-                        self.view = "concat_ws(', ', " + ', '.join(cols) + ")" 
+                        self.view = "concat_ws(', ', " + ', '.join(cols) + ")"
                     if index.name.endswith("_sort_idx"):
                         break
 

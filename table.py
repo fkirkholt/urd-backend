@@ -155,7 +155,6 @@ class Table:
                     )
                 )
             ):
-                print('setter data-type for ', self.name)
                 self._type = "data"
 
         all_fkey_columns = set()
@@ -621,6 +620,7 @@ class Table:
                             .get_view_definition(self.name, self.db.schema))
             except Exception as e:
                 view_def = None
+                print('Error getting view definition. Check permission')
                 print(e)
 
             if view_def:
@@ -807,7 +807,7 @@ class Table:
                     if (self.name == 'meta_data' and colname == 'cache'):
                         val = ''
                     if type(val) is str:
-                        val = "'" + val.replace("'", "''") + "'"
+                        val = "'" + val.strip().replace("'", "''") + "'"
                     elif isinstance(val, datetime.date):
                         val = "'" + str(val) + "'"
                     elif (col.datatype == 'bool' and dialect == 'oracle'):

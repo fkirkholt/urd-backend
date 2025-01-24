@@ -62,7 +62,7 @@ class Table:
         if self.db.engine.name == 'sqlite' or self.name not in self.db.comments:
             comment = None
         else:
-            comment = self.db.comments[tbl_name]
+            comment = self.db.comments[self.name]
 
         return Dict({
             'name': self.name,

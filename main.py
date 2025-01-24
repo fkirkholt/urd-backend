@@ -586,7 +586,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                      data_recs, select_recs, table):
         if table:
             table = Table(dbo, table)
-            filepath = os.path.join(dest, table.name + '.sql')
+            filepath = os.path.join(dest, f"{table.name}.{dialect}.sql")
             with open(filepath, 'w') as file:
                 if dialect == 'oracle':
                     file.write("SET DEFINE OFF;\n")
@@ -618,7 +618,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     file.write(ddl)
         else:
             ddl = ''
-            filepath = os.path.join(dest, base + '.' + dialect + '.sql')
+            filepath = os.path.join(dest, f"{base}.{dialect}.sql")
             ordered_tables, self_referring = dbo.sorted_tbl_names()
 
             with open(filepath, 'w') as file:

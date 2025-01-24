@@ -1,6 +1,7 @@
 from addict import Dict
 from expression import Expression
 
+
 class Reflection:
 
     def __init__(self, engine, catalog):
@@ -11,38 +12,44 @@ class Reflection:
 
     def get_schema_names(self):
         """Get all schemata in database"""
-        schema_names = []
+        if hasattr(self, '_schema_names'):
+            return self._schema_names
+        self._schema_names = []
 
         if self.engine.name == 'sqlite':
             sql = "PRAGMA database_list"
             with self.engine.connect() as cnxn:
                 rows = cnxn.execute(sql).fetchall()
                 for row in rows:
-                    schema_names.append(row[1])
+                    self._schema_names.append(row[1])
 
         if self.engine.name == 'postgres':
             # sql = self.expr.schemata()
             with self.engine.connect() as cnxn:
                 rows = cnxn.execute(sql).fetchall()
                 for row in rows:
-                    schema_names.append(row.schema_name)
+                    self._schema_names.append(row.schema_name)
 
-        return schema_names
+        return self._schema_names
 
     def get_table_names(self, schema):
-        tbl_names = []
+        if hasattr(self, '_tbl_names'):
+            return self._tbl_names
+        self._tbl_names = []
         with self.engine.connect() as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name in ('mysql', 'mariadb'):
                 rows = cursor.tables(catalog=schema).fetchall()
             else:
                 rows = cursor.tables(catalog=self.cat, schema=schema).fetchall()
-            tbl_names = [row.table_name for row in rows if row.table_type == 'TABLE']
+            self._tbl_names = [row.table_name for row in rows if row.table_type == 'TABLE']
 
-        return tbl_names
+        return self._tbl_names
 
     def get_multi_table_comment(self, schema):
-        comments = Dict()
+        if hasattr(self, '_comments'):
+            return self._comments
+        self._comments = Dict()
         with self.engine.connect() as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name in ('mysql', 'mariadb'):
@@ -50,25 +57,30 @@ class Reflection:
             else:
                 rows = cursor.tables(catalog=self.cat, schema=schema).fetchall()
             for row in rows:
-                comments[schema, row.table_name].text = row.remarks
+                self._comments[schema, row.table_name].text = row.remarks
 
-        return comments
+        return self._comments
 
     def get_view_names(self, schema):
-        view_names = []
+        if hasattr(self, '_view_names'):
+            return self._view_names
+        self._view_names = []
         with self.engine.connect() as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name in ('mysql', 'mariadb'):
                 rows = cursor.tables(catalog=schema).fetchall()
             else:
                 rows = cursor.tables(catalog=self.cat, schema=schema).fetchall()
-            view_names = [row.table_name for row in rows if row.table_type == 'VIEW']
+            self._view_names = [row.table_name for row in rows
+                                if row.table_type == 'VIEW']
 
-        return view_names
+        return self._view_names
 
     def get_multi_pk_constraint(self, schema):
+        if hasattr(self, '_pkeys'):
+            return self._pkeys
         tbls = self.get_table_names(schema)
-        pkeys = Dict()
+        self._pkeys = Dict()
         with self.engine.connect() as cnxn:
             crsr = cnxn.cursor()
             for tbl_name in tbls:
@@ -83,15 +95,17 @@ class Reflection:
                                             catalog=self.cat,
                                             schema=schema)
                 for row in rows:
-                    pkeys[(schema, tbl_name)].table_name = tbl_name
-                    pkeys[(schema, tbl_name)].pkey_name = row.pk_name
-                    if 'constrained_columns' not in pkeys[(schema, tbl_name)]:
-                        pkeys[(schema, tbl_name)].constrained_columns = []
-                    pkeys[(schema, tbl_name)].constrained_columns.append(row.column_name)
-        return pkeys
+                    self._pkeys[(schema, tbl_name)].table_name = tbl_name
+                    self._pkeys[(schema, tbl_name)].pkey_name = row.pk_name
+                    if 'constrained_columns' not in self._pkeys[(schema, tbl_name)]:
+                        self._pkeys[(schema, tbl_name)].constrained_columns = []
+                    self._pkeys[(schema, tbl_name)].constrained_columns.append(row.column_name)
+        return self._pkeys
 
     def get_multi_columns(self, schema):
         """ Return all columns in schema by reflection """
+        if hasattr(self, '_columns'):
+            return self._columns
         with self.engine.connect() as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name == 'oracle':
@@ -103,7 +117,7 @@ class Reflection:
             else:
                 rows = cursor.columns(catalog=self.cat, schema=schema).fetchall()
 
-        result = Dict()
+        self._columns = Dict()
         colnames = [column[0] for column in cursor.description]
         for row in rows:
             row = Dict(zip(colnames, row))
@@ -113,37 +127,18 @@ class Reflection:
             col.nullable = row.nullable
             col.default = row.column_def
             col.size = row.column_size
-            if (schema, row.table_name) not in result:
-                result[(schema, row.table_name)] = []
-            result[(schema, row.table_name)].append(col)
+            if (schema, row.table_name) not in self._columns:
+                self._columns[(schema, row.table_name)] = []
+            self._columns[(schema, row.table_name)].append(col)
 
-        return result
+        return self._columns
 
     def get_columns(self, tbl_name, schema):
         """ Return all columns in table by reflection """
-        with self.engine.connect() as cnxn:
-            cursor = cnxn.cursor()
-            if self.engine.name == 'oracle':
-                # cursor.columns doesn't work for all types of oracle columns
-                sql = self.expr.columns()
-                rows = cursor.execute(sql, schema, tbl_name, None).fetchall()
-            elif self.engine.name in ('mysql', 'mariadb'):
-                rows = cursor.columns(table=tbl_name, catalog=schema).fetchall()
-            else:
-                rows = cursor.columns(table=tbl_name, catalog=self.cat, schema=schema).fetchall()
+        if not hasattr(self, '_columns'):
+            _ = self.get_multi_columns(schema)
 
-        result = []
-        colnames = [column[0] for column in cursor.description]
-        for row in rows:
-            row = Dict(zip(colnames, row))
-            col = Dict()
-            col.name = row.column_name
-            col.type = row.type_name
-            col.nullable = row.nullable
-            col.default = row.column_def
-            result.append(col)
-
-        return result
+        return self._columns[(schema, tbl_name)]
 
     def get_foreign_keys(self, tbl_name, schema):
         if self.fkeys is None:

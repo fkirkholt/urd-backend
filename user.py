@@ -31,6 +31,8 @@ class User:
         return rows
 
     def tables(self, cat, schema):
+        if hasattr(self, '_tbl_names'):
+            return self._tbl_names
         cfg = Settings()
         refl = Reflection(self.engine, cat) if type(self.engine) is ODBC_Engine else inspect(self.engine)
         tbl_names = refl.get_table_names(schema)
@@ -62,6 +64,8 @@ class User:
 
                 for row in rows:
                     tbl_names.remove(row.table_name)
+
+        self._tbl_names = tbl_names
 
         return tbl_names
 

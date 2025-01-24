@@ -258,7 +258,9 @@ class Record:
 
         selects = []
         for key, field in self._tbl.fields.items():
-            if field.datatype == 'bytes':
+            if field.datatype == 'bytes' and self._db.engine.name == 'mssql':
+                selects.append(f"cast(datalength({field.name}) as varchar) + ' bytes' as {field.name}")
+            elif field.datatype == 'bytes':
                 selects.append(f"length({field.name}) || ' bytes' as {field.name}")
                 continue
             selects.append(field.name)

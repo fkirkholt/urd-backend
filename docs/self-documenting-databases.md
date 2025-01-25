@@ -317,34 +317,30 @@ of measure in the `data-after` attribute of the label. The label then
 consists of both the keyword itself, and the unit of measurement that
 comes after the field value.
 
-You can customize how a field is displayed by specifying `data-type`
-and/or `data-format`. This assumes that you use a selector in
-following pattern: `label[data-field="tablename.fieldname"]`. This
-selector belongs to the `label` tag, which encloses the field. You can
-skip `label` and only use `[data-field="tablename.fieldname"]`. The
-html element for the field is then generatede based on the values of
-`data-type` and `data-format`.
-
-The following values for `data-type` are supported:
-- json
-- date
+You can customize how a field is displayed by specifying `data-format`.
+This assumes that you use a selector in following pattern:
+`label[data-field="tablename.fieldname"]`. This selector belongs
+to the `label` tag, which encloses the field. You can skip `label`
+and only use `[data-field="tablename.fieldname"]`. The html element
+for the field is then generatede based on the values of `data-format`.
 
 The following values for `data-format` are supported:
 - link
 - json
 - yaml
 - markdown
+- ISO 8601
 
-If you set `data-type` as "json" and `data-format` as "yaml", then the
-data will be stored as json in the database, but you will see
-the data as `yaml`.  This applies by default to the html attributes
+A field from a column with datatype "json" can be formatted as "yaml".
+The data will be stored as json in the database, but you will see
+the data as `yaml`. This applies by default to the html attributes
 themselves.
 
-You can enter `data-type: date` if you have a text column in
+You can enter `data-format: ISO 8601` if you have a text column in
 the database that is used to enter date. An html `<time>` tag
 allows registration of dates in more formats than many databases,
 e.g. "2012-05" which stands for May 2012. These can then be registered
-as text in the database.
+as text in the database in ISO 8601 format.
 
 If you want to create an url of a field, you can set the attribute
 `data-format: link` to the `label` tag. Then you get a `<a>` tag

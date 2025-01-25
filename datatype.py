@@ -64,7 +64,7 @@ class Datatype:
         elif self.type == "bytes":
             return "blob"
         elif self.type == "json":
-            return "json"
+            return "jsontext"
         else:
             raise ValueError(f"Type {self.type} not supported yet")
 

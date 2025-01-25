@@ -2,6 +2,7 @@ from datetime import date, datetime
 from addict import Dict
 from sqlalchemy import text
 from util import prepare, to_rec
+from expression import Expression
 
 
 class Field:
@@ -18,8 +19,9 @@ class Field:
         return Dict(field)
 
     def set_attrs_from_col(self, col):
-        if type(col.type) is str: # odbc engine
-            self.datatype = self._db.refl.expr.to_urd_type(col.type)
+        if type(col.type) is str:  # odbc engine
+            expr = Expression(self._db.engine.name)
+            self.datatype = expr.to_urd_type(col.type) 
         else:
             try:
                 self.datatype = col.type.python_type.__name__
@@ -43,9 +45,6 @@ class Field:
             attrs['type'] = type_
 
         html_attrs = self.get_attributes(self._tbl.name, self.name)
-        if 'data-type' in html_attrs:
-            attrs['data-type'] = html_attrs['data-type']
-            self.datatype = html_attrs['data-type']
         if 'data-format' in html_attrs:
             attrs['data-format'] = html_attrs['data-format']
         if 'data-href' in html_attrs:

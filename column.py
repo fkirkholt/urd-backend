@@ -1,6 +1,7 @@
 from addict import Dict
 from datatype import Datatype
 from util import prepare
+from expression import Expression
 
 
 class Column:
@@ -17,7 +18,8 @@ class Column:
             setattr(self, attr, col[attr])
         # Get size, scale and precision for odbc connection
         if type(col.type) is str and '(' in col.type:
-            urd_type = self.db.refl.expr.to_urd_type(col.type)
+            expr = Expression(self.db.engine.name)
+            urd_type = expr.to_urd_type(col.type)
             size = col.type.split('(')[1].strip(')')
             if urd_type == 'str':
                 self.size = int(size)

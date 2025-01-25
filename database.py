@@ -155,7 +155,7 @@ class Database:
     def create_html_attributes(self):
         """Create table holding html_attributes"""
 
-        datatype = Datatype('str')
+        datatype = Datatype('json')
         string_datatype = datatype.to_native_type(self.engine.name)
 
         sql = f"""
@@ -173,7 +173,6 @@ class Database:
 
         self.tablenames.append('html_attributes')
         attributes = {
-            'data-type': 'json',
             'data-format': 'yaml'
         }
 

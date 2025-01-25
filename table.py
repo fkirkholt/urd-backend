@@ -9,7 +9,10 @@ from field import Field
 from grid import Grid
 from util import prepare, to_rec
 from sqlglot import parse_one, exp
+from settings import Settings
+from expression import Expression
 
+cfg = Settings()
 
 class Table:
     """Contains methods for getting metadata for table"""
@@ -543,9 +546,21 @@ class Table:
             # without columns can be returned
             if len(index.columns):
                 indexed_cols.append(index.columns[0])
-        cols = self.db.refl.get_columns(self.name, self.db.schema)
+
         # contents = None if not self.db.cache \
         #     else self.db.cache.contents
+
+        if not cfg.use_odbc and self.db.engine.name == 'sqlite':
+            # Must get native column types for sqlite, to find if
+            # there is a column defined as json
+            expr = Expression(self.db.engine.name)
+            sql = expr.columns(self.name)
+            with self.db.engine.connect() as cnxn:
+                sql, _ = prepare(sql)
+                rows = cnxn.execute(sql).fetchall()
+                cols = [to_rec(row) for row in rows]
+        else:
+            cols = self.db.refl.get_columns(self.name, self.db.schema)
 
         for col in cols:
             col = Dict(col)

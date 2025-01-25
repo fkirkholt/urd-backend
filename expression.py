@@ -32,7 +32,10 @@ class Expression:
 
     def to_urd_type(self, type_):
         type_ = type_.lower()
-        if re.search("char|text|clob|xml|sysname|uniqueidentifier", type_):
+
+        if re.search("json", type_):
+            return "json"
+        elif re.search("char|text|clob|xml|sysname|uniqueidentifier", type_):
             return "str"
         elif re.search("bool|bit|tinyint", type_):
             return "bool"
@@ -44,8 +47,6 @@ class Expression:
             return "float"
         elif re.search("date|time", type_):
             return "date"
-        elif re.search("json", type_):
-            return "json"
         elif re.search("blob|image|binary", type_):
             return "bytes"
         elif type_ == "geometry":
@@ -284,7 +285,7 @@ class Expression:
                 ns.oid=cl.relnamespace
             """
 
-    def columns(self):
+    def columns(self, tbl_name=None):
         if self.platform == 'oracle':
             return """
             select  table_name as "table_name",
@@ -294,6 +295,11 @@ class Expression:
             from all_tab_columns
             where owner = ? and table_name = nvl(?, table_name) and
                   column_name = nvl(?, column_name)
+            """
+        elif self.platform == 'sqlite':
+            return f"""
+            select name, type, case when "notnull" = 1 then 0 else 1 end as nullable,
+                   dflt_value as "default" from pragma_table_info('{tbl_name}')
             """
         else:
             return None

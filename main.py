@@ -184,6 +184,7 @@ def login(response: Response, system: str, server: str, username: str,
     cfg.pwd = password
     cfg.database = database
     cfg.host = server or 'localhost'
+    app.state.cnxn = None
 
     # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
     if cfg.system == 'sqlite' and cfg.database != 'urdr':
@@ -830,8 +831,10 @@ def query(base: str, sql: str, limit: str):
     print('sql', sql)
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
+    if not hasattr(app.state, 'cnxn') or app.state.cnxn is None:
+        app.state.cnxn = engine.connect()
     limit = 0 if not limit else int(limit)
-    result = dbo.query_result(sql, limit)
+    result = dbo.query_result(sql, limit, app.state.cnxn)
 
     return {'result': result}
 

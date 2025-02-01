@@ -763,7 +763,7 @@ class Database:
 
         return self._relations
 
-    def query_result(self, sql, limit):
+    def query_result(self, sql, limit, cnxn):
         """Get query result for user defined sql"""
         query = Dict()
         sql = sql.strip()
@@ -771,32 +771,37 @@ class Database:
         if len(query.string) == 0:
             return None
         t1 = time.time()
-        with self.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            if type(self.engine) is ODBC_Engine:
-                try:
-                    result = cnxn.execute(sql)
-                except pyodbc.Error as ex:
-                    sqlstate = ex.args[1]
-                    sqlstate = sqlstate.replace('[HY000]', '')
-                    sqlstate = sqlstate.replace('[SQLite]', '')
-                    sqlstate = sqlstate.replace('(1)', '')
-                    sqlstate = sqlstate.replace('(SQLExecDirectW)', '')
-                    query.time = round(time.time() - t1, 4)
-                    query.success = False
-                    query.result = 'ERROR: ' + sqlstate.strip()
+        sql, _ = prepare(sql)
+        if type(self.engine) is ODBC_Engine:
+            try:
+                result = cnxn.execute(sql)
+            except pyodbc.Error as ex:
+                sqlstate = ex.args[1]
+                sqlstate = sqlstate.replace('[HY000]', '')
+                sqlstate = sqlstate.replace('[SQLite]', '')
+                sqlstate = sqlstate.replace('(1)', '')
+                sqlstate = sqlstate.replace('(SQLExecDirectW)', '')
+                query.time = round(time.time() - t1, 4)
+                query.success = False
+                query.result = 'ERROR: ' + sqlstate.strip()
 
-                    return query
-            else:
-                try:
-                    result = cnxn.execute(sql)
-                except exc.StatementError as ex:
-                    query.time = round(time.time() - t1, 4)
-                    query.success = False
-                    query.result = 'ERROR: {}'.format(ex.orig)
+                return query
+        else:
+            cwd = os.getcwd()
+            folder = Path(self.engine.url.database).parent
+            os.chdir(folder)
 
-                    return query
+            try:
+                result = cnxn.execute(sql)
+            except exc.StatementError as ex:
+                os.chdir(cwd)
+                query.time = round(time.time() - t1, 4)
+                query.success = False
+                query.result = 'ERROR: {}'.format(ex.orig)
 
+                return query
+
+            os.chdir(cwd)
             query.success = True
             query.time = round(time.time() - t1, 4)
 

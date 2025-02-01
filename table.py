@@ -571,6 +571,14 @@ class Table:
             if hasattr(field, 'fkey'):
                 field.options = field.get_options('', {})
 
+            if (
+                field.name in indexed_cols and not hasattr(field, 'options') and
+                field.datatype == 'str' and
+                field.attrs.get('data-format', None) != 'ISO 8601'
+            ):
+                # Make the field show up as autocomplete
+                field.attrs['type'] = 'search'
+
             # Get info about column use if user has chosen this option
             if (
                 self.db.config and self.db.config.column_use and

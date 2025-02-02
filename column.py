@@ -144,7 +144,7 @@ class Column:
                 default = default.split('ON UPDATE')[0]
             elif dialect == 'mysql' and default in ('CURRENT_DATE', 'CURRENT_USER'):
                 default = '(' + default + ')'
-            elif self.db.refl.expr.to_urd_type(self.type) == 'str':
+            elif datatype == 'str':
                 default = "'" + default + "'"
 
             coldef += " DEFAULT " + default

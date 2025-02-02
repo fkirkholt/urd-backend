@@ -81,6 +81,9 @@ def get_engine(cfg, db_name=None):
         elif cfg.system == 'postgresql':
             url += '/postgres'
 
+    if cfg.system == 'mariadb':
+        url += '?charset=utf8mb4&collation=utf8mb4_unicode_ci'
+
     engine = create_engine(url)
 
     try:

@@ -697,7 +697,6 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                             ddl += f'{view_def}; \n\n'
                         else:
                             ddl += f"-- View definition not supported for {dbo.engine.name} yet\n"
-                        print('ddl', ddl)
 
                     file.write(ddl)
 

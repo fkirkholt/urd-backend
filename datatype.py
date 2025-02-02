@@ -8,7 +8,7 @@ class Datatype:
         if self.type == "str":
             return f"varchar({str(self.size)})" if self.size else "longtext"
         elif self.type == "int":
-            return "int(" + str(self.size) + ")"
+            return "int"
         elif self.type == "Decimal":
             return "decimal(" + str(self.size) + ") "
         elif self.type == "float":

@@ -175,7 +175,7 @@ class User:
         elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
                 sql, _ = prepare('show grants')
-                rows = cnxn.execute('show grants').fetchall()
+                rows = cnxn.execute(sql).fetchall()
             for row in rows:
                 stmt = row[0]
                 m = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)

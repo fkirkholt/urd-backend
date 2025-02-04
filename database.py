@@ -802,39 +802,39 @@ class Database:
                 return query
 
             os.chdir(cwd)
-            query.success = True
-            query.time = round(time.time() - t1, 4)
+        query.success = True
+        query.time = round(time.time() - t1, 4)
 
-            if type(self.engine) is ODBC_Engine:
-                returns_rows = result.description
+        if type(self.engine) is ODBC_Engine:
+            returns_rows = result.description
+        else:
+            returns_rows = result.returns_rows
+
+        if returns_rows:
+            if limit:
+                rows = result.fetchmany(limit)
             else:
-                returns_rows = result.returns_rows
+                rows = result.fetchall()
 
-            if returns_rows:
-                if limit:
-                    rows = result.fetchmany(limit)
-                else:
-                    rows = result.fetchall()
+            query.data = [to_rec(row) for row in rows]
+            # Find the table selected from
+            query.table = str(sqlglot.parse_one(query.string)
+                              .find(sqlglot.exp.Table))
 
-                query.data = [to_rec(row) for row in rows]
-                # Find the table selected from
-                query.table = str(sqlglot.parse_one(query.string)
-                                  .find(sqlglot.exp.Table))
+            # Get table name in correct case
+            tbl_names = self.refl.get_table_names(self.schema)
+            for tbl_name in tbl_names:
+                if tbl_name.lower() == query.table.lower():
+                    query.table = tbl_name
+                    break
 
-                # Get table name in correct case
-                tbl_names = self.refl.get_table_names(self.schema)
-                for tbl_name in tbl_names:
-                    if tbl_name.lower() == query.table.lower():
-                        query.table = tbl_name
-                        break
+        else:
+            rowcount = result.rowcount
 
-            else:
-                rowcount = result.rowcount
+            query.rowcount = rowcount
+            query.result = f"Query OK, {rowcount} rows affected"
 
-                query.rowcount = rowcount
-                query.result = f"Query OK, {rowcount} rows affected"
-
-            cnxn.commit()
+        cnxn.commit()
 
         return query
 

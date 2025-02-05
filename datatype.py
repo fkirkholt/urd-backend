@@ -131,7 +131,7 @@ class Datatype:
         elif self.type == "int":
             return "integer"
         elif self.type == "float":
-            if self.size and ',' in self.size:
+            if self.size and ',' in str(self.size):
                 return f"number({self.size})"
             elif self.size:
                 return "float(" + str(self.size) + ")"

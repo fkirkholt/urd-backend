@@ -396,7 +396,7 @@ class Record:
             inserts[key] = value
 
         sql = f"""
-        insert into "{self._tbl.view}" ({','.join(inserts.keys())})
+        insert into {self._tbl.view} ({','.join(inserts.keys())})
         values ({', '.join([f":{key}" for key in inserts])})
         """
 

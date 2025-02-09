@@ -43,7 +43,8 @@ what kind of table this is, when you look at them in a database client.
 
 Another way to indicate that something is a lookup table is to set
 the data type of the primary key column to a text type, e.g. `char`,
-`varchar` or `text`.
+`varchar` or `text`, or an numeric type that can't hold more than
+8 digits.
 
 When you set the primary key to text, you can also provide a
 recognizable identifier that can be used in compressed table display

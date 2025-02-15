@@ -171,12 +171,12 @@ the corresponding field in the current record has this value. This
 column can be named with `const_` as prefix, which indicates that it
 is a constant. Such columns are not displayed.
 
-Example: If you have a table `file` and a relation `personal_file`
-with additional information for personal, then you add a column
-`file.type`, and a column `personal_file.const_type` with default value
-`personal`. When one makes `const_type` as part of the foreign key
-that refers to `file`, the relation `personal_file` is only displayed
-for records where you have registered `personal` for `file.type`.
+Example: If you have a table `file` and a relation `personell_file`
+with additional information for personell, then you add a column
+`file.type`, and a column `personell_file.const_type` with default value
+`personell`. When one makes `const_type` as part of the foreign key
+that refers to `file`, the relation `personell_file` is only displayed
+for records where you have registered `personell` for `file.type`.
 
 # Foreign keys
 

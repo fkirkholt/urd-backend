@@ -498,7 +498,7 @@ class Database:
             prefix = prefix.rstrip('_') + '_'
             identifier = identifier.replace(prefix, '')
         if postfix:
-            postfix = postfix.lstrip('_') + '_'
+            postfix = '_' + postfix.lstrip('_')
             identifier = identifier.replace(postfix, '')
         label = identifier.replace('_', ' ')
 

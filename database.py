@@ -898,7 +898,9 @@ class Database:
                 if fkey['referred_table'] == tbl_name:
                     self_referring[tbl_name] = fkey
                     continue
-                ref_tables.append(fkey['referred_table'])
+                if fkey['referred_table'] in tbl_names:
+                    # SQLite may have foreign keys referring to non existing tables
+                    ref_tables.append(fkey['referred_table'])
             graph[tbl_name] = ref_tables
 
         sorter = TopologicalSorter(graph)

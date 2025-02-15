@@ -13,6 +13,8 @@ class Column:
         col = Dict(col)
         if col.default == 'NULL':
             col.default = None
+        elif col.default:
+            col.default = col.default.strip("'")
         self.type = col.type
         for attr in col.keys():
             setattr(self, attr, col[attr])

@@ -753,6 +753,37 @@ class Database:
                     self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
                     self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
 
+        if len(self._fkeys) == 0:
+            fkeys = Dict()
+            relations = Dict()
+            for tbl_name_1 in self.columns:
+                for col_1 in self.columns[tbl_name_1]:
+                    col_1 = Dict(col_1)
+                    for tbl_name_2 in self.tablenames:
+                        if tbl_name_2 in col_1.name:
+                            for col_2 in self.columns[tbl_name_2]:
+                                col_2 = Dict(col_2)
+                                ref = (tbl_name_2 + '_' + col_2.name).replace('__', '_').rstrip('_')
+                                if col_1.name.endswith(ref):
+                                    prefix = col_1.name.replace(ref, '').rstrip('_')
+                                    prefix = '_' + prefix if prefix else ''
+                                    name = tbl_name_1 + '_' + tbl_name_2 + prefix + '_fkey'
+                                    fkeys[tbl_name_1][name].name = name
+                                    fkeys[tbl_name_1][name].table_name = tbl_name_1
+                                    fkeys[tbl_name_1][name].schema = self.schema
+                                    fkeys[tbl_name_1][name].relationship = '1:M' 
+                                    if not 'constrained_columns' in fkeys[tbl_name_1][name]:
+                                        fkeys[tbl_name_1][name].constrained_columns = []
+                                        fkeys[tbl_name_1][name].referred_columns = []
+                                    fkeys[tbl_name_1][name].constrained_columns.append(col_1.name)
+                                    fkeys[tbl_name_1][name].referred_columns.append(col_2.name)
+                                    fkeys[tbl_name_1][name].referred_schema = self.schema
+                                    fkeys[tbl_name_1][name].referred_table = tbl_name_2
+                                    fkeys[tbl_name_1][name].ref_table_alias = prefix or tbl_name_2
+                                    relations[tbl_name_2][name] = fkeys[tbl_name_1][name]
+            self._fkeys = fkeys
+            self._relations = relations
+
         return self._fkeys
 
     @property

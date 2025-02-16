@@ -220,6 +220,9 @@ class Database:
 
     @property
     def schemas(self):
+        if hasattr(self, '_schemas'):
+            return self._schemas
+
         if self.engine.name == 'postgresql' and not self.user.is_admin(self.schema):
             sql = """
             select table_schema
@@ -456,8 +459,12 @@ class Database:
         for group_name in delete_groups:
             del tbl_groups[group_name]
 
-    def get_sub_tables(self):
+    @property
+    def sub_tables(self):
         """Return Dict of tables with subordinate tables"""
+        if hasattr(self, '_sub_tables'):
+            return self._sub_tables
+
         sub_tables = Dict()
         for tbl_name, table in self.tables.items():
             name_parts = tbl_name.rstrip('_').split("_")
@@ -482,6 +489,8 @@ class Database:
                         sub_tables[fkey.referred_table] = []
 
                     sub_tables[fkey.referred_table].append(tbl_name)
+
+        self._sub_tables = sub_tables
 
         return sub_tables
 
@@ -529,8 +538,6 @@ class Database:
             return self.contents
 
         contents = Dict()
-
-        self.sub_tables = self.get_sub_tables()
 
         if (not self.config.update_cache or self.config.urd_structure):
             tbl_groups = self.get_tbl_groups_urdr()
@@ -635,119 +642,125 @@ class Database:
     def pkeys(self):
         """Get primary key of table"""
 
-        if not hasattr(self, '_pkeys'):
-            self._pkeys = Dict()
-            # reflection of constraints is not implemented for duckdb yet
-            if self.engine.name == 'duckdb':
-                sql = """
-                select * from duckdb_constraints()
-                where constraint_type = 'PRIMARY KEY'
-                """
-                with self.engine.connect() as cnxn:
-                    sql, _ = prepare(sql)
-                    rows = cnxn.execute(sql).fetchall()
-                    for row in rows:
-                        pkey = Dict({
-                            'table_name': row.table_name,
-                            'name': 'PRIMARY',
-                            'unique': True,
-                            'columns': row.constraint_column_names
-                        })
-                        self._pkeys[row.table_name] = pkey
-            else:
-                pkey_constraints = self.refl.get_multi_pk_constraint(self.schema)
-                for (schema, table), pkey in pkey_constraints.items():
-                    self._pkeys[table] = Dict({
-                        'table_name': table,
-                        'name': pkey['name'] or 'PRIMARY',
+        if hasattr(self, '_pkeys'):
+            return self._pkeys
+
+        self._pkeys = Dict()
+        # reflection of constraints is not implemented for duckdb yet
+        if self.engine.name == 'duckdb':
+            sql = """
+            select * from duckdb_constraints()
+            where constraint_type = 'PRIMARY KEY'
+            """
+            with self.engine.connect() as cnxn:
+                sql, _ = prepare(sql)
+                rows = cnxn.execute(sql).fetchall()
+                for row in rows:
+                    pkey = Dict({
+                        'table_name': row.table_name,
+                        'name': 'PRIMARY',
                         'unique': True,
-                        'columns': pkey['constrained_columns']
+                        'columns': row.constraint_column_names
                     })
+                    self._pkeys[row.table_name] = pkey
+        else:
+            pkey_constraints = self.refl.get_multi_pk_constraint(self.schema)
+            for (schema, table), pkey in pkey_constraints.items():
+                self._pkeys[table] = Dict({
+                    'table_name': table,
+                    'name': pkey['name'] or 'PRIMARY',
+                    'unique': True,
+                    'columns': pkey['constrained_columns']
+                })
 
         return self._pkeys
 
     @property
     def indexes(self):
-        if not hasattr(self, '_indexes'):
-            self._indexes = Dict()
-            if self.engine.name == 'duckdb':
-                sql, _ = prepare("select * from duckdb_indexes()")
-                with self.engine.connect() as cnxn:
-                    rows = cnxn.execute(sql).fetchall()
-                    for row in rows:
-                        idx = Dict({
-                            'table_name': row.table_name,
-                            'name': row.index_name,
-                            'unique': row.is_unique
-                        })
-                        expr = row.sql
-                        x = re.search(r"\bON \w+\s?\(([^)]*)\)", expr)
-                        cols_delim = x.group(1).split(',')
-                        idx.columns = [s.strip() for s in cols_delim]
-                        self._indexes[row.table_name][idx.name] = idx
-                for table, pkey in self.pkeys.items():
-                    self._indexes[table][pkey.name] = pkey
-            else:
-                schema_indexes = self.refl.get_multi_indexes(self.schema)
+        if hasattr(self, '_indexes'):
+            return self._indexes
 
-                for (schema, table), indexes in schema_indexes.items():
+        self._indexes = Dict()
+        if self.engine.name == 'duckdb':
+            sql, _ = prepare("select * from duckdb_indexes()")
+            with self.engine.connect() as cnxn:
+                rows = cnxn.execute(sql).fetchall()
+                for row in rows:
+                    idx = Dict({
+                        'table_name': row.table_name,
+                        'name': row.index_name,
+                        'unique': row.is_unique
+                    })
+                    expr = row.sql
+                    x = re.search(r"\bON \w+\s?\(([^)]*)\)", expr)
+                    cols_delim = x.group(1).split(',')
+                    idx.columns = [s.strip() for s in cols_delim]
+                    self._indexes[row.table_name][idx.name] = idx
+            for table, pkey in self.pkeys.items():
+                self._indexes[table][pkey.name] = pkey
+        else:
+            schema_indexes = self.refl.get_multi_indexes(self.schema)
 
-                    for idx in indexes:
-                        idx = Dict(idx)
-                        idx.columns = idx.pop('column_names')
-                        idx.pop('dialect_options', None)
+            for (schema, table), indexes in schema_indexes.items():
 
-                        if idx.name and idx.columns != [None]:
-                            self._indexes[table][idx.name] = idx
+                for idx in indexes:
+                    idx = Dict(idx)
+                    idx.columns = idx.pop('column_names')
+                    idx.pop('dialect_options', None)
 
-                for table in self.pkeys:
-                    pkey = self.pkeys[table]
-                    self._indexes[table][pkey.name] = pkey
+                    if idx.name and idx.columns != [None]:
+                        self._indexes[table][idx.name] = idx
+
+            for table in self.pkeys:
+                pkey = self.pkeys[table]
+                self._indexes[table][pkey.name] = pkey
 
         return self._indexes
 
     @property
     def fkeys(self):
         """Get all foreign keys of table"""
-        if not hasattr(self, '_fkeys'):
-            self._fkeys = Dict()
-            self._relations = Dict()
-            aliases = {}
+        if hasattr(self, '_fkeys'):
+            return self._fkeys
 
-            schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+        self._fkeys = Dict()
+        self._relations = Dict()
+        aliases = {}
 
-            for key, fkeys in schema_fkeys.items():
-                for fkey in fkeys:
-                    fkey = Dict(fkey)
-                    fkey.base = self.cat
-                    fkey.table_name = key[-1]
-                    fkey.schema = key[0] or self.db.schema
-                    if set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns):
-                        fkey.relationship = '1:1'
-                    else:
-                        fkey.relationship = '1:M'
+        schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
 
-                    fkey.name = fkey.table_name + '_'
-                    fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+        for key, fkeys in schema_fkeys.items():
+            for fkey in fkeys:
+                fkey = Dict(fkey)
+                fkey.base = self.cat
+                fkey.table_name = key[-1]
+                fkey.schema = key[0] or self.db.schema
+                if set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns):
+                    fkey.relationship = '1:1'
+                else:
+                    fkey.relationship = '1:M'
 
-                    fkey_col = fkey.constrained_columns[-1]
-                    ref_col = fkey.referred_columns[-1].strip('_')
-                    if fkey_col in [fkey.referred_table + '_' + ref_col,
-                                    fkey.referred_columns[-1]]:
-                        ref_table_alias = fkey.referred_table
-                    else:
-                        ref_table_alias = fkey_col.strip('_')
-                    # In seldom cases there might be two foreign keys ending
-                    # in same column
-                    if fkey.table_name not in aliases:
-                        aliases[fkey.table_name] = []
-                    if ref_table_alias in aliases[fkey.table_name]:
-                        ref_table_alias = ref_table_alias + '2'
-                    fkey.ref_table_alias = ref_table_alias
-                    aliases[fkey.table_name].append(ref_table_alias)
+                fkey.name = fkey.table_name + '_'
+                fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
 
-                    self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
-                    self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
+                fkey_col = fkey.constrained_columns[-1]
+                ref_col = fkey.referred_columns[-1].strip('_')
+                if fkey_col in [fkey.referred_table + '_' + ref_col,
+                                fkey.referred_columns[-1]]:
+                    ref_table_alias = fkey.referred_table
+                else:
+                    ref_table_alias = fkey_col.strip('_')
+                # In seldom cases there might be two foreign keys ending
+                # in same column
+                if fkey.table_name not in aliases:
+                    aliases[fkey.table_name] = []
+                if ref_table_alias in aliases[fkey.table_name]:
+                    ref_table_alias = ref_table_alias + '2'
+                fkey.ref_table_alias = ref_table_alias
+                aliases[fkey.table_name].append(ref_table_alias)
+
+                self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
+                self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
 
         if len(self._fkeys) == 0:
             fkeys = Dict()

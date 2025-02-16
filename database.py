@@ -365,10 +365,6 @@ class Database:
                 and table.type == 'view'
             ):
                 continue
-            if tbl_name[0:1] == "_":
-                name = tbl_name[1:]
-            else:
-                name = tbl_name
             name = tbl_name[1:] if tbl_name[0:1] == "_" else tbl_name
             parts = name.split("_")
 

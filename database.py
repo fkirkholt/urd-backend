@@ -368,6 +368,9 @@ class Database:
                 and table.type == 'view'
             ):
                 continue
+            elif table.type == 'xref':
+                continue
+
             name = tbl_name[1:] if tbl_name[0:1] == "_" else tbl_name
             parts = name.split("_")
 
@@ -469,6 +472,9 @@ class Database:
         for tbl_name, table in self.tables.items():
             name_parts = tbl_name.rstrip('_').split("_")
             tbl = Table(self, tbl_name)
+
+            if tbl.type == 'xref':
+                continue
 
             for colname in table.pkey.columns:
                 fkey = tbl.get_fkey(colname)

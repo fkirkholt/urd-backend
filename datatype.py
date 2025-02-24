@@ -48,7 +48,7 @@ class Datatype:
             raise ValueError(f"Type {self.type} not supported yet")
 
     def get_sqlite_type(self):
-        if self.type in ["str"]:
+        if self.type in ["str", "UUID"]:
             return ("varchar(" + str(self.size) + ")"
                     if (self.size and self.size <= 4000) else "text")
         elif self.type in ["date", "datetime", "time"]:

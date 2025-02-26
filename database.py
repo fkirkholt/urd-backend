@@ -479,12 +479,7 @@ class Database:
             for colname in table.pkey.columns:
                 fkey = tbl.get_fkey(colname)
                 if fkey:
-                    if (
-                        len(name_parts) > 1 and (
-                            name_parts[0] in self.tables or
-                            name_parts[0]+'_' in self.tables
-                        ) and name_parts[0] != fkey.referred_table.strip('_')
-                    ):
+                    if tbl.type == 'ext' and fkey.relationship == '1:M':
                         continue
 
                     ref_tbl = Table(self, fkey.referred_table)

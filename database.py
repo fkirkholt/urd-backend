@@ -352,7 +352,7 @@ class Database:
         return False
 
     def get_tbl_groups_urdr(self):
-        """Group tables by prefix or relations
+        """Group tables by prefix
 
         If not generating cache or generating cache for databases
         with Urdr structure. This is the default behaviour, which
@@ -374,8 +374,8 @@ class Database:
             name = tbl_name[1:] if tbl_name[0:1] == "_" else tbl_name
             parts = name.split("_")
 
-            # Don't include tables that are subordinate to other tables
-            # i.e. the primary key also has a foreign key
+            # Don't include tables that are subordinate to other tables,
+            # i.e. the primary key also has a foreign key.
             # These are handled in get_content_node
             if self.is_subordinate(tbl_name):
                 continue
@@ -388,6 +388,7 @@ class Database:
 
             if not placed:
                 group = None
+                # Find longest prefix shared by at least two tables
                 for part in parts:
                     test_group = group + '_' + part if group else part
                     if (

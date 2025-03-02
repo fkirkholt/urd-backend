@@ -775,6 +775,8 @@ class Database:
                         if tbl_name_2 in col_1.name:
                             for col_2 in self.columns[tbl_name_2]:
                                 col_2 = Dict(col_2)
+                                if col_1.name == col_2.name and tbl_name_1 == tbl_name_2:
+                                    continue
                                 # reference to column in referred table
                                 ref = (tbl_name_2 + '_' + col_2.name).replace('__', '_').rstrip('_')
                                 if (
@@ -786,6 +788,7 @@ class Database:
                                     tbl_fkey_columns.append(col_1.name)
                                     # possible prefix that describes what relation this is
                                     # e.g. in `updated_by_user_name` the prefix is `upated_by`
+                                    prefix = ''
                                     if col_2.name not in tbl_fkey_columns:
                                         prefix = col_1.name.replace(ref, '').rstrip('_')
                                     prefix = '_' + prefix if prefix else ''

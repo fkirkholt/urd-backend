@@ -258,7 +258,11 @@ class Table:
 
         self._pkey = self.db.pkeys[self.name]
 
-        if (not self._pkey.columns and self.db.engine.name == 'sqlite'):
+        if (
+            not self._pkey.columns and
+            self.db.engine.name == 'sqlite' and
+            self.type != 'view'
+        ):
             self._pkey.columns = ['rowid']
             self._pkey.name = self.name + '_rowid'
 

@@ -52,7 +52,7 @@ class Grid:
             'privilege': self.db.user.table_privilege(self.db.schema,
                                                       self.tbl.name),
             'hidden': self.tbl.is_hidden(),
-            'pkey': self.tbl.pkey.columns or None,
+            'pkey': self.tbl.pkey.columns or self.columns,
             'fkeys': self.tbl.fkeys,
             'indexes': self.tbl.indexes,
             'label': self.db.get_label(self.tbl.name),
@@ -108,7 +108,8 @@ class Grid:
         for index, row in enumerate(values):
             for col, val in row.items():
                 recs[index]['columns'][col]['value'] = val
-            recs[index]['pkey'] = {key: row[key] for key in self.tbl.pkey.columns}
+            cols = self.tbl.pkey.columns or self.columns
+            recs[index]['pkey'] = {key: row[key] for key in cols}
 
         return recs
 

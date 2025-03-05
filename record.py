@@ -82,6 +82,7 @@ class Record:
         from database import Database
         from table import Table, Grid
 
+        # values of primary key columns
         values = None if len(self.pkey) == 0 else self.get_values()
 
         relations = {}
@@ -109,7 +110,6 @@ class Record:
                 continue
 
             grid = Grid(tbl_rel)
-            grid2 = Grid(tbl_rel)  # Used to count inherited records
 
             # todo: filtrate on highest level
 
@@ -123,22 +123,19 @@ class Record:
                 col = Column(self._tbl, tbl_rel.cols[colname])
 
                 mark = tbl_rel.view.rstrip('_') + '_' + colname.lstrip('_')
-                expr = f'{tbl_rel.view}.{colname} = :{mark}'
+                grid.cond.params[mark] = val
                 if (
-                    col.nullable and
+                    len(self.pkey) and col.nullable and
                     colname != rel.constrained_columns[0] and
                     rel.referred_columns == list(self.pkey.keys()) and
                     rel.index.unique is True
                 ):
-                    expr = f'{tbl_rel.view}.{colname} IS NULL'
-                    grid2.cond.prep_stmnts.append(expr)
-                    count_null_conds += 1
+                    expr = (f'({tbl_rel.view}.{colname} = :{mark} or '
+                            f'{tbl_rel.view}.{colname} is null)')
                 else:
-                    grid2.cond.prep_stmnts.append(expr)
-                    grid2.cond.params[mark] = val
+                    expr = f'{tbl_rel.view}.{colname} = :{mark}'
 
                 grid.cond.prep_stmnts.append(expr)
-                grid.cond.params[mark] = val
                 conds[colname] = val
 
                 if (colname[0] == '_' or colname[0:6] == 'const_') and col.default:
@@ -147,14 +144,8 @@ class Record:
             grid.is_relation = True
             count_records = grid.get_rowcount() if len(self.pkey) else 0
 
-            count_inherited = 0
-            if count_null_conds:
-                grid2.is_relation = True
-                count_inherited = grid2.get_rowcount()
-
             relation = Dict({
-                'count_records': count_records + count_inherited,
-                'count_inherited': count_inherited,
+                'count_records': count_records,
                 'name': rel.table_name,
                 'conditions': grid.get_client_conditions(),
                 'conds': conds,

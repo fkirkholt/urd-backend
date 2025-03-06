@@ -10,7 +10,7 @@ cfg = Settings()
 def prepare(sql, params={}):
     params_prep = params
     if cfg.use_odbc:
-        p = re.compile(r'(?<!:)\:\w*\b')
+        p = re.compile(r'(?<!:)\:[a-zA-ZæøåÆØÅ]\w*\b')
         placeholders = p.findall(sql)
         sql_prep = re.sub(r'(?<!:)\:\w*\b', '?', sql)
         if type(params) is not list:

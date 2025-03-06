@@ -153,7 +153,7 @@ class Table:
                         ('int' in str(pkey_col.type).lower() and
                          str(pkey_col.type).lower() not in smallints) or
                         ('numeric' in str(pkey_col.type).lower() and
-                         pkey_col.precision - (pkey_col.scale or 0) >= 8) or
+                         pkey_col.precision - getattr(pkey_col, 'scale', 0) >= 8) or
                         'date' in str(pkey_col.type).lower() 
                     )
                 )

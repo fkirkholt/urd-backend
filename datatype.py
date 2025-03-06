@@ -13,7 +13,7 @@ class Datatype:
             return "decimal(" + str(self.size) + ") "
         elif self.type == "float":
             if self.size:
-                precision = self.size.split(',')[0]
+                precision = str(self.size).split(',')[0]
                 return "float(" + precision + ")"
             else:
                 return "float"

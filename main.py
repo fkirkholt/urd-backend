@@ -596,6 +596,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     file.write("SET DEFINE OFF;\n")
                     file.write("SET FEEDBACK OFF;\n")
                     file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
+                    file.write("ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS'")
                 if table_defs:
                     if dialect == 'oracle':
                         ddl = f'drop table {table.name};\n'

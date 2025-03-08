@@ -208,7 +208,7 @@ class Field:
                             if col not in ref_tbl.pkey.columns[0:-1]]
                     if len(cols) == 1:
                         self.view = cols[0]
-                    elif self._db.engine.name in ['oracle', 'sqlite']:
+                    elif self._db.engine.name in ['oracle']:
                         self.view = " || ', ' || ".join(cols)
                     else:
                         self.view = "concat_ws(', ', " + ', '.join(cols) + ")"

@@ -30,13 +30,15 @@ class Column:
                 self.precision = int(size_parts[0])
                 if len(size_parts) == 2:
                     self.scale = int(size_parts[1])
+                else:
+                    self.scale = 0
         # Get size, scale and precision for SQLAlchemy
         if hasattr(col.type, 'length'):
             self.size = col.type.length
         if hasattr(col.type, 'display_width'):
             self.size = col.type.display_width
         if hasattr(col.type, 'scale'):
-            self.scale = col.type.scale
+            self.scale = col.type.scale or 0
             self.precision = col.type.precision
 
     def get_size(self):

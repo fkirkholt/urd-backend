@@ -52,8 +52,7 @@ class Expression:
         elif type_ == "geometry":
             return "geometry"
         elif type_ == "":
-            # view columns are often int
-            return "int"
+            return "unknown"
         else:
             raise ValueError(f"Type {type_} not supported yet")
 

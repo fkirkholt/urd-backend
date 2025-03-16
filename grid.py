@@ -220,28 +220,24 @@ class Grid:
             return self.db.cache.tables[self.tbl.name].grid.columns
         from table import Table
         self._columns = []
-        has_view = self.tbl.name + '_grid' in self.db.tablenames
-        if has_view:
-            view_name = self.tbl.name + '_grid'
-            view = Table(self.db, view_name)
-            cols = self.db.refl.get_columns(view_name, self.db.schema)
+        if self.tbl.name != self.tbl.grid_view:
+            view = Table(self.db, self.tbl.grid_view)
+            cols = self.db.refl.get_columns(self.tbl.grid_view, self.db.schema)
             self._columns = [col['name'] for col in cols]
             for field_name, field in view.fields.items():
                 if field_name not in self.tbl.fields:
                     field.virtual = True
-                    field.table_name = view_name
+                    field.table_name = self.tbl.grid_view
                     self.tbl.fields[field_name] = field
 
             return self._columns
 
-        has_view = self.tbl.name + '_view' in self.db.tablenames
-        if has_view:
-            view_name = self.tbl.name + '_view'
-            view = Table(self.db, view_name)
+        if self.tbl.name != self.tbl.view:
+            view = Table(self.db, self.tbl.view)
             for field_name, field in view.fields.items():
                 if field_name not in self.tbl.fields:
                     field.virtual = True
-                    field.table_name = view_name
+                    field.table_name = self.tbl.view
                     self.tbl.fields[field_name] = field
 
         grid_idx = self.tbl.indexes.get(self.tbl.name + "_grid_idx", None)

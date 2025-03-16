@@ -23,10 +23,16 @@ class Table:
         self.label = db.get_label(tbl_name)
         self.view = tbl_name
         if tbl_name + '_view' in db.tablenames:
-            self.view = tbl_name + '_view'
+            cols = self.db.refl.get_columns(tbl_name + '_view', self.db.schema)
+            colnames = [col['name'] for col in cols]
+            if set(colnames) >= set(self.pkey.columns):
+                self.view = tbl_name + '_view'
         self.grid_view = self.view
         if tbl_name + '_grid' in db.tablenames:
-            self.grid_view = tbl_name + '_grid'
+            cols = self.db.refl.get_columns(tbl_name + '_grid', self.db.schema)
+            colnames = [col['name'] for col in cols]
+            if set(colnames) >= set(self.pkey.columns):
+                self.grid_view = tbl_name + '_grid'
         self.alias = alias or self.view
         self.fts = False
 
@@ -345,7 +351,7 @@ class Table:
                     if f'left join {self.db.schema}.{self.name} ' not in join:
                         joins.append(join)
 
-        if (self.name + '_grid') in self.db.tablenames:
+        if self.grid_view != self.name and self.grid_view in self.db.tablenames:
             join_view = "join " + self.grid_view + " on "
             ons = [f'{self.grid_view}.{col} = {self.view}.{col}'
                    for col in self.pkey.columns]

@@ -391,7 +391,7 @@ class Grid:
 
         sql = ''
         access_idx = self.tbl.get_access_code_idx()
-        if access_idx:
+        if access_idx and self.db.cte_access:
             self.access_check = True
             sql += self.db.cte_access
             self.cond.params.uid = self.db.user.name
@@ -404,7 +404,7 @@ class Grid:
         for key, fkey in self.tbl.fkeys.items():
             fkey_table = Table(self.db, fkey.referred_table)
             fkey_access_idx = fkey_table.get_access_code_idx()
-            if fkey_access_idx:
+            if fkey_access_idx and self.db.cte_access:
                 self.access_check = True
                 if 'cte_access' not in sql:
                     sql += self.db.cte_access

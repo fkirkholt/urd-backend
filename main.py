@@ -451,6 +451,42 @@ async def get_table(base: str, table: str, filter: str = None,
     return {'data': grid.get(pkey_vals)}
 
 
+@app.post("/record")
+def create_record(base: str, table: str, pkey: str, values: str):
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base, cfg.uid)
+    tbl = Table(dbo, table)
+    pkey = json.loads(pkey)
+    record = Record(dbo, tbl, pkey)
+    vals = json.loads(values)
+    pkey = record.insert(vals)
+
+    return {'values': pkey}
+
+
+@app.put("/record")
+def update_record(base: str, table: str, pkey: str, values: str):
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base, cfg.uid)
+    tbl = Table(dbo, table)
+    pkey = json.loads(pkey)
+    record = Record(dbo, tbl, pkey)
+    vals = json.loads(values)
+
+    return {'result': record.update(vals)}
+
+
+@app.delete("/record")
+def delete_record(base: str, table: str, pkey: str, values: str):
+    engine = get_engine(cfg, base)
+    dbo = Database(engine, base, cfg.uid)
+    tbl = Table(dbo, table)
+    pkey = json.loads(pkey)
+    record = Record(dbo, tbl, pkey)
+
+    return {'result', record.delete()}
+
+
 @app.get("/record")
 def get_record(base: str, table: str, pkey: str, schema: str = None):
     engine = get_engine(cfg, base)

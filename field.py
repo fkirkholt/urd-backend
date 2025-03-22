@@ -96,7 +96,7 @@ class Field:
             element = 'input'
             type_ = 'checkbox'
         elif self.datatype == 'bytes' or (self.datatype == 'str' and (
-                self.size is None or self.size >= 255)):
+                not self.size or self.size >= 255)):
             element = "textarea"
         else:
             element = "input"

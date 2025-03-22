@@ -295,6 +295,15 @@ so the classes listed here will replace those in the code. You can
 inspect an element on the page to see which classes are used, copy
 these and replace the ones you wish.
 
+An other option is to style elements with the `style` attribute.
+You can put each rule as a yaml `key:value` pair:
+
+~~~ yaml
+style:
+  color: green
+  font-weight: bold
+~~~
+
 Each field in the record display is enclosed by a `label` tag; this
 is called an "indirect label". It has been done this way to be able
 to connect the label to the input. We cannot use the `for` attribute

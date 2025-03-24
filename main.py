@@ -870,10 +870,12 @@ def query(base: str, sql: str, limit: str):
     print('sql', sql)
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
-    if not hasattr(app.state, 'cnxn') or app.state.cnxn is None:
-        app.state.cnxn = engine.connect()
+    if not hasattr(app.state, 'cnxn'):
+        app.state.cnxn = dict()
+    if not base in app.state.cnxn:
+        app.state.cnxn[base] = engine.connect()
     limit = 0 if not limit else int(limit)
-    result = dbo.query_result(sql, limit, app.state.cnxn)
+    result = dbo.query_result(sql, limit, app.state.cnxn[base])
 
     return {'result': result}
 

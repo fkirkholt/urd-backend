@@ -596,6 +596,7 @@ class Grid:
 
                 operator = parts[1].strip()
                 value = parts[2].replace("*", "%")
+                mark = field_expr.replace('.', '_').replace('__', '_')
 
                 if (
                     value and (
@@ -607,21 +608,20 @@ class Grid:
                 else:
                     case_sensitive = value.lower() != value
                     if (not case_sensitive and value.lower() != value.upper()):
-                        field_expr = f"lower({field})"
+                        field_expr = f"lower({field_expr})"
                     if value == "":
                         value = None
                 if operator == "IN":
                     value = value.strip().split(",")
                     placeholders = []
                     for i, val in enumerate(value):
-                        mark = field.replace('.', '_') + str(i)
+                        mark = mark + str(i)
                         placeholders.append(f":{mark}")
                         if val.strip().replace('.', '', 1).isdigit():
                             val = int(val)
                         self.cond.params[mark] = val
                     expr = f"{field_expr} IN (" + ', '.join(placeholders) + ')'
                 else:
-                    mark = field_expr.replace('.', '_').replace('__', '_')
                     expr = f"{field_expr} {operator}"
                     if operator not in ['IS NULL', 'IS NOT NULL']:
                         expr += f" :{mark}"

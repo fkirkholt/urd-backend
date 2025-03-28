@@ -542,27 +542,42 @@ class Grid:
                             'idx': 0
                         })
                 else:
-                    value = parts[0]
-                    case_sensitive = value.lower() != value
-                    value = '%' + value + "%"
+                    values = parts[0].split()
 
-                    for field in self.tbl.fields.values():
-                        if field.fkey:
-                            view = field.name if not field.view else field.view
-                            if case_sensitive:
-                                conds.append(f"{view} LIKE :{field.name}")
-                            else:
-                                conds.append(f"lower({view}) LIKE :{field.name}")
-                            params[field.name] = value
-                        elif field.datatype == "str":
-                            if case_sensitive:
-                                conds.append(f"{self.tbl.view}.{field.name}"
-                                             f" LIKE :{field.name}")
-                            else:
-                                conds.append(f"lower({self.tbl.view}.{field.name})"
-                                             f" LIKE :{field.name}")
-                            params[field.name] = value
-                expr = "(" + " OR ".join(conds) + ")"
+                    i = 0
+                    for value in values:
+                        i += 1
+                        mark = 'val_' + str(i) 
+                        case_sensitive = value.lower() != value
+                        if value.startswith('!'):
+                            value = value[1:]
+                            op = 'NOT LIKE'
+                        else:
+                            op = 'LIKE'
+                        value = '%' + value + "%"
+                        concats = []
+
+                        for field in self.tbl.fields.values():
+                            if field.fkey:
+                                view = field.name if not field.view else field.view
+                                if case_sensitive:
+                                    concats.append(f"{view}")
+                                else:
+                                    concats.append(f"lower({view})")
+                            elif field.datatype == "str":
+                                if case_sensitive:
+                                    concats.append(f"{self.tbl.view}.{field.name}")
+                                else:
+                                    concats.append(f"lower({self.tbl.view}.{field.name})")
+
+                        if self.db.engine.name == 'oracle':
+                            row = '||'.join(concats)
+                        else:
+                            row = "concat_ws('|'," + ','.join(concats) + ")"
+                        conds.append(f"{row} {op} :{mark}")
+                        params[mark] = value
+                                
+                expr = "(" + " AND ".join(conds) + ")"
                 self.cond.prep_stmnts.append(expr)
                 self.cond.params.update(params)
             else:

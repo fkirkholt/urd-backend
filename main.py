@@ -114,7 +114,7 @@ def get_engine(cfg, db_name=None):
                         'msg': "Invalid authentication",
                         "system": cfg.system,
                         "host": cfg.host,
-                        "database": cfg.database
+                        "database": db_name
                     }
                 )
     elif cfg.system == 'sqlite' and cfg_default.database == 'urdr':
@@ -182,12 +182,11 @@ def home(request: Request):
 @app.post("/login")
 def login(response: Response, system: str, server: str, username: str,
           password: str, database: str):
-    cfg.system = system
+    cfg.system = system or cfg.system
     cfg.uid = username
     cfg.pwd = password
-    cfg.database = database
-    cfg.host = server or 'localhost'
-    app.state.cnxn = None
+    cfg.database = database or cfg.database
+    cfg.host = server or cfg.host
 
     # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
     if cfg.system == 'sqlite' and cfg.database != 'urdr':
@@ -200,8 +199,7 @@ def login(response: Response, system: str, server: str, username: str,
 @app.get("/logout")
 def logout(response: Response):
     response.delete_cookie("session")
-    cfg.uid = None
-    cfg.pwd = None
+    cfg = cfg_default
     cnxn = {
         'system': cfg_default.system,
         'host': cfg_default.host,

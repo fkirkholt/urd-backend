@@ -2,6 +2,9 @@ import re
 import math
 from addict import Dict
 from util import prepare, to_rec
+from settings import Settings
+
+cfg = Settings()
 
 
 class Grid:
@@ -571,6 +574,9 @@ class Grid:
                                     concats.append(f"lower({self.tbl.view}.{field.name})")
 
                         if self.db.engine.name == 'oracle':
+                            row = '||'.join(concats)
+                        elif self.db.engine.name == 'sqlite' and cfg.use_odbc:
+                            concats = ["coalesce(" + concat + ", '')" for concat in concats]
                             row = '||'.join(concats)
                         else:
                             row = "concat_ws('|'," + ','.join(concats) + ")"

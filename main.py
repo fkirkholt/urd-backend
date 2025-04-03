@@ -228,6 +228,7 @@ def dblist(role: str = None):
 
         else:
             file_list = os.listdir(cfg.host)
+            file_list.sort()
             for filename in file_list:
                 attrs = xattr.xattr(cfg.host + '/' + filename)
                 comment = None

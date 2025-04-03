@@ -36,8 +36,8 @@ class Database:
             self.schema = 'dbo' if len(path) == 1 else path[1]
             self.cat = path[0]
         elif engine.name in ('duckdb', 'sqlite'):
-            self.schema = 'main' if len(path) == 1 else path[1]
-            self.cat = path[0]
+            self.schema = 'main'
+            self.cat = None
         else:
             self.schema = db_name
             self.cat = None

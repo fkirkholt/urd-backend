@@ -98,7 +98,7 @@ class Field:
         elif self.datatype == 'bool':
             element = 'input'
             type_ = 'checkbox'
-        elif self.datatype == 'bytes' or (self.datatype == 'str' and (
+        elif self.datatype in ['bytes', 'json'] or (self.datatype == 'str' and (
                 not self.size or self.size >= 255)):
             element = "textarea"
         else:

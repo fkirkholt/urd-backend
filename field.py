@@ -3,6 +3,9 @@ from addict import Dict
 from sqlalchemy import text
 from util import prepare, to_rec
 from expression import Expression
+from settings import Settings
+
+cfg = Settings()
 
 
 class Field:
@@ -209,6 +212,10 @@ class Field:
                     if len(cols) == 1:
                         self.view = cols[0]
                     elif self._db.engine.name in ['oracle']:
+                        self.view = " || ', ' || ".join(cols)
+                    elif self._db.engine.name == 'sqlite' and cfg.use_odbc:
+                        # odbc driver for sqlite doesn't support concat_ws yet
+                        cols = ["coalesce(" + col + ", '')" for col in cols]
                         self.view = " || ', ' || ".join(cols)
                     else:
                         self.view = "concat_ws(', ', " + ', '.join(cols) + ")"

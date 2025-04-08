@@ -576,6 +576,7 @@ class Grid:
                         if self.db.engine.name == 'oracle':
                             row = '||'.join(concats)
                         elif self.db.engine.name == 'sqlite' and cfg.use_odbc:
+                            # odbc driver for sqlite doesn't support concat_ws yet
                             concats = ["coalesce(" + concat + ", '')" for concat in concats]
                             row = '||'.join(concats)
                         else:

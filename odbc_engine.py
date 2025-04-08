@@ -21,6 +21,7 @@ class ODBC_Engine:
             cnxnstr += 'Database=' + path[0] + ';'
         if cfg.system == 'oracle':
             cnxnstr += "DBQ=" + cfg.host + ';'
+            pyodbc.lowercase = True
         else:
             srv_parts = cfg.host.split(':')
             cnxnstr += 'Server=' + srv_parts[0] + ';'

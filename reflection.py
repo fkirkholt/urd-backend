@@ -155,9 +155,7 @@ class Reflection:
             if self.engine.name in ['mysql', 'mariadb', 'oracle', 'postgres']:
                 sql = self.expr.fkeys()
                 fkeys = Dict()
-                print('sql', sql)
-                for row in crsr.execute(sql, schema or cat):
-                    fkey = Dict()
+                for row in crsr.execute(sql, schema or self.cat):
                     key = (schema, row.fktable_name)
                     if key not in all_fkeys:
                         all_fkeys[key] = Dict()

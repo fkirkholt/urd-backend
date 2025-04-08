@@ -156,7 +156,8 @@ class Table:
                 (pkey_col_type == 'str' and not pkey_col_length or
                  pkey_col_type == 'str' and pkey_col_length >= 10) or (
                     pkey_col and (
-                        ('int' in str(pkey_col.type).lower() and
+                        ('int' in str(pkey_col_type).lower() and
+                         (not pkey_col_length or pkey_col_length > 8) and
                          str(pkey_col.type).lower() not in smallints) or
                         ('numeric' in str(pkey_col.type).lower() and
                          pkey_col.precision - pkey_col.scale >= 8) or

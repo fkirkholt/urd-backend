@@ -62,23 +62,15 @@ from the name. If the name of the referenced table occurs in the
 table name, this is removed (as well as any postfix), and then the
 label is derived from what you are left with.
 
+The label for such tables when displayed as relations, is derived
+from the last column in the foreign key(s). 
+
 If you e.g. has tables `user`, `group` and a cross-reference table
-`user_group_xref`, and are showing a user, then the postfix `_xref`
-and `user` is removed, and you'll see the relation "Group".
+`user_group_xref` with columns `user` and `group` (or `user_id` and
+`group_id`), and are showing a user, then the relation is derived from
+the `group` (or `group_id`) column and you'll see the relation "Group".
 
-The table is placed in the list of tables under the table that is
-referred first in the primary key.
-
-E.g. if you have a table `archive_creator` with a primary key
-`agent, archive`, the table `archive_creator` is placed under the
-table `agent`. If you want it to go under `archive` instead, set the
-primary key to `archive, agent`.
-
-You should also group the columns in the primary key so they are in
-the same order as the columns in the table.
-
-Prefix the table name with underscore to remove it from the list
-of tables.
+Cross-reference tables are not shown in the table list.
 
 ## Extension tables
 

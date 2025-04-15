@@ -344,7 +344,7 @@ class Record:
 
         # Get autoinc values for primary keys
         # Supports simple and compound primary keys
-        for colname in self._tbl.pkey.colnames:
+        for colname in self._tbl.pkey.columns:
             if colname in values:
                 self.pkey[colname] = values[colname]
         inc_col = self._tbl.pkey.columns[-1]

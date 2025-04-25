@@ -829,7 +829,8 @@ class Grid:
                         col != f"{self.tbl.name.rstrip('_')}_{ref.strip('_')}"
                         and col != ref
                     ):
-                        colname = self.db.get_label(col).lower()
+                        postfix = rel.referred_table.strip('_') + '_' + ref.strip('_')
+                        colname = self.db.get_label(col, postfix=postfix).lower()
                         rel.label += " (" + colname + ")"
             else:
                 rel.hidden = True

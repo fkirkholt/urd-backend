@@ -10,5 +10,6 @@ simplejson==3.19.3
 SQLAlchemy==2.0.37
 sqlglot==26.3.9
 starlette==0.45.3
+typer==0.15.1
 uvicorn==0.34.0
 xattr==1.1.4

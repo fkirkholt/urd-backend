@@ -28,6 +28,7 @@ import pyodbc
 from user import User
 from odbc_engine import ODBC_Engine
 from starlette.background import BackgroundTask
+import typer
 
 
 cfg = Settings()
@@ -866,12 +867,11 @@ def convert(base: str, table: str, from_format: str, to_format: str,
 
 @app.get('/query')
 def query(base: str, sql: str, limit: str):
-    print('sql', sql)
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     if not hasattr(app.state, 'cnxn'):
         app.state.cnxn = dict()
-    if not base in app.state.cnxn:
+    if base not in app.state.cnxn:
         app.state.cnxn[base] = engine.connect()
     limit = 0 if not limit else int(limit)
     result = dbo.query_result(sql, limit, app.state.cnxn[base])
@@ -879,9 +879,13 @@ def query(base: str, sql: str, limit: str):
     return {'result': result}
 
 
-if __name__ == '__main__':
+def main(host: str='localhost', port: int=8000):
     uvicorn.run(
         app,
-        host='localhost',
-        port=8000,
+        host=host,
+        port=port,
     )
+
+
+if __name__ == "__main__":
+    typer.run(main)

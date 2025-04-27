@@ -41,7 +41,7 @@ before starting the application.
 ## Starting web server
 
 ~~~ sh
-python3 main.py
+python3 main.py --host 0.0.0.0 --port 8000
 ~~~
 
 ## Features

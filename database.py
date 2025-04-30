@@ -737,7 +737,10 @@ class Database:
                 fkey.base = self.cat
                 fkey.table_name = key[-1]
                 fkey.schema = key[0] or self.db.schema
-                if set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns):
+                if (
+                    self.pkeys[fkey.table_name].columns and
+                    set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns)
+                ):
                     fkey.relationship = '1:1'
                 else:
                     fkey.relationship = '1:M'

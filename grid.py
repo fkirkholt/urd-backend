@@ -261,7 +261,10 @@ class Grid:
                 continue
             if field.name == 'password':
                 continue
-            if field.datatype == 'str' and not field.size:
+            if (
+                field.datatype == 'str' and not field.size
+                and not self.tbl.get_fkey(field.name)
+            ):
                 continue
             if field.datatype == 'str' and (field.size and field.size >= 255):
                 continue

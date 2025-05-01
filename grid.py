@@ -250,7 +250,12 @@ class Grid:
 
         fkeys = self.tbl.fkeys
         hidden = self.tbl.is_hidden()
+        i = 0
+        count_pkey_cols = 0
         for key, field in self.tbl.fields.items():
+            i += 1
+            if field.name in self.tbl.pkey.columns:
+                count_pkey_cols += 1
             if len(self._columns) == 5:
                 break
             # Don't show hdden columns
@@ -263,7 +268,9 @@ class Grid:
                 continue
             if (
                 field.datatype == 'str' and not field.size
-                and not self.tbl.get_fkey(field.name)
+                and not self.tbl.get_fkey(field.name) and (
+                    i > count_pkey_cols + 1
+                )
             ):
                 continue
             if field.datatype == 'str' and (field.size and field.size >= 255):

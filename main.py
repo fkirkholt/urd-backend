@@ -763,7 +763,7 @@ def download_file(path: str, media_type: str):
 
 
 @app.get('/export_tsv')
-def export_tsv(base: str, objects: str, dest: str, table: str = None):
+def export_tsv(base: str, objects: str, dest: str, clobs_as_files: bool,  table: str = None):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     download = True if dest == 'download' else False
@@ -784,9 +784,15 @@ def export_tsv(base: str, objects: str, dest: str, table: str = None):
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             docpath = os.path.join(dest, 'documents')
             os.makedirs(docpath, exist_ok=True)
-            table.write_tsv(filepath, columns=columns)
-            new_path = os.path.join(tempfile.gettempdir(), table.name + '.tsv')
-            os.rename(filepath, new_path)
+            table.write_tsv(filepath, clobs_as_files, columns=columns)
+            count_docs = len(os.listdir(docpath))
+            if count_docs:
+                path = shutil.make_archive(dest, 'zip', dest)
+                new_path = os.path.dirname(path) + '/' + table.name + '.zip'
+                os.rename(path, new_path)
+            else:
+                new_path = os.path.join(tempfile.gettempdir(), table.name + '.tsv')
+                os.rename(filepath, new_path)
             data = json.dumps({'msg': 'done', 'path': new_path})
 
             yield f"data: {data}\n\n"
@@ -804,11 +810,12 @@ def export_tsv(base: str, objects: str, dest: str, table: str = None):
                 table.offset = 0
                 table.limit = None
                 filepath = os.path.join(dest, 'data', tbl_name + '.tsv')
-                table.write_tsv(filepath)
+                table.write_tsv(filepath, clobs_as_files)
             if download:
                 path = shutil.make_archive(dest, 'zip', dest)
-                os.rename(path, '/tmp/data.zip')
-                data = json.dumps({'msg': 'done', 'path': '/tmp/data.zip'})
+                new_path = os.path.dirname(path) + '/' + base + '.zip'
+                os.rename(path, new_path)
+                data = json.dumps({'msg': 'done', 'path': new_path})
 
                 yield f"data: {data}\n\n"
             else:

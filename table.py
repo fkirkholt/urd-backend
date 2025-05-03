@@ -425,13 +425,15 @@ class Table:
 
         return tbl_names
 
-    def write_tsv(self, filepath, columns = None):
+    def write_tsv(self, filepath, clobs_as_files, columns = None):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         blobcolumns = []
         selects = {}
         for fieldname in self.fields:
             field = self.fields[fieldname]
-            if field.datatype == 'bytes':
+            if field.datatype == 'bytes' or (
+                clobs_as_files and field.datatype == 'str' and not field.size
+             ):
                 foldername = self.name + '.' + field.name
                 path = os.path.join(os.path.dirname(filepath), '../documents', foldername)
                 os.makedirs(path, exist_ok=True)
@@ -471,7 +473,9 @@ class Table:
                         foldername = self.name + '.' + col
                         path = os.path.join(dir, '../documents', foldername, filename)
                         if val is not None:
-                            with open(path, 'wb') as blobfile:
+                            field = self.fields[col]
+                            mode = 'wb' if field.datatype == 'bytes' else 'w' 
+                            with open(path, mode) as blobfile:
                                 blobfile.write(val)
                             val = 'documents/' + foldername + '/' + filename
                     if type(val) is bool:

@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException, Body
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import (HTMLResponse, JSONResponse, StreamingResponse,
                                FileResponse)
@@ -452,7 +452,7 @@ async def get_table(base: str, table: str, filter: str = None,
 
 
 @app.post("/record")
-def create_record(base: str, table: str, pkey: str, values: str):
+def create_record(base: str, table: str, pkey: str, values: str = Body(...)):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)
@@ -465,7 +465,7 @@ def create_record(base: str, table: str, pkey: str, values: str):
 
 
 @app.put("/record")
-def update_record(base: str, table: str, pkey: str, values: str):
+def update_record(base: str, table: str, pkey: str, values: str = Body(...)):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)

@@ -248,6 +248,10 @@ class Grid:
             self._columns = grid_idx.columns
             return self._columns
 
+        for field in self.tbl.fields.values():
+            if not field.nullable:
+                self._columns.append(field.name)
+
         fkeys = self.tbl.fkeys
         hidden = self.tbl.is_hidden()
         i = 0
@@ -256,8 +260,10 @@ class Grid:
             i += 1
             if field.name in self.tbl.pkey.columns:
                 count_pkey_cols += 1
-            if len(self._columns) == 5:
+            if len(self._columns) >= 5:
                 break
+            if key in self._columns:
+                continue
             # Don't show hdden columns
             if (
                 field.name[0:1] == '_' or

@@ -21,7 +21,6 @@ class ODBC_Engine:
             cnxnstr += 'Database=' + path[0] + ';'
         if cfg.system == 'oracle':
             cnxnstr += "DBQ=" + cfg.host + ';'
-            pyodbc.lowercase = True
         else:
             srv_parts = cfg.host.split(':')
             cnxnstr += 'Server=' + srv_parts[0] + ';'
@@ -30,9 +29,7 @@ class ODBC_Engine:
         cnxnstr += 'Uid=' + cfg.uid + ';Pwd=' + cfg.pwd + ';'
         if self.name == 'mssql':
             cnxnstr += 'Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes'
-            pyodbc.lowercase = False
         if self.name == 'sqlite':
-            pyodbc.lowercase = False
             path = os.path.join(cfg.host, db_name + '.db')
             cnxnstr = 'Driver=SQLite3;Database=' + path
             if os.path.exists(path):
@@ -60,9 +57,9 @@ class ODBC_Engine:
             'database': path if cfg.system == 'sqlite' else db_name
         })
 
-    def connect(self):
+    def connect(self, lowercase=False):
         cnxn = pyodbc.connect(self.cnxnstr)
-
+        pyodbc.lowercase = lowercase
         return cnxn
 
     def get_driver(self):

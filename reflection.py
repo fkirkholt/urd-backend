@@ -25,7 +25,7 @@ class Reflection:
 
         if self.engine.name == 'postgres':
             # sql = self.expr.schemata()
-            with self.engine.connect() as cnxn:
+            with self.engine.connect(lowercase=True) as cnxn:
                 rows = cnxn.execute(sql).fetchall()
                 for row in rows:
                     self._schema_names.append(row.schema_name)
@@ -36,7 +36,7 @@ class Reflection:
         if hasattr(self, '_tbl_names'):
             return self._tbl_names
         self._tbl_names = []
-        with self.engine.connect() as cnxn:
+        with self.engine.connect(lowercase=True) as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name in ('mysql', 'mariadb'):
                 rows = cursor.tables(catalog=schema).fetchall()
@@ -50,7 +50,7 @@ class Reflection:
         if hasattr(self, '_comments'):
             return self._comments
         self._comments = Dict()
-        with self.engine.connect() as cnxn:
+        with self.engine.connect(lowercase=True) as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name in ('mysql', 'mariadb'):
                 rows = cursor.tables(catalog=schema).fetchall()
@@ -65,7 +65,7 @@ class Reflection:
         if hasattr(self, '_view_names'):
             return self._view_names
         self._view_names = []
-        with self.engine.connect() as cnxn:
+        with self.engine.connect(lowercase=True) as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name in ('mysql', 'mariadb'):
                 rows = cursor.tables(catalog=schema).fetchall()
@@ -81,7 +81,7 @@ class Reflection:
             return self._pkeys
         tbls = self.get_table_names(schema)
         self._pkeys = Dict()
-        with self.engine.connect() as cnxn:
+        with self.engine.connect(lowercase=True) as cnxn:
             crsr = cnxn.cursor()
             for tbl_name in tbls:
                 if self.engine.name in ['sqlite']:
@@ -106,7 +106,7 @@ class Reflection:
         """ Return all columns in schema by reflection """
         if hasattr(self, '_columns'):
             return self._columns
-        with self.engine.connect() as cnxn:
+        with self.engine.connect(lowercase=True) as cnxn:
             cursor = cnxn.cursor()
             if self.engine.name == 'oracle':
                 # cursor.columns doesn't work for all types of oracle columns
@@ -150,7 +150,7 @@ class Reflection:
         if self.fkeys:
             return self.fkeys
         all_fkeys = Dict()
-        with self.engine.connect() as cnxn:
+        with self.engine.connect(lowercase=True) as cnxn:
             crsr = cnxn.cursor()
             if self.engine.name in ['mysql', 'mariadb', 'oracle', 'postgres']:
                 sql = self.expr.fkeys()

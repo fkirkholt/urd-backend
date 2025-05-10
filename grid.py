@@ -814,10 +814,11 @@ class Grid:
                     rel.order = len(rel_tbl.pkey.columns) - \
                         rel_tbl.pkey.columns.index(rel.constrained_columns[-1])
 
-                
                 if rel_tbl.type == 'xref':
+                    # set label based on column names of fkey columns
                     diff = set(rel_tbl.pkey.columns) - set(rel.constrained_columns)
-                    diff = [col for col in rel_tbl.pkey.columns if col not in rel.constrained_columns]
+                    diff = [col for col in rel_tbl.pkey.columns
+                            if col not in rel.constrained_columns]
                     colname = list(diff)[-1]
                     rel.label = self.db.get_label(list(diff)[-1])
                     for fkey in rel_tbl.fkeys.values():
@@ -825,7 +826,7 @@ class Grid:
                             ref_col = fkey.referred_columns[-1].strip('_')
                             ref_col_has_special_name = True
                             if colname in [fkey.referred_table + '_' + ref_col,
-                                            fkey.referred_columns[-1]]:
+                                           fkey.referred_columns[-1]]:
                                 rel.label = self.db.get_label(fkey.referred_table)
                                 ref_col_has_special_name = False
                 else:

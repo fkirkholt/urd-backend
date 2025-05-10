@@ -203,6 +203,9 @@ class Field:
             if ref_tbl.is_hidden() is False and ref_tbl.type != 'list':
                 self.expandable = True
 
+            if not ref_tbl.pkey:
+                return self.view
+
             for index in ref_tbl.indexes.values():
                 if index.columns != ref_tbl.pkey.columns and index.unique:
                     # Only last pk column is used in display value,

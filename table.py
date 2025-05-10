@@ -180,7 +180,7 @@ class Table:
             elif set(cols) < set(self.pkey.columns):
                 all_fkey_columns.update(set(cols))
 
-        if set(self.pkey.columns) <= all_fkey_columns:
+        if self.pkey and set(self.pkey.columns) <= all_fkey_columns:
             self._type = "xref"
 
         return self._type

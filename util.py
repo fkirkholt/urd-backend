@@ -12,7 +12,7 @@ def prepare(sql, params={}):
     if cfg.use_odbc:
         p = re.compile(r'(?<!:)\:[a-zA-ZæøåÆØÅ_]\w*\b')
         placeholders = p.findall(sql)
-        sql_prep = re.sub(r'(?<!:)\:\w*\b', '?', sql)
+        sql_prep = re.sub(r'(?<!:)\:[a-zA-ZæøåÆØÅ_]\w*\b', '?', sql)
         if type(params) is not list:
             params_prep = []
             for ph in placeholders:

@@ -144,6 +144,7 @@ class Expression:
             from all_indexes i
             join all_ind_columns col on col.index_name = i.index_name
             where i.table_owner = ?
+                  and column_name not like '%$'
             order by column_position
             """
         elif self.platform in ('mysql', 'mariadb'):

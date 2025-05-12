@@ -294,6 +294,7 @@ class Expression:
             from all_tab_columns
             where owner = ? and table_name = nvl(?, table_name) and
                   column_name = nvl(?, column_name)
+            order by table_name, column_id
             """
         elif self.platform == 'sqlite':
             return f"""

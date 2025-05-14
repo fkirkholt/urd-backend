@@ -955,7 +955,7 @@ class Database:
             
             with open(filepath) as file:
                 print('importing', filename)
-                records = csv.DictReader(file, delimiter="\t")
+                records = csv.DictReader(file, delimiter="\t", quoting=csv.QUOTE_NONE)
 
                 with self.engine.connect() as cnxn:
 

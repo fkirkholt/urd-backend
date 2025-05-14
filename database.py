@@ -817,8 +817,7 @@ class Database:
                                     fkeys[tbl_name_1][name].name = name
                                     fkeys[tbl_name_1][name].table_name = tbl_name_1
                                     fkeys[tbl_name_1][name].schema = self.schema
-                                    fkeys[tbl_name_1][name].relationship = '1:M' 
-                                    if not 'constrained_columns' in fkeys[tbl_name_1][name]:
+                                    if 'constrained_columns' not in fkeys[tbl_name_1][name]:
                                         fkeys[tbl_name_1][name].constrained_columns = []
                                         fkeys[tbl_name_1][name].referred_columns = []
                                     if (fkey_col_name) not in fkeys[tbl_name_1][name].constrained_columns:
@@ -828,6 +827,16 @@ class Database:
                                     fkeys[tbl_name_1][name].referred_table = tbl_name_2
                                     fkeys[tbl_name_1][name].ref_table_alias = prefix or tbl_name_2
                                     relations[tbl_name_2][name] = fkeys[tbl_name_1][name]
+            for tbl_name in fkeys:
+                for fkey in fkeys[tbl_name].values():
+                    if (
+                        self.pkeys[fkey.table_name].columns and
+                        set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns)
+                    ):
+                        fkey.relationship = '1:1'
+                    else:
+                        fkey.relationship = '1:M'
+
             self._fkeys = fkeys
             self._relations = relations
 

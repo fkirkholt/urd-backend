@@ -137,7 +137,8 @@ class Table:
                         pkey_col = Column(self, col)
                         break
                 if type(pkey_col.type) is str:
-                    pkey_col_type = self.db.refl.expr.to_urd_type(pkey_col.type)
+                    expr = Expression(self.db.engine.name)
+                    pkey_col_type = expr.to_urd_type(pkey_col.type)
                 else:
                     pkey_col_type = pkey_col.type.python_type.__name__
                 if hasattr(pkey_col, 'size'):
@@ -565,7 +566,7 @@ class Table:
         # contents = None if not self.db.cache \
         #     else self.db.cache.contents
 
-        if not cfg.use_odbc and self.db.engine.name == 'sqlite':
+        if not cfg.use_odbc and self.db.engine.name in ['sqlite', 'duckdb']:
             # Must get native column types for sqlite, to find if
             # there is a column defined as json
             expr = Expression(self.db.engine.name)

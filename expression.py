@@ -302,6 +302,13 @@ class Expression:
             select name, type, case when "notnull" = 1 then 0 else 1 end as nullable,
                    dflt_value as "default" from pragma_table_info('{tbl_name}')
             """
+        elif self.platform == 'duckdb':
+            return f"""
+            select table_name, column_name as name, is_nullable as nullable,
+                   column_default as "default", data_type as type
+            from duckdb_columns
+            where schema_name = 'main' and table_name = '{tbl_name}'
+            """
         else:
             return None
 

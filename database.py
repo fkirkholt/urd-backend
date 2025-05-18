@@ -284,9 +284,27 @@ class Database:
 
         if not hasattr(self, '_columns'):
             self._columns = Dict()
-            columns = self.refl.get_multi_columns(self.schema)
-            for (schema, table), cols in columns.items():
-                self._columns[table] = cols
+
+            if self.engine.name == 'duckdb':
+                sql = """
+                select table_name, column_name as name, is_nullable as nullable,
+                       column_default as "default", data_type as type
+                from duckdb_columns
+                where schema_name = 'main'
+                """
+                with self.engine.connect() as cnxn:
+                    sql, _ = prepare(sql)
+                    rows = cnxn.execute(sql).fetchall()
+                    for row in rows:
+                        if row.table_name not in self._columns:
+                            self._columns[row.table_name] = []
+                        col = to_rec(row)
+                        self._columns[row.table_name].append(col)
+
+            else:
+                columns = self.refl.get_multi_columns(self.schema)
+                for (schema, table), cols in columns.items():
+                    self._columns[table] = cols
 
         return self._columns
 

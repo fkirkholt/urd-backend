@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     timeout: int = 30 * 60  # 30 minutes
     system: str | None = None
     host: str | None = None
+    subfolders: list = []
     database: str | None = None
     uid: str | None = None
     pwd: str | None = None

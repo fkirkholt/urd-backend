@@ -440,7 +440,7 @@ class Record:
 
         with self._db.engine.connect() as cnxn:
             sql, params = prepare(sql, params)
-            result = cnxn.execute(sql, params)
+            cnxn.execute(sql, params)
             cnxn.commit()
 
         # Update primary key
@@ -448,7 +448,7 @@ class Record:
             if key in self.pkey:
                 self.pkey[key] = value
 
-        return result
+        return 1
 
     def delete(self):
         """ Deletes a record.

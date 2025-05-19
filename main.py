@@ -489,7 +489,7 @@ def update_record(base: str, table: str, pkey: str, values: str = Body(...)):
 
 
 @app.delete("/record")
-def delete_record(base: str, table: str, pkey: str, values: str):
+def delete_record(base: str, table: str, pkey: str):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     tbl = Table(dbo, table)

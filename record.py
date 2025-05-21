@@ -467,7 +467,7 @@ class Record:
 
         with self._db.engine.connect() as cnxn:
             sql, params = prepare(sql, self.pkey)
-            result = cnxn.execute(sql, params)
+            cnxn.execute(sql, params)
             cnxn.commit()
 
-        return result
+        return 1

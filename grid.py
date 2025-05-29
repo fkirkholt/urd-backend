@@ -279,7 +279,7 @@ class Grid:
                 )
             ):
                 continue
-            if field.datatype == 'str' and (field.size and field.size >= 255):
+            if field.datatype == 'str' and (field.size and field.size > 255):
                 continue
             if field.datatype == 'json':
                 continue

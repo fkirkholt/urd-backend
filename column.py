@@ -32,6 +32,10 @@ class Column:
                     self.scale = int(size_parts[1])
                 else:
                     self.scale = 0
+        elif type(col.type) is str and col.type == 'VARCHAR':
+            # Set size of 'VARCHAR' columns in DuckDB, which doesn't
+            # register any size on such columns
+            self.size = 255
         # Get size, scale and precision for SQLAlchemy
         if hasattr(col.type, 'length'):
             self.size = col.type.length

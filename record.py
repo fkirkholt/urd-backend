@@ -243,9 +243,10 @@ class Record:
     def get_values(self):
         if self._cache.get('vals', None):
             return self._cache.vals
-        conds = [f"{key} = :{key}" for key in self.pkey]
+        conds = [f"{key} = :{key}" for key in self.pkey if self.pkey[key] is not None]
+        conds = conds + [f"{key} is null" for key in self.pkey if self.pkey[key] is None]
         cond = " and ".join(conds)
-        params = {key: val for key, val in self.pkey.items()}
+        params = {key: val for key, val in self.pkey.items() if self.pkey[key] is not None}
 
         selects = []
         for key, field in self._tbl.fields.items():
@@ -427,9 +428,12 @@ class Record:
         sets = [f"{key} = :{key}" for key, val in set_values.items()]
         set_str = ",\n".join(sets)
 
-        wheres = [f"{key} = :pk{i}" for i, key in enumerate(self.pkey)]
+        wheres = [f"{key} = :pk{i}" for i, key in enumerate(self.pkey)
+                  if self.pkey[key] is not None]
+        wheres = wheres + [f"{key} is null" for key in self.pkey if self.pkey[key] is None]
         where_str = " and ".join(wheres)
-        where_vals = {f"pk{i}": val for i, val in enumerate(self.pkey.values())}
+        where_vals = {f"pk{i}": val for i, val in enumerate(self.pkey.values())
+                      if val is not None}
         params = set_values | where_vals
 
         sql = f"""

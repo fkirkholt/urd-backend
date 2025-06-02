@@ -736,7 +736,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     if table_defs:
                         file.write(table.get_indexes_ddl())
 
-                if table_defs:
+                if table_defs and dialect == engine.name:
                     i = 0
                     for view_name in dbo.refl.get_view_names(dbo.schema):
                         if i == 0:
@@ -752,6 +752,14 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                             ddl += f'{view_def}; \n\n'
                         else:
                             ddl += f"-- View definition not supported for {dbo.engine.name} yet\n"
+                    for definition in dbo.functions.values():
+                        if dialect == 'oracle':
+                            ddl += 'CREATE OR REPLACE '
+                        ddl += definition + '\n\n'
+                    for definition in dbo.procedures.values():
+                        if dialect == 'oracle':
+                            ddl += 'CREATE OR REPLACE '
+                        ddl += definition + '\n\n'
 
                     file.write(ddl)
 

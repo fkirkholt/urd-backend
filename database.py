@@ -850,6 +850,40 @@ class Database:
 
         return self._relations
 
+    @property
+    def functions(self):
+        """Get all functions in database"""
+        functions = Dict()
+        sql = self.user.expr.functionlines()
+        if sql is None:
+            return functions
+        with self.engine.connect() as cnxn:
+            sql, params = prepare(sql, {'owner': self.schema})
+            rows = cnxn.execute(sql, params).fetchall()
+        for row in rows:
+            if row.name not in functions:
+                functions[row.name] = row.text
+            else:
+                functions[row.name] += row.text
+        return functions
+
+    @property
+    def procedures(self):
+        """Get all procedures in database"""
+        procedures = Dict()
+        sql = self.user.expr.procedurelines()
+        if sql is None:
+            return procedures
+        with self.engine.connect() as cnxn:
+            sql, params = prepare(sql, {'owner': self.schema})
+            rows = cnxn.execute(sql, params).fetchall()
+        for row in rows:
+            if row.name not in procedures:
+                procedures[row.name] = row.text
+            else:
+                procedures[row.name] += row.text
+        return procedures
+
     def query_result(self, sql, limit, cnxn):
         """Get query result for user defined sql"""
         query = Dict()
@@ -910,6 +944,7 @@ class Database:
 
             # Get table name in correct case
             tbl_names = self.refl.get_table_names(self.schema)
+
             for tbl_name in tbl_names:
                 if tbl_name.lower() == query.table.lower():
                     query.table = tbl_name

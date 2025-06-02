@@ -373,3 +373,25 @@ class Expression:
             """
         else:
             return None
+
+    def functionlines(self):
+        if self.platform == 'oracle':
+            return """
+            SELECT name as "name", text as "text"
+            FROM   all_source
+            WHERE  owner = :owner and type = 'FUNCTION'
+            ORDER BY name, line
+            """
+        else:
+            return None
+
+    def procedurelines(self):
+        if self.platform == 'oracle':
+            return """
+            SELECT name as "name", text as "text"
+            FROM   all_source
+            WHERE  owner = :owner and type = 'PROCEDURE'
+            ORDER BY name, line
+            """
+        else:
+            return None

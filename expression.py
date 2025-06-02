@@ -363,6 +363,10 @@ class Expression:
             WHERE   TABLE_SCHEMA    = ?
             AND     TABLE_NAME      = ?;
             """
+        elif self.platform == 'oracle':
+            return """
+            SELECT text FROM user_views where view_name = ?;
+            """
         elif self.platform == 'sqlite':
             return """
             select sql from sqlite_master where name = ?

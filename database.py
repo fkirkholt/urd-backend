@@ -979,7 +979,7 @@ class Database:
 
         # Make graph to use in topologic sort
         for tbl_name in tbl_names:
-            ref_tables = []
+            graph[tbl_name] = []
             fkeys = self.refl.get_foreign_keys(tbl_name, self.schema)
             for fkey in fkeys:
                 if fkey['referred_table'] == tbl_name:
@@ -987,8 +987,17 @@ class Database:
                     continue
                 if fkey['referred_table'] in tbl_names:
                     # SQLite may have foreign keys referring to non existing tables
-                    ref_tables.append(fkey['referred_table'])
-            graph[tbl_name] = ref_tables
+                    if fkey['referred_table'] not in graph[tbl_name]:
+                        graph[tbl_name].append(fkey['referred_table'])
+                        sorter = TopologicalSorter(graph)
+                        try:
+                            ordered_tables = tuple(sorter.static_order())
+                        except Exception as e:
+                            print(e)
+                            if not hasattr(self, 'circular'):
+                                self.circular = []
+                            self.circular.append(str(e) + '. Removed fkey: ' + json.dumps(fkey))
+                            graph[tbl_name].pop()
 
         sorter = TopologicalSorter(graph)
         ordered_tables = tuple(sorter.static_order())

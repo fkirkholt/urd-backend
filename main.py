@@ -675,6 +675,9 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
             ordered_tables, self_referring = dbo.sorted_tbl_names()
 
             with open(filepath, 'w') as file:
+                if dbo.circular:
+                    for line in dbo.circular:
+                        file.write('-- ' + line + '\n')
                 if dialect == 'oracle':
                     file.write("SET DEFINE OFF;\n")
                     file.write("SET FEEDBACK OFF;\n")

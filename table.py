@@ -672,16 +672,20 @@ class Table:
                 elif dialect == 'mariadb':
                     dialect = 'mysql'
 
-                table = (parse_one(view_def, read=dialect)
-                         .find(exp.From)
-                         .find(exp.Table))
-                if table:
-                    table.pkey = self.db.pkeys[table.name]
-                    if (
-                        table.pkey and self.pkey and
-                        table.pkey.columns == self.pkey.columns
-                    ):
-                        table_name = table.name
+                try:
+                    table = (parse_one(view_def, read=dialect)
+                             .find(exp.From)
+                             .find(exp.Table))
+                    if table:
+                        table.pkey = self.db.pkeys[table.name]
+                        if (
+                            table.pkey and self.pkey and
+                            table.pkey.columns == self.pkey.columns
+                        ):
+                            table_name = table.name
+                except Exception as e:
+                    print(e)
+
         if hasattr(self.db, 'relations') and not self.db.config.update_cache:
             self._relations = self.db.relations[table_name]
             return

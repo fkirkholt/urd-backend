@@ -671,7 +671,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     file.write(ddl)
         else:
             ddl = ''
-            filepath = os.path.join(dest, f"{base}.{dialect}.sql")
+            filepath = os.path.join(dest, f"{base.lower()}.{dialect}.sql")
             ordered_tables, self_referring = dbo.sorted_tbl_names()
 
             with open(filepath, 'w') as file:
@@ -832,7 +832,7 @@ def export_tsv(base: str, objects: str, dest: str, clobs_as_files: bool,  table:
                 table = Table(dbo, tbl_name)
                 table.offset = 0
                 table.limit = None
-                filepath = os.path.join(dest, 'data', tbl_name + '.tsv')
+                filepath = os.path.join(dest, base.lower() + '-data', tbl_name + '.tsv')
                 table.write_tsv(filepath, clobs_as_files)
             if download:
                 path = shutil.make_archive(dest, 'zip', dest)

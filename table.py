@@ -453,6 +453,8 @@ class Table:
             rows = cnxn.execute(sql)
             n = 0
             for row in rows:
+                if self.limit and n == self.limit:
+                    break
                 n += 1
                 rec = to_rec(row)
                 if n == 1:

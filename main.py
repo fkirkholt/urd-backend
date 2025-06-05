@@ -791,7 +791,8 @@ def download_file(path: str, media_type: str):
 
 
 @app.get('/export_tsv')
-def export_tsv(base: str, objects: str, dest: str, clobs_as_files: bool,  table: str = None):
+def export_tsv(base: str, objects: str, dest: str, clobs_as_files: bool,
+               limit: int = None, table: str = None):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     download = True if dest == 'download' else False
@@ -836,7 +837,7 @@ def export_tsv(base: str, objects: str, dest: str, clobs_as_files: bool,  table:
                 yield f"data: {data}\n\n"
                 table = Table(dbo, tbl_name)
                 table.offset = 0
-                table.limit = None
+                table.limit = limit
                 filepath = os.path.join(dest, base.lower() + '-data', tbl_name + '.tsv')
                 table.write_tsv(filepath, clobs_as_files)
             if download:

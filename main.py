@@ -616,7 +616,7 @@ async def update_cache(base: str, config: str):
 @app.get('/export_sql')
 def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                no_fkeys: bool, list_recs: bool, data_recs: bool,
-               select_recs: bool, table: str = None):
+               select_recs: bool, view_as_table: bool, table: str = None):
     """Create sql for exporting a database
 
     Parameters:
@@ -674,6 +674,11 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
             filepath = os.path.join(dest, f"{base.lower()}.{dialect}.sql")
             ordered_tables, self_referring = dbo.sorted_tbl_names()
 
+            views = tuple(dbo.refl.get_view_names(dbo.schema))
+            if view_as_table:
+                ordered_tables = (ordered_tables + views)
+                views = []
+
             with open(filepath, 'w') as file:
                 if dbo.circular:
                     for line in dbo.circular:
@@ -683,7 +688,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     file.write("SET FEEDBACK OFF;\n")
                     file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
                 if table_defs:
-                    for view_name in dbo.refl.get_view_names(dbo.schema):
+                    for view_name in views:
                         if dialect == 'oracle':
                             ddl += f"drop view {view_name};\n"
                         else:
@@ -738,7 +743,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
 
                 if table_defs and dialect == engine.name:
                     i = 0
-                    for view_name in dbo.refl.get_view_names(dbo.schema):
+                    for view_name in views:
                         if i == 0:
                             ddl += '\n'
                         i += 1

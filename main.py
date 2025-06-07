@@ -679,7 +679,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                 views = []
 
             with open(filepath, 'w') as file:
-                if dbo.circular:
+                if hasattr(dbo, 'circular'):
                     for line in dbo.circular:
                         file.write('-- ' + line + '\n')
                 if dialect == 'oracle':

@@ -4,6 +4,7 @@ import time
 import re
 import csv
 import sys
+import shutil
 from pathlib import Path
 from graphlib import TopologicalSorter
 from sqlalchemy import inspect, exc
@@ -13,7 +14,6 @@ import pyodbc
 from addict import Dict
 from settings import Settings
 from table import Table
-from grid import Grid
 from user import User
 from datatype import Datatype
 from odbc_engine import ODBC_Engine
@@ -959,6 +959,110 @@ class Database:
         cnxn.commit()
 
         return query
+
+    def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download):
+        # Count rows
+        total_rows = 0
+        for table in tables:
+            with self.engine.connect() as cnxn:
+                n = cnxn.execute(f'select count(*) from {table}').fetchone()[0]
+                if limit and n > limit:
+                    n = limit
+                total_rows += n
+
+        count = 0
+        last_progress = 0
+        for table in tables:
+            table = Table(self, table, dest)
+            table.offset = 0
+            table.limit = limit
+            filepath = os.path.join(dest, self.schema.lower() + '-data', table.name + '.tsv')
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            blobcolumns = []
+            selects = {}
+            for fieldname in table.fields:
+                field = table.fields[fieldname]
+                if field.datatype == 'bytes' or (
+                    clobs_as_files and field.datatype == 'str' and not field.size
+                 ):
+                    foldername = table.name + '.' + field.name
+                    path = os.path.join(os.path.dirname(filepath), '../documents', foldername)
+                    os.makedirs(path, exist_ok=True)
+                    blobcolumns.append(field.name)
+                if not cols or field.name in cols:
+                    selects[field.name] = field.name
+                    if field.datatype == 'geometry':
+                        selects[field.name] = f"{field.name}.ToString() as {field.name}"
+
+            select = ', '.join(selects.values())
+
+            file = open(filepath, 'w')
+            sql = f"select {select} from " + table.name
+            with self.engine.connect() as cnxn:
+                sql, _ = prepare(sql)
+                rows = cnxn.execute(sql)
+                n = 0
+                for row in rows:
+                    progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
+                    if progress != last_progress:
+                        data = json.dumps({'msg': table.name, 'progress': progress})
+                        yield f"data: {data}\n\n"
+                        last_progress = progress
+                    if limit and n == limit:
+                        break
+                    n += 1
+                    count += 1
+                    rec = to_rec(row)
+                    if n == 1:
+                        file.write('\t'.join(rec.keys()) + '\n')
+                    values = []
+                    num_files = 0
+                    for col, val in rec.items():
+                        if col in blobcolumns:
+                            num_files += 1
+                            dir = os.path.dirname(filepath)
+                            if table.pkey:
+                                pkey_vals = []
+                                for pkey_col in table.pkey.columns:
+                                    pkey_vals.append(str(rec[pkey_col]))
+                                filename = '-'.join(pkey_vals) + '.data'
+                            else:
+                                filename = str(num_files) + '.data'
+
+                            foldername = table.name + '.' + col
+                            path = os.path.join(dir, '../documents', foldername, filename)
+                            if val is not None:
+                                field = table.fields[col]
+                                mode = 'wb' if field.datatype == 'bytes' else 'w' 
+                                with open(path, mode) as blobfile:
+                                    blobfile.write(val)
+                                val = 'documents/' + foldername + '/' + filename
+                        if type(val) is bool:
+                            val = int(val)
+                        if type(val) is str:
+                            val = val.replace('\t', ' ')
+                            val = val.replace('\r\n', ' ')
+                            val = val.replace('\r', ' ')
+                            val = val.replace('\n', ' ')
+                        elif val is None:
+                            val = ''
+                        else:
+                            val = str(val)
+                        values.append(val)
+                    file.write('\t'.join(values) + '\n')
+                file.close()
+                if n == 0:
+                    os.remove(filepath)
+        if download:
+            path = shutil.make_archive(dest, 'zip', dest)
+            new_path = os.path.dirname(path) + '/' + self.schema + '.zip'
+            os.rename(path, new_path)
+            data = json.dumps({'msg': 'done', 'progress': 100, 'path': new_path})
+
+            yield f"data: {data}\n\n"
+        else:
+            data = json.dumps({'msg': 'done', 'progress': 100})
+            yield f"data: {data}\n\n"
 
     def import_tsv(self, dir: str):
 

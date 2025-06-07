@@ -9,7 +9,6 @@ import io
 import urllib.parse
 import re
 import tempfile
-import shutil
 from sqlalchemy import create_engine
 from settings import Settings
 from database import Database
@@ -791,11 +790,17 @@ def download_file(path: str, media_type: str):
 
 
 @app.get('/export_tsv')
-def export_tsv(base: str, objects: str, dest: str, clobs_as_files: bool,
-               limit: int = None, table: str = None):
+def export_tsv(base: str, tables: str, dest: str, clobs_as_files: bool,
+               limit: int = None, columns: str = None, folder: str = None):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     download = True if dest == 'download' else False
+    tbls = json.loads(urllib.parse.unquote(tables))
+    if columns:
+        cols = json.loads(urllib.parse.unquote(columns))
+    else:
+        cols = None
+
     if download:
         tempdir = tempfile.TemporaryDirectory()
         dest = tempdir.name
@@ -803,55 +808,8 @@ def export_tsv(base: str, objects: str, dest: str, clobs_as_files: bool,
         if not os.path.exists(dest):
             os.makedirs(dest)
 
-    def event_stream(dbo, objects, dest, table):
-        if table:
-            table = Table(dbo, table)
-            table.offset = 0
-            table.limit = None
-            columns = json.loads(urllib.parse.unquote(objects))
-            filepath = os.path.join(dest, 'data', table.name + '.tsv')
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            docpath = os.path.join(dest, 'documents')
-            os.makedirs(docpath, exist_ok=True)
-            table.write_tsv(filepath, clobs_as_files, columns=columns)
-            count_docs = len(os.listdir(docpath))
-            if count_docs:
-                path = shutil.make_archive(dest, 'zip', dest)
-                new_path = os.path.dirname(path) + '/' + table.name + '.zip'
-                os.rename(path, new_path)
-            else:
-                new_path = os.path.join(tempfile.gettempdir(), table.name + '.tsv')
-                os.rename(filepath, new_path)
-            data = json.dumps({'msg': 'done', 'path': new_path})
-
-            yield f"data: {data}\n\n"
-            return new_path
-        else:
-            tables = json.loads(urllib.parse.unquote(objects))
-            i = 0
-            count = len(tables)
-            for tbl_name in tables:
-                i += 1
-                progress = round(i/count * 100) 
-                data = json.dumps({'msg': tbl_name, 'progress': progress})
-                yield f"data: {data}\n\n"
-                table = Table(dbo, tbl_name)
-                table.offset = 0
-                table.limit = limit
-                filepath = os.path.join(dest, base.lower() + '-data', tbl_name + '.tsv')
-                table.write_tsv(filepath, clobs_as_files)
-            if download:
-                path = shutil.make_archive(dest, 'zip', dest)
-                new_path = os.path.dirname(path) + '/' + base + '.zip'
-                os.rename(path, new_path)
-                data = json.dumps({'msg': 'done', 'path': new_path})
-
-                yield f"data: {data}\n\n"
-            else:
-                data = json.dumps({'msg': 'done'})
-                yield f"data: {data}\n\n"
-
-    return StreamingResponse(event_stream(dbo, objects, dest, table),
+    return StreamingResponse(dbo.export_tsv(tbls, dest, limit, clobs_as_files,
+                                            cols, download),
                              media_type="text/event-stream")
 
 

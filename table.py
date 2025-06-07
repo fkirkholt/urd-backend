@@ -1,7 +1,6 @@
 """Module for handling tables"""
 import datetime
 import pypandoc
-import os
 from addict import Dict
 from record import Record
 from column import Column
@@ -13,6 +12,7 @@ from settings import Settings
 from expression import Expression
 
 cfg = Settings()
+
 
 class Table:
     """Contains methods for getting metadata for table"""
@@ -425,79 +425,6 @@ class Table:
             tbl_names.append(rel.table_name)
 
         return tbl_names
-
-    def write_tsv(self, filepath, clobs_as_files, columns = None):
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        blobcolumns = []
-        selects = {}
-        for fieldname in self.fields:
-            field = self.fields[fieldname]
-            if field.datatype == 'bytes' or (
-                clobs_as_files and field.datatype == 'str' and not field.size
-             ):
-                foldername = self.name + '.' + field.name
-                path = os.path.join(os.path.dirname(filepath), '../documents', foldername)
-                os.makedirs(path, exist_ok=True)
-                blobcolumns.append(field.name)
-            if not columns or field.name in columns:
-                selects[field.name] = field.name
-                if field.datatype == 'geometry':
-                    selects[field.name] = f"{field.name}.ToString() as {field.name}"
-
-        select = ', '.join(selects.values())
-
-        file = open(filepath, 'w')
-        sql = f"select {select} from " + self.name
-        with self.db.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            rows = cnxn.execute(sql)
-            n = 0
-            for row in rows:
-                if self.limit and n == self.limit:
-                    break
-                n += 1
-                rec = to_rec(row)
-                if n == 1:
-                    file.write('\t'.join(rec.keys()) + '\n')
-                values = []
-                num_files = 0
-                for col, val in rec.items():
-                    if col in blobcolumns:
-                        num_files += 1
-                        dir = os.path.dirname(filepath)
-                        if self.pkey:
-                            pkey_vals = []
-                            for pkey_col in self.pkey.columns:
-                                pkey_vals.append(str(rec[pkey_col]))
-                            filename = '-'.join(pkey_vals) + '.data'
-                        else:
-                            filename = str(num_files) + '.data'
-
-                        foldername = self.name + '.' + col
-                        path = os.path.join(dir, '../documents', foldername, filename)
-                        if val is not None:
-                            field = self.fields[col]
-                            mode = 'wb' if field.datatype == 'bytes' else 'w' 
-                            with open(path, mode) as blobfile:
-                                blobfile.write(val)
-                            val = 'documents/' + foldername + '/' + filename
-                    if type(val) is bool:
-                        val = int(val)
-                    if type(val) is str:
-                        val = val.replace('\t', ' ')
-                        val = val.replace('\r\n', ' ')
-                        val = val.replace('\r', ' ')
-                        val = val.replace('\n', ' ')
-                    elif val is None:
-                        val = ''
-                    else:
-                        val = str(val)
-                    values.append(val)
-                file.write('\t'.join(values) + '\n')
-            file.close()
-            if n == 0:
-                os.remove(filepath)
-
 
     def save(self, records: list):
         """Save new and updated records in table"""

@@ -54,10 +54,10 @@ def get_engine(cfg, db_name=None):
 
     if cfg.system == 'duckdb':
         db_name = db_name.split('.')[0]
-        path = os.path.join(cfg.host, '/'.join(cfg.subfolders), db_name) + '.db'
+        path = os.path.join(cfg.host, db_name)
         url = f"duckdb:///{path}"
     elif cfg.system == 'sqlite':
-        path = os.path.join(cfg.host, '/'.join(cfg.subfolders), db_name) + '.db'
+        path = os.path.join(cfg.host, db_name)
         url = f"sqlite+{driver}:///{path}"
     elif cfg.system == 'oracle':
         parts = cfg.host.split('/')
@@ -130,7 +130,6 @@ def token():
     return jwt.encode({
         "system": cfg.system,
         "server": cfg.host,
-        "subfolders": cfg.subfolders if 'subfolders' in cfg else [],
         "uid": cfg.uid,
         "pwd": cfg.pwd,
         "database": cfg.database,
@@ -188,7 +187,6 @@ def login(response: Response, system: str, server: str, username: str,
     cfg.pwd = password
     cfg.database = database or cfg.database
     cfg.host = server or cfg.host
-    cfg.subfolders = []
 
     # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
     if cfg.system == 'sqlite' and cfg.database != 'urdr':
@@ -210,9 +208,28 @@ def logout(response: Response):
 
     return {'success': True, 'cnxn': cnxn}
 
+@app.get("/file")
+def get_file(path: str):
+    filepath = os.path.join(cfg.host, path)
+    if os.path.isdir(filepath):
+        return { 'path': path, 'type': 'dir'}
+    with open(filepath, 'r') as file:
+        content = file.read()
+    name = os.path.basename(filepath)
+
+    return { 'path': path, 'name': name, 'content': content, 'type': 'file' }
+
+@app.post("/file")
+def update_file(path: str, content: str):
+    filepath = os.path.join(cfg.host, path)
+    with open(filepath, 'w') as file:
+        file.write(content)
+
+    return {'result': 'success' }
+
 
 @app.get("/dblist")
-def dblist(response: Response, role: str = None, subfolders: str = None):
+def dblist(response: Response, role: str = None, path: str = None):
     result = []
     useradmin = False
     if cfg.system in ('sqlite', 'duckdb'):
@@ -226,31 +243,39 @@ def dblist(response: Response, role: str = None, subfolders: str = None):
                 base.columns.name = row.name
                 base.columns.label = row.name.capitalize()
                 base.columns.description = row.description
+                base.columns.type = 'database'
                 result.append(base)
 
         else:
-            if subfolders:
-                cfg.subfolders = json.loads(subfolders)
-                response.set_cookie(key="session", value=token(), expires=cfg.timeout)
+            filepath = os.path.join(cfg.host, path) if path else cfg.host
+            if os.path.isfile(filepath):
+                dirpath = os.path.dirname(filepath)
             else:
-                cfg.subfolders = []
-            path = os.path.join(cfg.host, '/'.join(cfg.subfolders))
-            file_list = os.listdir(path)
+                dirpath = filepath
+            file_list = os.listdir(dirpath)
             file_list.sort()
             for filename in file_list:
-                attrs = xattr.xattr(path + '/' + filename)
+                filepath = os.path.join(dirpath, filename)
+                if os.path.islink(filepath):
+                    continue
+                attrs = xattr.xattr(filepath)
                 comment = None
                 if 'user.comment' in attrs:
                     comment = attrs.get('user.comment')
-                if (
-                    not os.path.isdir(os.path.join(path, filename)) and
-                    os.path.splitext(filename)[1] != '.db'
-                ):
-                    continue
                 base = Dict()
-                base.columns.name = filename
-                base.columns.label = filename.capitalize()
+                base.columns.name =  os.path.join(path, filename) if path else filename
+                base.columns.label = filename
                 base.columns.description = comment
+                base.columns.type = 'file'
+                if os.path.isdir(filepath):
+                    base.columns.type = 'dir'
+                else:
+                    with open(filepath, 'rb') as reader:
+                        if reader.read(6) == b'SQLite':
+                            base.columns.type = 'database'
+                        elif reader.read(4) == b'DUCK':
+                            base.columns.type = 'database'
+
                 result.append(base)
     else:
         engine = get_engine(cfg)
@@ -278,6 +303,7 @@ def dblist(response: Response, role: str = None, subfolders: str = None):
             base.columns.name = row.db_name
             base.columns.label = row.db_name.capitalize()
             base.columns.description = row.db_comment
+            base.columns.type = 'database'
             result.append(base)
 
         # Find if user has useradmin privileges
@@ -299,7 +325,7 @@ def dblist(response: Response, role: str = None, subfolders: str = None):
 
     return {'data': {
         'records': result,
-        'subfolders': cfg.subfolders,
+        'path': path,
         'roles': [] if cfg.system in ('sqlite', 'duckdb') else user.roles,
         'role': role,
         'useradmin': useradmin,

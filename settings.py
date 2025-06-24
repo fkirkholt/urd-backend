@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     secret_key: str = "some_secret_key"
     timeout: int = 30 * 60  # 30 minutes
+    cnxn: str | None = None
     system: str | None = None
     host: str | None = None
     subfolders: list = []

@@ -139,7 +139,9 @@ def token():
 
 @app.middleware("http")
 async def check_login(request: Request, call_next):
-    session: str = request.cookies.get("session")
+    session = None
+    if 'cnxn' in request.query_params:
+        session: str = request.cookies.get(request.query_params['cnxn'])
 
     if session:
         payload = jwt.decode(session, cfg.secret_key)
@@ -180,8 +182,9 @@ def home(request: Request):
 
 
 @app.post("/login")
-def login(response: Response, system: str, server: str, username: str,
+def login(response: Response, cnxn: str, system: str, server: str, username: str,
           password: str, database: str):
+    cfg.cnxn = cnxn 
     cfg.system = system or cfg.system
     cfg.uid = username
     cfg.pwd = password
@@ -191,7 +194,7 @@ def login(response: Response, system: str, server: str, username: str,
     # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
     if cfg.system == 'sqlite' and cfg.database != 'urdr':
         cfg.timeout = None
-    response.set_cookie(key="session", value=token(), expires=cfg.timeout)
+    response.set_cookie(key=cnxn, value=token(), expires=cfg.timeout)
 
     return {"success": True}
 

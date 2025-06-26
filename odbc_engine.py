@@ -30,7 +30,7 @@ class ODBC_Engine:
         if self.name == 'mssql':
             cnxnstr += 'Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes'
         if self.name == 'sqlite':
-            path = os.path.join(cfg.host, '/'.join(cfg.subfolders), db_name + '.db')
+            path = os.path.join(cfg.host, db_name)
             cnxnstr = 'Driver=SQLite3;Database=' + path
             if os.path.exists(path):
                 cnxn = pyodbc.connect(cnxnstr)

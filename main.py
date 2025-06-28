@@ -211,16 +211,25 @@ def logout(response: Response):
 
     return {'success': True, 'cnxn': cnxn}
 
+
 @app.get("/file")
 def get_file(path: str):
     filepath = os.path.join(cfg.host, path)
     if os.path.isdir(filepath):
-        return { 'path': path, 'type': 'dir'}
-    with open(filepath, 'r') as file:
-        content = file.read()
+        return {'path': path, 'type': 'dir'}
+    size = os.path.getsize(filepath)
+    content = None
+    msg = None
+    if size < 100000000:
+        with open(filepath, 'r') as file:
+            content = file.read()
+    else:
+        msg = 'File too large to open'
     name = os.path.basename(filepath)
 
-    return { 'path': path, 'name': name, 'content': content, 'type': 'file' }
+    return {'path': path, 'name': name, 'content': content, 'type': 'file',
+            'msg': msg}
+
 
 @app.post("/file")
 def update_file(path: str, content: str):
@@ -228,7 +237,7 @@ def update_file(path: str, content: str):
     with open(filepath, 'w') as file:
         file.write(content)
 
-    return {'result': 'success' }
+    return {'result': 'success'}
 
 
 @app.get("/dblist")
@@ -266,10 +275,11 @@ def dblist(response: Response, role: str = None, path: str = None):
                 if 'user.comment' in attrs:
                     comment = attrs.get('user.comment')
                 base = Dict()
-                base.columns.name =  os.path.join(path, filename) if path else filename
+                base.columns.name = os.path.join(path, filename) if path else filename
                 base.columns.label = filename
                 base.columns.description = comment
                 base.columns.type = 'file'
+                base.columns.size = os.path.getsize(filepath)
                 if os.path.isdir(filepath):
                     base.columns.type = 'dir'
                 else:

@@ -232,7 +232,7 @@ def get_file(path: str):
 
 
 @app.post("/file")
-def update_file(path: str, content: str):
+def update_file(path: str, content: str = Body(...)):
     filepath = os.path.join(cfg.host, path)
     with open(filepath, 'w') as file:
         file.write(content)

@@ -872,8 +872,8 @@ def export_kdrs_xml(base: str, version: str, descr: str):
     return response
 
 
-@app.get('/file')
-def get_file(base: str, table: str, pkey: str, column: str = None):
+@app.get('/db_file')
+def get_db_file(base: str, table: str, pkey: str, column: str = None):
     pkey = json.loads(urllib.parse.unquote(pkey))
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)

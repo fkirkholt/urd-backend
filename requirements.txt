@@ -13,3 +13,4 @@ starlette==0.45.3
 typer==0.15.1
 uvicorn==0.34.0
 xattr==1.1.4
+jinja2==3.1.3

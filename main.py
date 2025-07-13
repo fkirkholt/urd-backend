@@ -84,7 +84,17 @@ def get_engine(cfg, db_name=None):
     if cfg.system == 'mariadb':
         url += '?charset=utf8mb4&collation=utf8mb4_unicode_ci'
 
-    engine = create_engine(url)
+    try:
+        engine = create_engine(url)
+    except Exception as ex:
+        if str(ex).startswith('No module named'):
+            msg = 'Please install driver ' + driver
+        else:
+            msg = str(ex)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=msg
+        )
 
     try:
         with engine.connect():

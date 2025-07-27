@@ -204,8 +204,8 @@ class Grid:
 
             action = Dict({
                 'label': "Show file",
-                'url': "/file",
-                'icon': "external-link",
+                'url': "/db_file",
+                'icon': "external_link",
                 'communication': "download",
                 'disabled': f"({last_col} is null)",
             })

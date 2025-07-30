@@ -150,8 +150,11 @@ def token():
 @app.middleware("http")
 async def check_login(request: Request, call_next):
     session = None
+    path_parts = request.url.path.split('/')
     if 'cnxn' in request.query_params:
         session: str = request.cookies.get(request.query_params['cnxn'])
+    elif len(path_parts) > 1:
+        session: str = request.cookies.get(path_parts[1])
 
     if session:
         payload = jwt.decode(session, cfg.secret_key)
@@ -225,19 +228,29 @@ def logout(response: Response):
 @app.get("/file")
 def get_file(path: str):
     filepath = os.path.join(cfg.host, path)
+    if cfg.system not in ['sqlite', 'duckdb']:
+        return {'path': path, 'type': 'server'}
     if os.path.isdir(filepath):
         return {'path': path, 'type': 'dir'}
+    if not os.path.isfile(filepath) and not os.path.isdir(filepath):
+        return {'path': path, 'type': None}
     size = os.path.getsize(filepath)
     content = None
     msg = None
-    if size < 100000000:
+    type = 'file'
+    with open(filepath, 'rb') as reader:
+        if reader.read(6) == b'SQLite':
+            type = 'sqlite'
+        elif reader.read(4) == b'DUCK':
+            type = 'duckdb'
+    if type == 'file' and size < 100000000:
         with open(filepath, 'r') as file:
             content = file.read()
-    else:
+    elif size >= 100000000:
         msg = 'File too large to open'
     name = os.path.basename(filepath)
 
-    return {'path': path, 'name': name, 'content': content, 'type': 'file',
+    return {'path': path, 'name': name, 'content': content, 'type': type,
             'msg': msg}
 
 
@@ -920,6 +933,14 @@ def query(base: str, sql: str, limit: str):
     result = dbo.query_result(sql, limit, app.state.cnxn[base])
 
     return {'result': result}
+
+
+@app.get("/{full_path:path}")
+async def capture_routes(request: Request, full_path: str):
+    print('path', full_path)
+    return templates.TemplateResponse("urd.html", {
+        "request": request, "v": mod, "base": cfg.database
+    })
 
 
 def main(host: str='localhost', port: int=8000):

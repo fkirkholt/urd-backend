@@ -38,7 +38,7 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="static/html")
-mod = os.path.getmtime("static/js/dist/bundle.js")
+mod = os.path.getmtime("static/js/dist/index.js")
 
 
 def cleanup(temp_file):

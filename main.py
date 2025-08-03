@@ -254,6 +254,22 @@ def get_file(path: str):
             'msg': msg}
 
 
+@app.get('/backlinks')
+def get_backlinks(path: str):
+    backlinks = []
+    filepath = os.path.join(cfg.host, path)
+    for path, folders, files in os.walk(cfg.host):
+        for filename in files:
+            relpath = os.path.relpath(filepath, path)
+            with open(os.path.join(path, filename), 'r') as file:
+                content = file.read()
+                if '(' + relpath + ')' in content:
+                    abspath = os.path.join(path, filename)
+                    backlinks.append(os.path.relpath(abspath, cfg.host))
+
+    return backlinks
+
+
 @app.post("/file")
 def update_file(path: str, content: str = Body(...)):
     filepath = os.path.join(cfg.host, path)

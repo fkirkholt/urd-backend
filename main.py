@@ -9,6 +9,7 @@ import io
 import urllib.parse
 import re
 import tempfile
+from subprocess import run
 from sqlalchemy import create_engine
 from settings import Settings
 from database import Database
@@ -381,6 +382,48 @@ def dblist(response: Response, role: str = None, path: str = None):
         'roles': [] if cfg.system in ('sqlite', 'duckdb') else user.roles,
         'role': role,
         'useradmin': useradmin,
+        'system': cfg.system
+    }}
+
+
+@app.get("/ripgrep")
+def ripgrep(path: str, cmd: str):
+    dir = os.path.join(cfg.host, path) if path else cfg.host
+    cwd = os.getcwd()
+    os.chdir(dir)
+    cmd += ' --line-number --color=always --colors=path:none'
+    cmd += ' --max-columns=100 --max-columns-preview'
+    result = run(cmd, shell=True, capture_output=True, text=True)
+    os.chdir(cwd)
+    lines = result.stdout.split('\n')
+    files = []
+    result = []
+    for line in lines:
+        if line == '':
+            break
+        parts = line.split(':', 1)
+        file = parts[0]
+        if file not in files:
+            files.append(file)
+            base = Dict()
+            base.columns.name = os.path.join(path, file)
+            base.columns.label = file
+            if len(parts) > 1:
+                desc = parts[1]
+                base.columns.description = desc
+            base.columns.type = 'file'
+            result.append(base)
+        elif len(parts) > 1:
+            desc = parts[1]
+            base.columns.description += '<br>' + desc
+
+    return {'data': {
+        'records': result,
+        'path': path,
+        'grep': True,
+        'roles': [],
+        'role': None,
+        'useradmin': None,
         'system': cfg.system
     }}
 

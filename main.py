@@ -261,6 +261,8 @@ def get_backlinks(path: str):
     filepath = os.path.join(cfg.host, path)
     for path, folders, files in os.walk(cfg.host):
         for filename in files:
+            if not filename.endswith('.md'):
+                continue
             relpath = os.path.relpath(filepath, path)
             with open(os.path.join(path, filename), 'r') as file:
                 content = file.read()

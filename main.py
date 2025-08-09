@@ -25,6 +25,7 @@ from jose import jwt
 import time
 import xattr
 import pyodbc
+import magic
 from user import User
 from odbc_engine import ODBC_Engine
 from starlette.background import BackgroundTask
@@ -238,17 +239,19 @@ def get_file(path: str):
     size = os.path.getsize(filepath)
     content = None
     msg = None
-    type = 'file'
+    type = magic.from_file(filepath, mime=True)
+    text_types = ['application/javascript']
     with open(filepath, 'rb') as reader:
         if reader.read(6) == b'SQLite':
             type = 'sqlite'
         elif reader.read(4) == b'DUCK':
             type = 'duckdb'
-    if type == 'file' and size < 100000000:
-        with open(filepath, 'r') as file:
-            content = file.read()
-    elif size >= 100000000:
-        msg = 'File too large to open'
+    if type.startswith('text/') or type in text_types:
+        if size < 100000000:
+            with open(filepath, 'r') as file:
+                content = file.read()
+        else:
+            msg = 'File too large to open'
     name = os.path.basename(filepath)
 
     return {'path': path, 'name': name, 'content': content, 'type': type,
@@ -998,13 +1001,21 @@ def query(base: str, sql: str, limit: str):
 
 @app.get("/{full_path:path}")
 async def capture_routes(request: Request, full_path: str):
-    print('path', full_path)
+    path_parts = full_path.split('/')
+    filepath = os.path.join(cfg.host, '/'.join(path_parts[1:]))
+    type = ''
+    if os.path.isfile(filepath):
+        type = magic.from_file(filepath, mime=True)
+    name = os.path.basename(filepath)
+    if type.startswith('image/'):
+        return FileResponse(filepath, media_type=type, filename=name)
+
     return templates.TemplateResponse("urd.html", {
         "request": request, "v": mod, "base": cfg.database
     })
 
 
-def main(host: str='localhost', port: int=8000):
+def main(host: str = 'localhost', port: int = 8000):
     uvicorn.run(
         app,
         host=host,

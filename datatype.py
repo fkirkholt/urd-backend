@@ -23,6 +23,8 @@ class Datatype:
             return "tinyint(1)"
         elif self.type == "bytes":
             return "blob"
+        elif self.type == 'dict':
+            return "json"
         else:
             raise ValueError(f"Type {self.type} not supported yet")
 

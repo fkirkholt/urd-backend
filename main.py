@@ -253,9 +253,14 @@ def get_file(path: str):
         else:
             msg = 'File too large to open'
     name = os.path.basename(filepath)
+    lsp = False
+    for ext in cfg.lsp_filetypes.split('|'):
+        if path.endswith(ext):
+            lsp = True
 
     return {'path': path, 'name': name, 'content': content, 'type': type,
-            'msg': msg}
+            'msg': msg, 'abspath': filepath if lsp else None,
+            'websocket': cfg.websocket if lsp else None}
 
 
 @app.get('/backlinks')

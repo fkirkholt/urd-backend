@@ -793,7 +793,7 @@ class Database:
                 for col_1 in self.columns[tbl_name_1]:
                     col_1 = Dict(col_1)
                     for tbl_name_2 in self.tablenames:
-                        if tbl_name_2 in col_1.name:
+                        if (tbl_name_2 + '_') in col_1.name and tbl_name_2 != tbl_name_1:
                             for col_2 in self.columns[tbl_name_2]:
                                 col_2 = Dict(col_2)
                                 if col_1.name == col_2.name and tbl_name_1 == tbl_name_2:

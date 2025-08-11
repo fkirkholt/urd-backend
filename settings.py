@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     exportdir: str | None = None
     websocket: str | None = None
     # Filetypes that should be checked with LSP over websocket
-    lsp_filetypes: str | None = None  # bar delimited: .py|.js
+    lsp_filetypes: str = ''  # bar delimited: .py|.js
 
     class Config:
         env_prefix = 'urdr_'

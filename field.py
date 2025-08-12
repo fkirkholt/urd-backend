@@ -156,7 +156,7 @@ class Field:
 
         sql = f"""
         select count(*)
-        from {self._db.schema}.{from_table} {self.name}
+        from {self._db.schema}.{from_table} {alias}
         where {condition}
         """
 

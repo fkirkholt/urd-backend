@@ -155,7 +155,7 @@ class Field:
         # Count records
 
         sql = f"""
-        select count(*)
+        select count(distinct {value_field})
         from {self._db.schema}.{from_table} {alias}
         where {condition}
         """

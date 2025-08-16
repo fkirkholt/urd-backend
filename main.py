@@ -1012,8 +1012,12 @@ async def capture_routes(request: Request, full_path: str):
     if os.path.isfile(filepath):
         type = magic.from_file(filepath, mime=True)
     name = os.path.basename(filepath)
-    if type.startswith('image/'):
-        return FileResponse(filepath, media_type=type, filename=name)
+    if type.startswith('image/') or type == 'application/pdf':
+        headers = {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": "inline"
+        } 
+        return FileResponse(filepath, media_type=type, filename=name, headers=headers)
 
     return templates.TemplateResponse("urd.html", {
         "request": request, "v": mod, "base": cfg.database

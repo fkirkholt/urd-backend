@@ -793,40 +793,35 @@ class Database:
                 for col_1 in self.columns[tbl_name_1]:
                     col_1 = Dict(col_1)
                     for tbl_name_2 in self.tablenames:
-                        if (tbl_name_2 + '_') in col_1.name and tbl_name_2 != tbl_name_1:
+                        if (tbl_name_2.rstrip('_') + '_') in col_1.name:  # 'klage' in 'klage'
+                            constrained_cols = []
                             for col_2 in self.columns[tbl_name_2]:
                                 col_2 = Dict(col_2)
                                 if col_1.name == col_2.name and tbl_name_1 == tbl_name_2:
                                     continue
                                 # reference to column in referred table
                                 ref = (tbl_name_2 + '_' + col_2.name).replace('__', '_').rstrip('_')
-                                if (
-                                    col_1.name.endswith(ref) or
-                                    col_1.name == col_2.name or
-                                    col_2.name in tbl_fkey_columns
-                                ):
-                                    fkey_col_name = col_2.name if col_2.name in tbl_fkey_columns else col_1.name
+                                if col_1.name.endswith(ref) or col_1.name == col_2.name:
                                     tbl_fkey_columns.append(col_1.name)
                                     # possible prefix that describes what relation this is
                                     # e.g. in `updated_by_user_name` the prefix is `upated_by`
-                                    prefix = ''
-                                    if col_2.name not in tbl_fkey_columns:
-                                        prefix = col_1.name.replace(ref, '').rstrip('_')
+                                    prefix = col_1.name.replace(ref, '').rstrip('_')
                                     prefix = '_' + prefix if prefix else ''
                                     name = tbl_name_1 + '_' + tbl_name_2 + prefix + '_fkey'
                                     fkeys[tbl_name_1][name].name = name
                                     fkeys[tbl_name_1][name].table_name = tbl_name_1
                                     fkeys[tbl_name_1][name].schema = self.schema
-                                    if 'constrained_columns' not in fkeys[tbl_name_1][name]:
-                                        fkeys[tbl_name_1][name].constrained_columns = []
-                                        fkeys[tbl_name_1][name].referred_columns = []
-                                    if (fkey_col_name) not in fkeys[tbl_name_1][name].constrained_columns:
-                                        fkeys[tbl_name_1][name].constrained_columns.append(fkey_col_name)
-                                        fkeys[tbl_name_1][name].referred_columns.append(col_2.name)
+                                    referred_cols = constrained_cols.copy()
+                                    referred_cols.append(col_2.name)
+                                    constrained_cols.append(col_1.name) 
+                                    fkeys[tbl_name_1][name].constrained_columns = constrained_cols
+                                    fkeys[tbl_name_1][name].referred_columns = referred_cols
                                     fkeys[tbl_name_1][name].referred_schema = self.schema
                                     fkeys[tbl_name_1][name].referred_table = tbl_name_2
                                     fkeys[tbl_name_1][name].ref_table_alias = prefix or tbl_name_2
                                     relations[tbl_name_2][name] = fkeys[tbl_name_1][name]
+                                elif col_2.name in tbl_fkey_columns:
+                                    constrained_cols.append(col_2.name)
             for tbl_name in fkeys:
                 for fkey in fkeys[tbl_name].values():
                     if (

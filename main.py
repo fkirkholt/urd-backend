@@ -290,6 +290,31 @@ def update_file(path: str, content: str = Body(...)):
     return {'result': 'success'}
 
 
+@app.put("/file_rename")
+def rename_file(src: str, dst: str):
+    src = os.path.join(cfg.host, src)
+    dst = os.path.join(cfg.host, dst)
+    os.rename(src, dst)
+    filepath = os.path.join(cfg.host, src)
+    for path, folders, files in os.walk(cfg.host):
+        for filename in files:
+            if not filename.endswith('.md'):
+                continue
+            relpath = os.path.relpath(filepath, path)
+            new_content = ''
+            with open(os.path.join(path, filename), 'r') as file:
+                content = file.read()
+                if '(' + relpath + ')' in content:
+                    new_path = relpath.replace(os.path.basename(relpath),
+                                               os.path.basename(dst))
+                    new_content = content.replace('(' + relpath + ')',
+                                                  '(' + new_path + ')')
+            if new_content:
+                with open(os.path.join(path, filename), 'w') as file:
+                    file.write(new_content)
+    return {'success': True}
+
+
 @app.get("/dblist")
 def dblist(response: Response, role: str = None, path: str = None):
     result = []

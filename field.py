@@ -120,7 +120,7 @@ class Field:
 
         return attributes
 
-    def get_options(self, condition, params):
+    def get_options(self, condition, params, get_parent=True):
         from table import Table
 
         fkey = self._tbl.get_fkey(self.name)
@@ -135,7 +135,7 @@ class Field:
                     hierarchy = True
                     break
 
-            if hierarchy:
+            if hierarchy and get_parent:
                 fkey_parent = ref_tbl.get_parent_fk()
                 parent = fkey_parent.constrained_columns[-1]
 

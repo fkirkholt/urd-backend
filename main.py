@@ -722,7 +722,7 @@ async def get_options(request: Request):
         view = view if view else req.column
         conds.append(f"lower({view}) like '{search}%'")
     cond = " and ".join(conds)
-    data = fld.get_options(cond, {})
+    data = fld.get_options(cond, {}, get_parent=False)
 
     return data
 

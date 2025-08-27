@@ -14,6 +14,7 @@ import pyodbc
 from addict import Dict
 from settings import Settings
 from table import Table
+from grid import Grid
 from user import User
 from datatype import Datatype
 from odbc_engine import ODBC_Engine
@@ -793,7 +794,7 @@ class Database:
                 for col_1 in self.columns[tbl_name_1]:
                     col_1 = Dict(col_1)
                     for tbl_name_2 in self.tablenames:
-                        if (tbl_name_2.rstrip('_') + '_') in col_1.name:  # 'klage' in 'klage'
+                        if (tbl_name_2.rstrip('_') + '_') in col_1.name:
                             constrained_cols = []
                             for col_2 in self.columns[tbl_name_2]:
                                 col_2 = Dict(col_2)
@@ -955,12 +956,26 @@ class Database:
 
         return query
 
-    def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download):
+    def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download, filter):
+        params = []
+        if filter:
+            tbl = Table(self, tables[0])
+            grid = Grid(tbl)
+            grid.set_search_cond(filter)
+            join = '\n'.join(tbl.joins)
+            cond = grid.get_cond_expr()
+            params = grid.cond.params
         # Count rows
         total_rows = 0
         for table in tables:
+            
             with self.engine.connect() as cnxn:
-                n = cnxn.execute(f'select count(*) from {table}').fetchone()[0]
+                sql = f'select count(*) from {table}'
+                if filter:
+                    sql += '\n' + join
+                    sql += ' where ' + cond
+                sql, params = prepare(sql, params)
+                n = cnxn.execute(sql, params).fetchone()[0]
                 if limit and n > limit:
                     n = limit
                 total_rows += n
@@ -993,9 +1008,12 @@ class Database:
 
             file = open(filepath, 'w')
             sql = f"select {select} from " + table.name
+            if filter:
+                sql += '\n' + join
+                sql += ' where ' + cond
             with self.engine.connect() as cnxn:
-                sql, _ = prepare(sql)
-                rows = cnxn.execute(sql)
+                sql, params = prepare(sql, params)
+                rows = cnxn.execute(sql, params)
                 n = 0
                 for row in rows:
                     progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
@@ -1108,7 +1126,6 @@ class Database:
 
     def sorted_tbl_names(self):
         graph = {}
-        self_referring = {}
         tbl_names = self.refl.get_table_names(self.schema)
 
         # Make graph to use in topologic sort
@@ -1117,7 +1134,6 @@ class Database:
             fkeys = self.refl.get_foreign_keys(tbl_name, self.schema)
             for fkey in fkeys:
                 if fkey['referred_table'] == tbl_name:
-                    self_referring[tbl_name] = fkey
                     continue
                 if fkey['referred_table'] in tbl_names:
                     # SQLite may have foreign keys referring to non existing tables
@@ -1136,7 +1152,7 @@ class Database:
         sorter = TopologicalSorter(graph)
         ordered_tables = tuple(sorter.static_order())
 
-        return (ordered_tables, self_referring)
+        return ordered_tables
 
     def export_as_kdrs_xml(self, version, descr):
         xml = "<views>\n"

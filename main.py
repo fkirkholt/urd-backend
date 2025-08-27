@@ -746,7 +746,8 @@ async def update_cache(base: str, config: str):
 @app.get('/export_sql')
 def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                no_fkeys: bool, list_recs: bool, data_recs: bool,
-               select_recs: bool, view_as_table: bool, table: str = None):
+               select_recs: bool, view_as_table: bool, 
+               table: str = None, filter: str = None):
     """Create sql for exporting a database
 
     Parameters:
@@ -765,7 +766,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
         os.makedirs(dest, exist_ok=True)
 
     def event_stream(dbo, dest, dialect, table_defs, no_fkeys, list_recs,
-                     data_recs, select_recs, table):
+                     data_recs, select_recs, table, filter):
         if table:
             table = Table(dbo, table)
             filepath = os.path.join(dest, f"{table.name}.{dialect}.sql")
@@ -774,7 +775,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     file.write("SET DEFINE OFF;\n")
                     file.write("SET FEEDBACK OFF;\n")
                     file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
-                    file.write("ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS'")
+                    file.write("ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS';\n")
                 if table_defs:
                     if dialect == 'oracle':
                         ddl = f'drop table {table.name};\n'
@@ -792,7 +793,8 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     else:
                         if dialect == 'oracle':
                             file.write('WHENEVER SQLERROR EXIT 1;\n')
-                        table.write_inserts(file, dialect, select_recs)
+                        filter = urllib.parse.unquote(filter)
+                        table.write_inserts(file, dialect, select_recs, filter=filter)
                         if dialect == 'oracle':
                             file.write('WHENEVER SQLERROR CONTINUE;\n')
 
@@ -802,7 +804,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
         else:
             ddl = ''
             filepath = os.path.join(dest, f"{base.lower()}.{dialect}.sql")
-            ordered_tables, self_referring = dbo.sorted_tbl_names()
+            ordered_tables = dbo.sorted_tbl_names()
 
             views = tuple(dbo.refl.get_view_names(dbo.schema))
             if view_as_table:
@@ -854,9 +856,6 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                     if table_defs:
                         file.write(table.export_ddl(dialect, no_fkeys))
                     if list_recs or data_recs:
-                        self_ref = None
-                        if tbl_name in self_referring:
-                            self_ref = self_referring[tbl_name]
                         if (
                             (table.type == 'list' and list_recs) or
                             (table.type != 'list' and data_recs)
@@ -867,7 +866,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                                 file.write(f'insert into {table.name}\n')
                                 file.write(f'select * from {dbo.schema}.{table.name};\n')
                             else:
-                                table.write_inserts(file, dialect, select_recs, fkey=self_ref)
+                                table.write_inserts(file, dialect, select_recs)
                     if table_defs:
                         file.write(table.get_indexes_ddl())
 
@@ -909,7 +908,7 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
             yield f"data: {data}\n\n"
 
     event_generator = event_stream(dbo, dest, dialect, table_defs, no_fkeys,
-                                   list_recs, data_recs, select_recs, table)
+                                   list_recs, data_recs, select_recs, table, filter)
     return StreamingResponse(event_generator, media_type="text/event-stream")
 
 
@@ -922,7 +921,8 @@ def download_file(path: str, media_type: str):
 
 @app.get('/export_tsv')
 def export_tsv(base: str, tables: str, dest: str, clobs_as_files: bool,
-               limit: int = None, columns: str = None, folder: str = None):
+               limit: int = None, columns: str = None, folder: str = None,
+               filter: str = None):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
     download = True if dest == 'download' else False
@@ -940,7 +940,7 @@ def export_tsv(base: str, tables: str, dest: str, clobs_as_files: bool,
             os.makedirs(dest)
 
     return StreamingResponse(dbo.export_tsv(tbls, dest, limit, clobs_as_files,
-                                            cols, download),
+                                            cols, download, filter),
                              media_type="text/event-stream")
 
 

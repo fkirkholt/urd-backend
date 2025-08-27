@@ -285,10 +285,11 @@ class Table:
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
+        fkey = None
         # Find relation to child records
-        rel = [rel for rel in self.relations.values()
-               if rel.table_name == self.name][0]
-        fkey = self.get_fkey(rel.name)
+        for rel in self.relations.values():
+            if rel.table_name == self.name:
+                fkey = self.get_fkey(rel.name)
 
         return fkey
 
@@ -707,14 +708,25 @@ class Table:
 
         return ddl
 
-    def write_inserts(self, file, dialect, select_recs, fkey=None):
+    def write_inserts(self, file, dialect, select_recs, filter=None):
         """Export records as sql
 
         Parameters:
         select_recs: If records should be selected from existing database
         """
 
+        params = []
+        join = ''
+        cond = '1 = 1'
+        if filter:
+            grid = Grid(self)
+            grid.set_search_cond(filter)
+            join = '\n'.join(self.joins)
+            cond = grid.get_cond_expr()
+            params = grid.cond.params
+
         insert = ''
+        fkey = self.get_parent_fk()
         if fkey and self.db.engine.name in ['mysql', 'postgresql', 'sqlite']:
             cols = self.db.refl.get_columns(self.name, self.db.schema)
             colnames = []
@@ -724,11 +736,13 @@ class Table:
             select = ', '.join(colnames)
             fkey_cc = fkey['constrained_columns'][0]
             fkey_rc = fkey['referred_columns'][0]
+              
             sql = f"""
             with recursive tbl_data as (
                 select {self.name}.*, 1 as level
                 from {self.name}
-                where {fkey_cc} is null
+                {join}
+                where {self.name}.{fkey_cc} is null and {cond}
 
                 union all
 
@@ -742,67 +756,74 @@ class Table:
             order by level
             """
         else:
-            sql = f"select * from {self.name}"
+            sql = f"select {self.name}.* from {self.name}"
+            if filter:
+                sql += '\n' + '\n'.join(self.joins)
+                sql += ' where ' + cond
 
         with self.db.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            rows = cnxn.execute(sql)
-
-            sql, _ = prepare('select count(*) from ' + self.name)
-            rowcount = cnxn.execute(sql).fetchone()[0]
-
-            if dialect == 'oracle':
-                insert += f'insert into {self.name}\n'
-            else:
-                insert += f'insert into {self.name} values '
-            i = 0
+            sql, params = prepare(sql, params)
+            cursor = cnxn.execute(sql, params)
+            
             # Insert time grows exponentially with number of inserts
             # per `insert all` in Oracle after a certain value.
             # This value is around 50 for version 19c
             max = 50 if dialect == 'oracle' else 1000;
-            for row in rows:
-                rec = to_rec(row)
-                if (i > 0 and i % max == 0):
+            n = 0
+
+            while True:
+                n += 1
+                rows = cursor.fetchmany(max)
+                if not rows:
+                    break
+
+                rowcount = len(rows)
+                i = 0
+                if dialect == 'oracle':
+                    insert += f'insert into {self.name}\n'
+                else:
+                    insert += f'insert into {self.name} values '
+                for row in rows:
+                    rec = to_rec(row)
                     if dialect == 'oracle':
-                        if i % 10000 == 0:
-                            insert += 'commit;\n\n'
-                            insert += f'prompt {i} of {rowcount}\n'
-                        insert += f'insert into {self.name}\n'
                         insert += 'select '
                     else:
-                        insert += f'insert into {self.name} values ('
-                elif dialect == 'oracle':
-                    insert += 'select '
-                else:
-                    insert += '('
-                i += 1
-                for colname, val in rec.items():
-                    col = self.fields[colname]
-                    if (self.name == 'meta_data' and colname == 'cache'):
-                        val = ''
-                    if type(val) is str:
-                        val = "'" + val.strip().replace("'", "''") + "'"
-                    elif isinstance(val, datetime.date):
-                        val = "'" + str(val) + "'"
-                    elif (col.datatype == 'bool' and dialect == 'oracle'):
-                        if val is False:
-                            val = 0
-                        elif val is True:
-                            val = 1
-                    elif val is None:
-                        val = 'null'
-                    insert += str(val) + ','
-                if i % max == 0 or i == rowcount:
-                    if dialect == 'oracle':
-                        insert = insert[:-1] + ' from dual;\n\n'
+                        insert += '('
+                    i += 1
+                    for colname, val in rec.items():
+                        col = self.fields[colname]
+                        if (self.name == 'meta_data' and colname == 'cache'):
+                            val = ''
+                        if type(val) is str:
+                            val = "'" + val.strip().replace("'", "''") + "'"
+                        elif isinstance(val, datetime.date):
+                            val = "'" + str(val) + "'"
+                        elif (col.datatype == 'bool' and dialect == 'oracle'):
+                            if val is False:
+                                val = 0
+                            elif val is True:
+                                val = 1
+                        elif val is None:
+                            val = 'null'
+                        insert += str(val) + ','
+                    if i == rowcount:
+                        if dialect == 'oracle':
+                            insert = insert[:-1] + ' from dual;\n\n'
+                        else:
+                            insert = insert[:-1] + ');\n\n'
+                    elif dialect == 'oracle':
+                        insert = insert[:-1] + ' from dual union all\n'
                     else:
-                        insert = insert[:-1] + ');\n\n'
-                elif dialect == 'oracle':
-                    insert = insert[:-1] + ' from dual union all\n'
-                else:
-                    insert = insert[:-1] + "),\n"
+                        insert = insert[:-1] + "),\n"
+                    file.write(insert)
+                    insert = ''
+
+                insert += 'commit;\n\n'
+                if (n * max) % 10000 == 0:
+                    insert += f'prompt {n * max}\n'
                 file.write(insert)
                 insert = ''
+            
             if dialect == 'oracle':
                 pass
             elif i == 0:

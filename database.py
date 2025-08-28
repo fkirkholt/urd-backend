@@ -962,7 +962,7 @@ class Database:
             tbl = Table(self, tables[0])
             grid = Grid(tbl)
             grid.set_search_cond(filter)
-            join = '\n'.join(tbl.joins)
+            join = '\n'.join(tbl.joins.values())
             cond = grid.get_cond_expr()
             params = grid.cond.params
         # Count rows

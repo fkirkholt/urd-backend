@@ -136,7 +136,7 @@ class Grid:
             cond = "WHERE " + " AND ".join(self.cond.prep_stmnts)
 
         order_by = self.make_order_by()
-        join = '\n'.join(self.tbl.joins)
+        join = '\n'.join(self.tbl.joins.values())
 
         sql = ''
         access_idx = self.tbl.get_access_code_idx()
@@ -354,9 +354,9 @@ class Grid:
 
         sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += '\n'.join(self.tbl.joins)
-        sql += "" if not cond else "where " + cond + "\n"
-        sql += order + "\n"
+        sql += '\n'.join(self.tbl.joins.values())
+        sql += "" if not cond else "\nwhere " + cond + "\n"
+        sql += '\n' + order + "\n"
 
         if self.db.engine.name in ['mssql', 'oracle']:
             sql += f"offset {self.tbl.offset} rows\n"
@@ -385,7 +385,7 @@ class Grid:
         else:
             sql += "select count(*)\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += '\n'.join(self.tbl.joins) + "\n"
+        sql += '\n'.join(self.tbl.joins.values()) + "\n"
         sql += "" if not conds else f"where {conds}\n"
 
         # Counting can very slow in SQLite, so we limit to 1000
@@ -442,9 +442,9 @@ class Grid:
 
         sql += "select " + select + "\n"
         sql += f'from {self.db.schema}.{self.tbl.view}\n'
-        sql += '\n'.join(self.tbl.joins)
-        sql += "" if not conds else "where " + conds + "\n"
-        sql += order + "\n"
+        sql += '\n'.join(self.tbl.joins.values())
+        sql += "" if not conds else "\nwhere " + conds + "\n"
+        sql += '\n' + order + "\n"
 
         if self.db.engine.name in ['mssql', 'oracle']:
             sql += f"offset {self.tbl.offset} rows\n"
@@ -473,7 +473,7 @@ class Grid:
             return sums
 
         cond = self.get_cond_expr()
-        joins = [join for join in self.tbl.joins
+        joins = [join for join in self.tbl.joins.values()
                  if self.tbl.name + '_grid' not in join]
 
         if (self.tbl.name + '_grid') in self.db.tablenames:

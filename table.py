@@ -298,7 +298,7 @@ class Table:
         """Return all joins to table as single string"""
         if hasattr(self, '_joins'):
             return self._joins
-        joins = []
+        joins = {}
 
         for key, fkey in self.fkeys.items():
             if fkey.referred_table not in self.db.tablenames:
@@ -319,8 +319,8 @@ class Table:
                    for idx, col in enumerate(fkey.constrained_columns)]
             on_list = ' AND '.join(ons)
 
-            joins.append(f'left join {self.db.schema}.{fkey.referred_table} '
-                         f'{fkey.ref_table_alias} on {on_list}')
+            joins[fkey.referred_table] = (f'left join {self.db.schema}.{fkey.referred_table} '
+                                          f'{fkey.ref_table_alias} on {on_list}')
 
             # Join with 1:1 relation carrying access code
             fkey_table = Table(self.db, fkey.referred_table)
@@ -334,8 +334,8 @@ class Table:
                                f"{fkey.ref_table_alias}.{col}"
                                for idx, col in enumerate(rel_fkey.referred_columns)]
                         on_list = ' AND '.join(ons)
-                        joins.append(f"left join {self.db.schema}.{rel_fkey.table_name} "
-                                     f"on {on_list}")
+                        joins[rel_fkey.table_name] = (f"left join {self.db.schema}.{rel_fkey.table_name} "
+                                                      f"on {on_list}")
 
         for key, fkey in self.relations.items():
             if fkey.relationship == '1:1':
@@ -345,13 +345,13 @@ class Table:
                        f"{self.view}.{col}"
                        for idx, col in enumerate(fkey.referred_columns)]
                 on_list = ' AND '.join(ons)
-                joins.append(f"left join {self.db.schema}.{fkey.table_name} {alias} "
-                             f"on {on_list}")
+                joins[fkey.table_name] = (f"left join {self.db.schema}.{fkey.table_name} {alias} "
+                                          f"on {on_list}")
 
                 rel_tbl = Table(self.db, fkey.table_name, alias=alias)
-                for join in rel_tbl.joins:
+                for joined_table in rel_tbl.joins:
                     # Don't add the join defining the 1:1 relation
-                    if f'left join {self.db.schema}.{self.name} ' not in join:
+                    if joined_table != self.name and joined_table not in joins:
                         joins.append(join)
 
         if self.grid_view != self.name and self.grid_view in self.db.tablenames:
@@ -359,14 +359,12 @@ class Table:
             ons = [f'{self.grid_view}.{col} = {self.view}.{col}'
                    for col in self.pkey.columns]
             join_view += ' AND '.join(ons) + "\n"
-        else:
-            join_view = ""
 
-        joins.append(join_view)
+            joins[self.grid_view] = join_view
 
         if self.fts and self.name + '_fts' in self.db.tablenames:
             join = f"join {self.name}_fts fts on fts.rowid = {self.name}.rowid\n"
-            joins.append(join)
+            joins[self.name + '_fts'] = join
         
         self._joins = joins
 
@@ -721,7 +719,7 @@ class Table:
         if filter:
             grid = Grid(self)
             grid.set_search_cond(filter)
-            join = '\n'.join(self.joins)
+            join = '\n'.join(self.joins.values())
             cond = grid.get_cond_expr()
             params = grid.cond.params
 
@@ -758,7 +756,7 @@ class Table:
         else:
             sql = f"select {self.name}.* from {self.name}"
             if filter:
-                sql += '\n' + '\n'.join(self.joins)
+                sql += '\n' + '\n'.join(self.joins.values())
                 sql += ' where ' + cond
 
         with self.db.engine.connect() as cnxn:

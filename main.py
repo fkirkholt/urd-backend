@@ -422,12 +422,13 @@ def dblist(response: Response, role: str = None, path: str = None):
 
 
 @app.get("/ripgrep")
-def ripgrep(path: str, cmd: str):
+def ripgrep(path: str, pattern: str):
     dir = os.path.join(cfg.host, path) if path else cfg.host
     cwd = os.getcwd()
     os.chdir(dir)
-    cmd += ' --line-number --color=always --colors=path:none'
-    cmd += ' --max-columns=100 --max-columns-preview'
+    cmd = 'rg ' + pattern + ' --line-number --color=always --colors=path:none'
+    cmd += ' --max-columns=255 --max-columns-preview'
+    cmd += '' if any(char.isupper() for char in pattern) else ' -i'
     result = run(cmd, shell=True, capture_output=True, text=True)
     os.chdir(cwd)
     lines = result.stdout.split('\n')
@@ -455,7 +456,7 @@ def ripgrep(path: str, cmd: str):
     return {'data': {
         'records': result,
         'path': path,
-        'grep': True,
+        'grep': pattern,
         'roles': [],
         'role': None,
         'useradmin': None,

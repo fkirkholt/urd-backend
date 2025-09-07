@@ -785,164 +785,19 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
 
     Parameters:
     dialect: The sql dialect used (mysql, postgresql, sqlite)
-    include_recs: If records should be included
+    list_recs: If records from lookup tables should be included
+    data_recs: If records from data tables should be included
     select_recs: If included records should be selected from
                  existing database
     """
 
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
-    download = True if dest == 'download' else False
-    if download:
-        dest = tempfile.gettempdir()
-    else:
-        os.makedirs(dest, exist_ok=True)
 
-    def event_stream(dbo, dest, dialect, table_defs, no_fkeys, list_recs,
-                     data_recs, select_recs, table, filter):
-        if table:
-            table = Table(dbo, table)
-            filepath = os.path.join(dest, f"{table.name}.{dialect}.sql")
-            with open(filepath, 'w') as file:
-                if dialect == 'oracle':
-                    file.write("SET DEFINE OFF;\n")
-                    file.write("SET FEEDBACK OFF;\n")
-                    file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
-                    file.write("ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS';\n")
-                if table_defs:
-                    if dialect == 'oracle':
-                        ddl = f'drop table {table.name};\n'
-                    else:
-                        ddl = f'drop table if exists {table.name};\n'
-                    ddl += table.export_ddl(dialect, no_fkeys)
-                    file.write(ddl)
-                if (
-                    (table.type == 'list' and list_recs) or
-                    (table.type != 'list' and data_recs)
-                ):
-                    if select_recs:
-                        file.write(f'insert into {table.name}\n')
-                        file.write(f'select * from {dbo.schema}.{table.name};\n')
-                    else:
-                        if dialect == 'oracle':
-                            file.write('WHENEVER SQLERROR EXIT 1;\n')
-                        filter = urllib.parse.unquote(filter)
-                        table.write_inserts(file, dialect, select_recs, filter=filter)
-                        if dialect == 'oracle':
-                            file.write('WHENEVER SQLERROR CONTINUE;\n')
-
-                if table_defs:
-                    ddl = table.get_indexes_ddl()
-                    file.write(ddl)
-        else:
-            ddl = ''
-            filepath = os.path.join(dest, f"{base.lower()}.{dialect}.sql")
-            ordered_tables = dbo.sorted_tbl_names()
-
-            views = tuple(dbo.refl.get_view_names(dbo.schema))
-            if view_as_table:
-                ordered_tables = (ordered_tables + views)
-                views = []
-
-            with open(filepath, 'w') as file:
-                if hasattr(dbo, 'circular'):
-                    for line in dbo.circular:
-                        file.write('-- ' + line + '\n')
-                if dialect == 'oracle':
-                    file.write("SET DEFINE OFF;\n")
-                    file.write("SET FEEDBACK OFF;\n")
-                    file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
-                if table_defs:
-                    for view_name in views:
-                        if dialect == 'oracle':
-                            ddl += f"drop view {view_name};\n"
-                        else:
-                            ddl += f"drop view if exists {view_name};\n"
-
-                    for tbl_name in reversed(ordered_tables):
-                        if dialect == 'oracle':
-                            ddl += f"drop table {tbl_name};\n"
-                        else:
-                            ddl += f"drop table if exists {tbl_name};\n"
-
-                    file.write(ddl)
-                    ddl = ''
-
-                if dialect == 'oracle':
-                    file.write('WHENEVER SQLERROR EXIT 1;\n')
-
-                count = len(ordered_tables)
-                i = 0
-                for tbl_name in ordered_tables:
-                    i += 1
-                    progress = round(i/count * 100)
-                    data = json.dumps({'msg': tbl_name, 'progress': progress})
-                    yield f"data: {data}\n\n"
-
-                    if tbl_name is None:
-                        continue
-                    if tbl_name == 'sqlite_sequence':
-                        continue
-                    if '_fts' in tbl_name:
-                        continue
-                    table = Table(dbo, tbl_name)
-                    if table_defs:
-                        file.write(table.export_ddl(dialect, no_fkeys))
-                    if list_recs or data_recs:
-                        if (
-                            (table.type == 'list' and list_recs) or
-                            (table.type != 'list' and data_recs)
-                        ):
-                            if dialect == 'oracle':
-                                file.write(f'prompt inserts into {table.name}\n')
-                            if select_recs:
-                                file.write(f'insert into {table.name}\n')
-                                file.write(f'select * from {dbo.schema}.{table.name};\n')
-                            else:
-                                table.write_inserts(file, dialect, select_recs)
-                    if table_defs:
-                        file.write(table.get_indexes_ddl())
-
-                if table_defs and dialect == engine.name:
-                    i = 0
-                    for view_name in views:
-                        if i == 0:
-                            ddl += '\n'
-                        i += 1
-                        try:
-                            # Fails in mssql if user hasn't got permission VIEW DEFINITION
-                            view_def = dbo.refl.get_view_definition(view_name, dbo.schema)
-                        except Exception as e:
-                            view_def = f"-- ERROR: Couldn't get definition for view {view_name} "
-                            print(e)
-                        if view_def:
-                            ddl += f'{view_def}; \n\n'
-                        else:
-                            ddl += f"-- View definition not supported for {dbo.engine.name} yet\n"
-                    for definition in dbo.functions.values():
-                        if dialect == 'oracle':
-                            ddl += 'CREATE OR REPLACE '
-                        ddl += definition + '\n\n'
-                    for definition in dbo.procedures.values():
-                        if dialect == 'oracle':
-                            ddl += 'CREATE OR REPLACE '
-                        ddl += definition + '\n\n'
-
-                    file.write(ddl)
-
-        if download:
-            new_path = os.path.join(tempfile.gettempdir(),
-                                    os.path.basename(filepath))
-            os.rename(filepath, new_path)
-            data = json.dumps({'msg': 'done', 'path': new_path})
-            yield f"data: {data}\n\n"
-        else:
-            data = json.dumps({'msg': 'done'})
-            yield f"data: {data}\n\n"
-
-    event_generator = event_stream(dbo, dest, dialect, table_defs, no_fkeys,
-                                   list_recs, data_recs, select_recs, table, filter)
-    return StreamingResponse(event_generator, media_type="text/event-stream")
+    return StreamingResponse(dbo.export_sql(dest, dialect, table_defs, no_fkeys,
+                                            list_recs, data_recs, select_recs,
+                                            view_as_table, table, filter),
+                             media_type="text/event-stream")
 
 
 @app.get('/download')

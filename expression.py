@@ -312,6 +312,75 @@ class Expression:
         else:
             return None
 
+    def rows(self, tbl, cond):
+
+        fkey = tbl.get_parent_fk()
+        if fkey and self.platform in ['mysql', 'postgresql', 'sqlite']:
+            cols = tbl.db.refl.get_columns(self.name, self.db.schema)
+            colnames = []
+            for col in cols:
+                colnames.append(col['name'])
+
+            select = ', '.join(colnames)
+            fkey_cc = fkey['constrained_columns'][0]
+            fkey_rc = fkey['referred_columns'][0]
+            join = '\n'.join(tbl.joins.values())
+              
+            sql = f"""
+            with recursive tbl_data as (
+                select {tbl.name}.*, 1 as level
+                from {tbl.name}
+                {join}
+                where {tbl.name}.{fkey_cc} is null and {cond}
+
+                union all
+
+                select this.*, prior.level + 1
+                from tbl_data prior
+                inner join {tbl.name} this
+                   on this.{fkey_cc} = prior.{fkey_rc}
+            )
+            select {select}
+            from tbl_data
+            order by level
+            """
+        else:
+            sql = f"select {tbl.name}.* from {tbl.name}"
+            if filter:
+                sql += '\n' + '\n'.join(tbl.joins.values())
+                sql += ' where ' + cond
+
+        return sql
+
+    def insert_rec(self, tbl, rec):
+        insert = ''
+        if self.platform == 'oracle':
+            insert += 'select '
+        else:
+            insert += '('
+        for colname, val in rec.items():
+            col = tbl.fields[colname]
+            if (tbl.name == 'meta_data' and colname == 'cache'):
+                val = ''
+            if type(val) is str:
+                val = "'" + val.strip().replace("'", "''") + "'"
+            elif isinstance(val, date):
+                val = "'" + str(val) + "'"
+            elif (col.datatype == 'bool' and self.platform == 'oracle'):
+                if val is False:
+                    val = 0
+                elif val is True:
+                    val = 1
+            elif val is None:
+                val = 'null'
+            insert += str(val) + ','
+        if self.platform == 'oracle':
+            insert = insert[:-1] + ' from dual'
+        else:
+            insert = insert[:-1] + ')'
+
+        return insert
+
     def privilege(self):
         if self.platform == 'postgresql':
             sql = "select pg_catalog.has_schema_privilege"

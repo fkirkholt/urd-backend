@@ -5,6 +5,8 @@ import re
 import csv
 import sys
 import shutil
+import tempfile
+import urllib.parse
 from pathlib import Path
 from graphlib import TopologicalSorter
 from sqlalchemy import inspect, exc
@@ -19,6 +21,7 @@ from user import User
 from datatype import Datatype
 from odbc_engine import ODBC_Engine
 from reflection import Reflection
+from expression import Expression
 from util import prepare, to_rec
 
 
@@ -955,6 +958,189 @@ class Database:
         cnxn.commit()
 
         return query
+
+    def export_sql(self, dest, dialect, table_defs, no_fkeys, list_recs,
+                   data_recs, select_recs, view_as_table, table, filter):
+        download = True if dest == 'download' else False
+        if download:
+            dest = tempfile.gettempdir()
+        else:
+            os.makedirs(dest, exist_ok=True)
+        if table:
+            filepath = os.path.join(dest, f"{table}.{dialect}.sql")
+            ordered_tables = [table]
+        else:
+            filepath = os.path.join(dest, f"{self.identifier.lower()}.{dialect}.sql")
+            ordered_tables = self.sorted_tbl_names()
+
+        ddl = ''
+        params = []
+        if filter:
+            tbl = Table(self, table)
+            grid = Grid(tbl)
+            grid.set_search_cond(filter)
+            join = '\n'.join(tbl.joins.values())
+            cond = grid.get_cond_expr()
+            params = grid.cond.params
+        # Count rows
+        total_rows = 0
+        for tbl_name in ordered_tables:
+            with self.engine.connect() as cnxn:
+                sql = f'select count(*) from {tbl_name}'
+                if filter:
+                    sql += '\n' + join
+                    sql += ' where ' + cond
+                sql, params = prepare(sql, params)
+                n = cnxn.execute(sql, params).fetchone()[0]
+                total_rows += n
+
+        views = tuple(self.refl.get_view_names(self.schema))
+        if view_as_table:
+            ordered_tables = (ordered_tables + views)
+            views = []
+
+        file = open(filepath, 'w')
+        if hasattr(self, 'circular'):
+            for line in self.circular:
+                file.write('-- ' + line + '\n')
+        if dialect == 'oracle':
+            file.write("SET DEFINE OFF;\n")
+            file.write("SET FEEDBACK OFF;\n")
+            file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
+        if table_defs:
+            for view_name in views:
+                if dialect == 'oracle':
+                    ddl += f"drop view {view_name};\n"
+                else:
+                    ddl += f"drop view if exists {view_name};\n"
+
+            for tbl_name in reversed(ordered_tables):
+                if dialect == 'oracle':
+                    ddl += f"drop table {tbl_name};\n"
+                else:
+                    ddl += f"drop table if exists {tbl_name};\n"
+
+            file.write(ddl)
+            ddl = ''
+
+        if dialect == 'oracle':
+            file.write('WHENEVER SQLERROR EXIT 1;\n')
+
+        count = 0
+        last_progress = 0
+        i = 0
+        expr = Expression(dialect)
+        for tbl_name in ordered_tables:
+            i += 1
+
+            if tbl_name is None:
+                continue
+            if tbl_name == 'sqlite_sequence':
+                continue
+            if '_fts' in tbl_name:
+                continue
+            table = Table(self, tbl_name)
+            if table_defs:
+                file.write(table.export_ddl(dialect, no_fkeys))
+                file.write(table.get_indexes_ddl())
+
+            if (
+                (table.type == 'list' and not list_recs) or
+                (table.type != 'list' and not data_recs)
+            ):
+                continue
+
+            if dialect == 'oracle':
+                file.write(f'prompt inserts into {table.name}\n')
+            if select_recs:
+                file.write(f'insert into {table.name}\n')
+                file.write(f'select * from {self.schema}.{table.name};\n')
+            else:
+                params = []
+                join = ''
+                cond = '1 = 1'
+                if filter:
+                    grid = Grid(self)
+                    grid.set_search_cond(filter)
+                    cond = grid.get_cond_expr()
+                    params = grid.cond.params
+                sql = expr.rows(table, cond)
+                with self.engine.connect() as cnxn:
+                    sql, params = prepare(sql, params)
+                    cursor = cnxn.execute(sql, params)
+                    
+                    # Insert time grows exponentially with number of inserts
+                    # per `insert all` in Oracle after a certain value.
+                    # This value is around 50 for version 19c
+                    max = 50 if dialect == 'oracle' else 1000;
+
+                    while True:
+                        rows = cursor.fetchmany(max)
+                        if not rows:
+                            break
+
+                        # rowcount = len(rows)
+                        i = 0
+                        if dialect == 'oracle':
+                            insert = f'insert into {table.name}\n'
+                        else:
+                            insert = f'insert into {table.name} values '
+                        file.write(insert)
+                        for row in rows:
+                            progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
+                            if progress != last_progress:
+                                data = json.dumps({'msg': table.name, 'progress': progress})
+                                yield f"data: {data}\n\n"
+                                last_progress = progress
+                            i += 1
+                            count += 1
+                            insert = ''
+                            if dialect == 'oracle' and i > 1:
+                                insert += ' union all\n'
+                            rec = to_rec(row)
+                            insert += expr.insert_rec(table, rec) 
+                            file.write(insert)
+
+                        file.write(';\n\n')
+
+        if table_defs and dialect == self.engine.name:
+            i = 0
+            for view_name in views:
+                if i == 0:
+                    ddl += '\n'
+                i += 1
+                try:
+                    # Fails in mssql if user hasn't got permission VIEW DEFINITION
+                    view_def = self.refl.get_view_definition(view_name, self.schema)
+                except Exception as e:
+                    view_def = f"-- ERROR: Couldn't get definition for view {view_name} "
+                    print(e)
+                if view_def:
+                    ddl += f'{view_def}; \n\n'
+                else:
+                    ddl += f"-- View definition not supported for {self.engine.name} yet\n"
+            for definition in self.functions.values():
+                if dialect == 'oracle':
+                    ddl += 'CREATE OR REPLACE '
+                ddl += definition + '\n\n'
+            for definition in self.procedures.values():
+                if dialect == 'oracle':
+                    ddl += 'CREATE OR REPLACE '
+                ddl += definition + '\n\n'
+
+            file.write(ddl)
+
+        file.close()
+
+        if download:
+            new_path = os.path.join(tempfile.gettempdir(),
+                                    os.path.basename(filepath))
+            os.rename(filepath, new_path)
+            data = json.dumps({'msg': 'done', 'path': new_path})
+            yield f"data: {data}\n\n"
+        else:
+            data = json.dumps({'msg': 'done'})
+            yield f"data: {data}\n\n"
 
     def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download, filter):
         params = []

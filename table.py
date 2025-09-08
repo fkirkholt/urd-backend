@@ -153,6 +153,7 @@ class Table:
             elif self.name[-4:] == "_ext":
                 self._type = "ext"
             elif (
+                pkey_col_type is None or
                 (pkey_col_type == 'str' and not pkey_col_length or
                  pkey_col_type == 'str' and pkey_col_length >= 10) or (
                     pkey_col and (

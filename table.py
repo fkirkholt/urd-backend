@@ -352,7 +352,7 @@ class Table:
                 for joined_table in rel_tbl.joins:
                     # Don't add the join defining the 1:1 relation
                     if joined_table != self.name and joined_table not in joins:
-                        joins.append(join)
+                        joins[joined_table] = rel_tbl.joins[joined_table]
 
         if self.grid_view != self.name and self.grid_view in self.db.tablenames:
             join_view = "join " + self.grid_view + " on "

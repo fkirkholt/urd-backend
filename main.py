@@ -750,6 +750,7 @@ async def update_cache(base: str, config: str):
     dbo.config.update_cache = True
     dbo.cache = None
     dbo.tables = Dict()
+
     def event_stream():
         if ('html_attributes' not in dbo.tablenames):
             dbo.create_html_attributes()
@@ -793,6 +794,9 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
 
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
+
+    if cfg.system in ['sqlite', 'duckdb'] and dest != 'download':
+        dest = os.path.join(cfg.host, dest)
 
     return StreamingResponse(dbo.export_sql(dest, dialect, table_defs, no_fkeys,
                                             list_recs, data_recs, select_recs,

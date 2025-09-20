@@ -860,7 +860,7 @@ def get_db_file(base: str, table: str, pkey: str, column: str = None):
     tbl = Table(dbo, table)
     rec = Record(dbo, tbl, pkey)
     path = rec.get_file_path(column)
-    path = os.path.join(cfg.host, path)
+    path = os.path.join(cfg.host, os.path.dirname(base), path)
 
     return FileResponse(path)
 

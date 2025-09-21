@@ -314,6 +314,13 @@ def rename_file(src: str, dst: str):
                     file.write(new_content)
     return {'success': True}
 
+@app.put("/file_delete")
+def delete_file(filename: str):
+  filepath = os.path.join(cfg.host, filename)
+  os.remove(filepath)
+
+  return {'success': True}
+
 
 @app.get("/dblist")
 def dblist(response: Response, role: str = None, path: str = None):

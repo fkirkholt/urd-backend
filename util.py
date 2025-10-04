@@ -9,18 +9,25 @@ cfg = Settings()
 
 def prepare(sql, params={}):
     params_prep = params
+    sql_prep = sql
     if cfg.use_odbc:
-        p = re.compile(r'(?<!:)\:[a-zA-ZæøåÆØÅ_]\w*\b')
-        placeholders = p.findall(sql)
-        sql_prep = re.sub(r'(?<!:)\:[a-zA-ZæøåÆØÅ_]\w*\b', '?', sql)
-        if type(params) is not list:
+        if params:
+            p = re.compile(r'(?<!:)\:[a-zA-ZæøåÆØÅ_]\w*\b')
+            placeholders = p.findall(sql)
+            sql_prep = re.sub(r'(?<!:)\:[a-zA-ZæøåÆØÅ_]\w*\b', '?', sql)
+            if type(params) is not list:
+                params_prep = []
+                for ph in placeholders:
+                    key = ph[1:]
+                    val = params[key]
+                    params_prep.append(val)
+        else:
             params_prep = []
-            for ph in placeholders:
-                key = ph[1:]
-                val = params[key] 
-                params_prep.append(val)
     else:
-        sql_prep = text(sql)
+        if params:
+            sql_prep = text(sql)
+        else:
+            sql_prep = text(re.sub(r'([\:])', r'\\\1', sql))
 
     return sql_prep, params_prep
 

@@ -319,23 +319,23 @@ class Table:
                    for idx, col in enumerate(fkey.constrained_columns)]
             on_list = ' AND '.join(ons)
 
-            joins[fkey.referred_table] = (f'left join {self.db.schema}.{fkey.referred_table} '
-                                          f'{fkey.ref_table_alias} on {on_list}')
+            joins[fkey.name] = (f'left join {self.db.schema}.{fkey.referred_table} '
+                                f'{fkey.ref_table_alias} on {on_list}')
 
             # Join with 1:1 relation carrying access code
             fkey_table = Table(self.db, fkey.referred_table)
             access_idx = fkey_table.get_access_code_idx()
             if access_idx and access_idx.table_name != fkey_table.name:
-                for key, rel_fkey in fkey_table.relations.items():
-                    if rel_fkey.table_name == access_idx.table_name:
-                        if rel_fkey.table_name == self.name:
+                for key, fkey in fkey_table.relations.items():
+                    if fkey.table_name == access_idx.table_name:
+                        if fkey.table_name == self.name:
                             continue
-                        ons = [f"{rel_fkey.table_name}.{rel_fkey.constrained_columns[idx]} = "
+                        ons = [f"{fkey.table_name}.{fkey.constrained_columns[idx]} = "
                                f"{fkey.ref_table_alias}.{col}"
-                               for idx, col in enumerate(rel_fkey.referred_columns)]
+                               for idx, col in enumerate(fkey.referred_columns)]
                         on_list = ' AND '.join(ons)
-                        joins[rel_fkey.table_name] = (f"left join {self.db.schema}.{rel_fkey.table_name} "
-                                                      f"on {on_list}")
+                        joins[fkey.name] = (f"left join {self.db.schema}.{fkey.table_name} "
+                                            f"on {on_list}")
 
         for key, fkey in self.relations.items():
             if fkey.relationship == '1:1':
@@ -345,14 +345,15 @@ class Table:
                        f"{self.view}.{col}"
                        for idx, col in enumerate(fkey.referred_columns)]
                 on_list = ' AND '.join(ons)
-                joins[fkey.table_name] = (f"left join {self.db.schema}.{fkey.table_name} {alias} "
-                                          f"on {on_list}")
+                joins[fkey.name] = (f"left join {self.db.schema}.{fkey.table_name} {alias} "
+                                    f"on {on_list}")
 
                 rel_tbl = Table(self.db, fkey.table_name, alias=alias)
-                for joined_table in rel_tbl.joins:
+                for fkey_name in rel_tbl.joins:
                     # Don't add the join defining the 1:1 relation
-                    if joined_table != self.name and joined_table not in joins:
-                        joins[joined_table] = rel_tbl.joins[joined_table]
+                    fkey = rel_tbl.fkeys[fkey_name]
+                    if fkey and fkey.referred_table != self.name and fkey.name not in joins:
+                        joins[fkey.name] = rel_tbl.joins[fkey.name]
 
         if self.grid_view != self.name and self.grid_view in self.db.tablenames:
             join_view = "join " + self.grid_view + " on "

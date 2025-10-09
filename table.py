@@ -118,55 +118,61 @@ class Table:
             self._type = 'view'
             return 'view'
 
-        self._type = 'list'
-        for colname in self.pkey.columns:
-            # Data type of primary key column
-            pkey_col = None
-            pkey_col_type = None
-            pkey_col_length = None
-            # Find data type for last pkey column
-            if (
-                self.pkey and len(self.pkey.columns) and
-                self.pkey.columns != ['rowid']
-            ):
-                # colname = self.pkey.columns[-1]
-                cols = self.db.columns[self.name]
-                for col in cols:
-                    if col['name'] == colname:
-                        pkey_col = Column(self, col)
-                        break
-                if type(pkey_col.type) is str:
-                    expr = Expression(self.db.engine.name)
-                    pkey_col_type = expr.to_urd_type(pkey_col.type)
-                else:
-                    pkey_col_type = pkey_col.type.python_type.__name__
-                if hasattr(pkey_col, 'size'):
-                    pkey_col_length = pkey_col.size
+        list_idx = self.indexes.get(self.name.rstrip('_') + "_list_idx", None)
+        if list_idx:
+            return 'list'
+        elif self.db.config.update_cache: 
+            self._type = 'list'
+            for colname in self.pkey.columns:
+                # Data type of primary key column
+                pkey_col = None
+                pkey_col_type = None
+                pkey_col_length = None
+                # Find data type for last pkey column
+                if (
+                    self.pkey and len(self.pkey.columns) and
+                    self.pkey.columns != ['rowid']
+                ):
+                    # colname = self.pkey.columns[-1]
+                    cols = self.db.columns[self.name]
+                    for col in cols:
+                        if col['name'] == colname:
+                            pkey_col = Column(self, col)
+                            break
+                    if type(pkey_col.type) is str:
+                        expr = Expression(self.db.engine.name)
+                        pkey_col_type = expr.to_urd_type(pkey_col.type)
+                    else:
+                        pkey_col_type = pkey_col.type.python_type.__name__
+                    if hasattr(pkey_col, 'size'):
+                        pkey_col_length = pkey_col.size
 
-            # self._type = self.main_type
+                # self._type = self.main_type
 
-            # if (self.name[-5:] == "_list" or self.name[-6:] == "_liste"):
-            #     self._type = "list"
-            smallints = ['tinyint', 'smallint', 'mediumint']
-            if self.name[-5:] in ("_xref", "_link"):
-                self._type = "xref"
-            elif self.name[-4:] == "_ext":
-                self._type = "ext"
-            elif (
-                pkey_col_type is None or
-                (pkey_col_type == 'str' and not pkey_col_length or
-                 pkey_col_type == 'str' and pkey_col_length >= 10) or (
-                    pkey_col and (
-                        ('int' in str(pkey_col_type).lower() and
-                         (not pkey_col_length or pkey_col_length > 8) and
-                         str(pkey_col.type).lower() not in smallints) or
-                        ('numeric' in str(pkey_col.type).lower() and
-                         pkey_col.precision - pkey_col.scale >= 8) or
-                        'date' in str(pkey_col.type).lower() 
+                # if (self.name[-5:] == "_list" or self.name[-6:] == "_liste"):
+                #     self._type = "list"
+                smallints = ['tinyint', 'smallint', 'mediumint']
+                if self.name[-5:] in ("_xref", "_link"):
+                    self._type = "xref"
+                elif self.name[-4:] == "_ext":
+                    self._type = "ext"
+                elif (
+                    pkey_col_type is None or
+                    (pkey_col_type == 'str' and not pkey_col_length or
+                     pkey_col_type == 'str' and pkey_col_length >= 10) or (
+                        pkey_col and (
+                            ('int' in str(pkey_col_type).lower() and
+                             (not pkey_col_length or pkey_col_length > 8) and
+                             str(pkey_col.type).lower() not in smallints) or
+                            ('numeric' in str(pkey_col.type).lower() and
+                             pkey_col.precision - pkey_col.scale >= 8) or
+                            'date' in str(pkey_col.type).lower() 
+                        )
                     )
-                )
-            ):
-                self._type = "data"
+                ):
+                    self._type = "data"
+        else:
+            self._type = 'data'
 
         all_fkey_columns = set()
         for fkey in self.fkeys.values():

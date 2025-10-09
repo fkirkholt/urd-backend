@@ -41,10 +41,16 @@ are then displayed with a list icon.
 When you use postfix to specify lookup tables, you also see at once
 what kind of table this is, when you look at them in a database client.
 
-Another way to indicate that something is a lookup table is to set
-the data type of the primary key column to a text type, e.g. `char`,
-`varchar` or `text`, or an numeric type that can't hold more than
-8 digits.
+It's also possible to mark a table as a lookup table by naming the
+unique index used to chose the column(s) to represent the display
+value as `<table_name>_list_idx`, cf. below.
+
+When generating cache for the database structure, it is possible to determine
+if a table is a lookup table by looking at the data type of the primary
+key columns. This can be useful when analyzing the structure of an existing
+database. A table is defined as a lookup table when the primary key column
+is a text type, e.g. `char`, `varchar` or `text`, or a numeric type that
+can't hold more than 8 digits.
 
 When you set the primary key to text, you can also provide a
 recognizable identifier that can be used in compressed table display
@@ -187,9 +193,16 @@ is displayed.
 
 Urdr uses indexes in great extent to know how data should be displayed.
 
+## Lookup tables
+
+A table can be set to a lookup table by creating an index
+`<table_name>_list_idx`, e.g. an unique index on the columns in the lookup
+table that represents the display value.
+
 ## Grid
 
-To determine which columns are to be displayed in the grid, the index `<table_name>_grid_idx` is used, if it exists.
+To determine which columns are to be displayed in the grid, the index
+`<table_name>_grid_idx` is used, if it exists.
 
 If this index does not exist, the first five columns are displayed,
 with exception for text columns with 255 characters or more, hidden
@@ -217,6 +230,9 @@ to be displayed from the record in a foreign key field in a referencing table.
 
 If you also want the records to be sorted by this index, you can
 use `<table_name>_sort_idx` and set this to unique.
+
+If the table should be recognized as a lookup table, you can name the index
+`<table_name>_list_idx`.
 
 If you have several unique indexes, the one named `...sort_idx` is used
 for identification.

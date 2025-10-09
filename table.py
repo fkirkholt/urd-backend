@@ -5,7 +5,7 @@ from record import Record
 from column import Column
 from field import Field
 from grid import Grid
-from util import prepare, to_rec
+from util import prepare, to_rec, format_fkey
 from sqlglot import parse_one, exp
 from settings import Settings
 from expression import Expression
@@ -270,7 +270,16 @@ class Table:
             self._pkey = self.db.cache.tables[self.name].pkey
             return self._pkey
 
-        self._pkey = self.db.pkeys[self.name]
+        if self.db.pkeys_loaded:
+            self._pkey = self.db.pkeys[self.name]
+        else:
+            pkey = self.db.refl.get_pk_constraint(self.name, self.db.schema)
+            self._pkey = Dict({
+                'table_name': self.name,
+                'name': pkey['name'] or 'PRIMARY',
+                'unique': True,
+                'columns': pkey['constrained_columns']
+            })
 
         if (
             not self._pkey.columns and
@@ -288,6 +297,17 @@ class Table:
                 self._pkey.columns = attrs[selector]['data-pkey']
 
         return self._pkey
+
+    @property
+    def columns(self):
+        if hasattr(self, '_columns'):
+            return self._columns
+        if self.db.columns_loaded:
+            self._columns = self.db.columns[self.name]
+        else:
+            self._columns = self.db.refl.get_columns(self.name, self.db.schema)
+
+        return self._columns
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
@@ -486,7 +506,24 @@ class Table:
         if (self.db.cache and not self.db.config.update_cache):
             self._fkeys = self.db.cache.tables[self.name].fkeys
             return
-        self._fkeys = self.db.fkeys[self.name]
+        if self.db.fkeys_loaded:
+            self._fkeys = self.db.fkeys[self.name]
+        else:
+            fkeys = self.db.refl.get_foreign_keys(self.name, self.db.schema)
+
+            self._fkeys = Dict()
+            for fkey in fkeys:
+                fkey, alias = format_fkey(fkey, self.db.cat, self.db.schema,
+                                          self.name, self.pkey)
+                fkey_col = fkey.constrained_columns[-1]
+                ref_col = fkey.referred_columns[-1].strip('_')
+                if fkey_col in [fkey.referred_table + '_' + ref_col,
+                                fkey.referred_columns[-1]]:
+                    ref_table_alias = fkey.referred_table
+                else:
+                    ref_table_alias = fkey_col.strip('_')
+                fkey.ref_table_alias = ref_table_alias
+                self._fkeys[fkey.name] = fkey
 
     def init_fields(self):
         """Store Dict of fields in table object"""
@@ -584,8 +621,18 @@ class Table:
         if self.db.cache and not self.db.config.update_cache:
             self._indexes = self.db.cache.tables[self.name].indexes
             return
+        if self.db.indexes_loaded:
+            self._indexes = self.db.indexes[self.name]
+        else:
+            indexes = self.db.refl.get_indexes(self.name, self.db.schema)
+            self._indexes = Dict()
+            for idx in indexes:
+                idx = Dict(idx)
+                idx.columns = idx.pop('column_names')
+                idx.pop('dialect_options', None)
 
-        self._indexes = self.db.indexes[self.name]
+                if idx.name and idx.columns != [None]:
+                    self._indexes[idx.name] = idx
 
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
@@ -653,7 +700,7 @@ class Table:
         """Return ddl for table"""
         ddl = f"\ncreate table {self.name} (\n"
         coldefs = []
-        cols = self.db.refl.get_columns(self.name, self.db.schema)
+        cols = self.columns
         for col in cols:
             col = Dict(col)
             column = Column(self, col)

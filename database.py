@@ -29,6 +29,10 @@ class Database:
     """Contains methods for getting data and metadata from database"""
 
     def __init__(self, engine, db_name, uid):
+        self.pkeys_loaded = False
+        self.fkeys_loaded = False
+        self.columns_loaded = False
+        self.indexes_loaded = False
         self.engine = engine
         self.identifier = db_name
         self.user = User(engine, name=uid)
@@ -207,8 +211,10 @@ class Database:
 
         self.tables = Dict()
 
-        tbl_names = self.user.tables(self.cat, self.schema)
-        view_names = self.refl.get_view_names(self.schema)
+        # Loads metadata so we don't have to load for each table
+        self.fkeys
+        self.indexes
+        self.pkeys
 
         for tbl_name in self.tablenames:
             if tbl_name[-5:] == '_view' and tbl_name[:-5] in self.tablenames:
@@ -219,6 +225,8 @@ class Database:
             table = Table(self, tbl_name)
 
             self.tables[tbl_name] = table.get()
+            self.tables[tbl_name].fkeys = self.fkeys[tbl_name]
+            self.tables[tbl_name].relations = self.relations[tbl_name]
 
         return self.tables
 
@@ -285,6 +293,7 @@ class Database:
     @property
     def columns(self):
         """ Return all columns in database grouped by table name """
+        self.columns_loaded = True
 
         if not hasattr(self, '_columns'):
             self._columns = Dict()
@@ -669,6 +678,7 @@ class Database:
         if hasattr(self, '_pkeys'):
             return self._pkeys
 
+        self.pkeys_loaded = True
         self._pkeys = Dict()
         # reflection of constraints is not implemented for duckdb yet
         if self.engine.name == 'duckdb':
@@ -701,6 +711,7 @@ class Database:
 
     @property
     def indexes(self):
+        self.indexes_loaded = True
         if hasattr(self, '_indexes'):
             return self._indexes
 
@@ -746,6 +757,7 @@ class Database:
         """Get all foreign keys of table"""
         if hasattr(self, '_fkeys'):
             return self._fkeys
+        self.fkeys_loaded = True
 
         self._fkeys = Dict()
         self._relations = Dict()

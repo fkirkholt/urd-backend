@@ -144,6 +144,7 @@ class Expression:
             from all_indexes i
             join all_ind_columns col on col.index_name = i.index_name
             where i.table_owner = ?
+                  and i.table_name = nvl(?, i.table_name) 
                   and column_name not like '%$'
             order by column_position
             """
@@ -152,32 +153,84 @@ class Expression:
             select index_name, column_name, non_unique, table_name
             from information_schema.statistics
             where table_schema = ?
+                  and table_name = coalesce(?, table_name)
             order by index_name, seq_in_index;
             """
+        elif self.platform == 'mssql':
+            return """
+            SELECT 
+                OBJECT_NAME(ic.object_id) AS table_name,
+                i.name AS index_name,
+                case when i.is_unique = 1 then 0 else 1 end as non_unique,
+                c.name AS column_name,
+                ic.key_ordinal,
+                ic.is_included_column
+            FROM 
+                sys.index_columns ic
+            JOIN 
+                sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+            JOIN 
+                sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+            WHERE 
+                OBJECT_SCHEMA_NAME(i.object_id) = ?
+                and OBJECT_NAME(ic.object_id) = coalesce(?, OBJECT_NAME(ic.object_id))
+            ORDER BY 
+                table_name, index_name, ic.key_ordinal;
+            """
+        else:
+            return None
 
     def pkeys(self):
         if self.platform == 'oracle':
             return """
             SELECT cols.table_name, cols.column_name, cols.position as key_seq,
-                   cons.status, cons.owner
+                   cons.status, cons.owner, cons.constraint_name as pk_name
             FROM all_constraints cons, all_cons_columns cols
             WHERE cons.constraint_type = 'P'
             AND cons.constraint_name = cols.constraint_name
             AND cons.owner = cols.owner
             AND cons.owner = ?
+            AND cols.table_name = nvl(?, cols.table_name)
             ORDER BY cols.table_name, cols.position;
             """
         elif self.platform in ('mysql', 'mariadb'):
             return """
-            select s.index_name, s.table_name, s.column_name, c.data_type
+            select s.index_name as pk_name, s.table_name, s.column_name,
+                   c.data_type
             from information_schema.statistics s
             join information_schema.columns c
               on c.table_schema = s.table_schema and
                  c.table_name = s.table_name and
                  c.column_name = s.column_name
             where s.table_schema = ? and s.index_name = 'primary'
+              and s.table_name = coalesce(?, s.table_name)
             order by s.table_name, seq_in_index;
             """
+        elif self.platform == 'mssql':
+            return """
+            select 
+                pk.[name] as pk_name,
+                ic.index_column_id as column_id,
+                col.[name] as column_name, 
+                tab.[name] as table_name
+            from sys.tables tab
+                inner join sys.indexes pk
+                    on tab.object_id = pk.object_id 
+                    and pk.is_primary_key = 1
+                inner join sys.index_columns ic
+                    on ic.object_id = pk.object_id
+                    and ic.index_id = pk.index_id
+                inner join sys.columns col
+                    on pk.object_id = col.object_id
+                    and col.column_id = ic.column_id
+            where schema_name(tab.schema_id) = ?
+              and tab.[name] = coalesce(?, tab.[name])
+            order by
+                pk.[name],
+                ic.index_column_id
+            """
+        else:
+            return None
 
     def pkey(self, table_name=None):
         if self.platform == 'sqlite':
@@ -195,7 +248,7 @@ class Expression:
             SELECT kcu.constraint_name as fk_name,
                    kcu.table_name as fktable_name,
                    kcu.column_name as fkcolumn_name,
-                   kcu.referenced_table_schema as pktable_schema,
+                   kcu.referenced_table_schema as pktable_schem,
                    kcu.referenced_table_name as pktable_name,
                    kcu.referenced_column_name as pkcolumn_name,
                    rc.update_rule, rc.delete_rule
@@ -203,6 +256,7 @@ class Expression:
             JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
                  on kcu.constraint_name = rc.constraint_name
             WHERE kcu.referenced_table_schema = ?
+                  and kcu.table_name = coalesce(?, kcu.table_name)
             AND kcu.referenced_table_name IS NOT NULL
             ORDER BY kcu.table_name, kcu.ordinal_position
             """
@@ -212,7 +266,7 @@ class Expression:
                     a.constraint_name as fk_name, a.table_name as fktable_name,
                     c.owner, c.delete_rule,
                     -- referenced pk
-                    c.r_owner as pktable_schema,
+                    c.r_owner as pktable_schem,
                     c_pk.table_name as pktable_name,
                     c_pk.constraint_name r_pk,
                     ra.column_name pkcolumn_name
@@ -228,7 +282,8 @@ class Expression:
                 AND ra.constraint_name = c_pk.constraint_name
                 AND ra.position = a.position
             WHERE c.constraint_type = 'R'
-            AND   a.owner = ?
+                  AND a.owner = ?
+                  AND a.table_name = nvl(?, a.table_name)
             ORDER BY a.position
             """
         elif self.platform == 'postgresql':
@@ -236,7 +291,7 @@ class Expression:
             select
                 con.relname as fktable_name,
                 att2.attname as fkcolumn_name,
-                ns.nspname as pktable_schema,
+                ns.nspname as pktable_schem,
                 cl.relname as pktable_name,
                 att.attname as pkcolumn_name,
                 conname as fk_name,
@@ -273,6 +328,7 @@ class Expression:
                 where
                     con1.contype = 'f'
                     and ns.nspname = ?
+                    and cl.relname = coalesce(?, cl.relname)
 
             ) con
             join pg_attribute att on
@@ -284,6 +340,41 @@ class Expression:
             join pg_namespace ns on
                 ns.oid=cl.relnamespace
             """
+        elif self.platform == 'mssql':
+            return """
+            SELECT C.TABLE_CATALOG as fktable_cat,
+                   C.TABLE_SCHEMA as fktable_schem,
+                   C.TABLE_NAME as fktable_name,
+                   KCU.COLUMN_NAME as fkcolumn_name,
+                   C2.TABLE_CATALOG as pktable_cat,
+                   C2.TABLE_SCHEMA as pktable_schem,
+                   C2.TABLE_NAME as pktable_name,
+                   KCU2.COLUMN_NAME as pkcolumn_name,
+                   RC.UPDATE_RULE as update_rule,
+                   RC.DELETE_RULE as delete_rule,
+                   C.CONSTRAINT_NAME as fk_name,
+                   C2.CONSTRAINT_NAME [PK_NAME],
+                   CAST(7 AS SMALLINT) [DEFERRABILITY]
+            FROM   INFORMATION_SCHEMA.TABLE_CONSTRAINTS C
+                   INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU
+                     ON C.CONSTRAINT_SCHEMA = KCU.CONSTRAINT_SCHEMA
+                        AND C.CONSTRAINT_NAME = KCU.CONSTRAINT_NAME
+                   INNER JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS RC
+                     ON C.CONSTRAINT_SCHEMA = RC.CONSTRAINT_SCHEMA
+                        AND C.CONSTRAINT_NAME = RC.CONSTRAINT_NAME
+                   INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS C2
+                     ON RC.UNIQUE_CONSTRAINT_SCHEMA = C2.CONSTRAINT_SCHEMA
+                        AND RC.UNIQUE_CONSTRAINT_NAME = C2.CONSTRAINT_NAME
+                   INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU2
+                     ON C2.CONSTRAINT_SCHEMA = KCU2.CONSTRAINT_SCHEMA
+                        AND C2.CONSTRAINT_NAME = KCU2.CONSTRAINT_NAME
+                        AND KCU.ORDINAL_POSITION = KCU2.ORDINAL_POSITION
+            WHERE  C.CONSTRAINT_TYPE = 'FOREIGN KEY'
+                   AND C.TABLE_SCHEMA = ?
+                   AND C.TABLE_NAME = coalesce(?, C.TABLE_NAME) 
+            """
+        else:
+            return None
 
     def columns(self, tbl_name=None):
         if self.platform == 'oracle':
@@ -293,16 +384,28 @@ class Expression:
                     data_type as "type_name", data_length as "column_size",
                     case nullable when 'Y' then 1 else 0 end as "nullable"
             from all_tab_columns
-            where owner = ? and table_name = nvl(?, table_name) and
-                  column_name = nvl(?, column_name)
+            where owner = ?
+                  and table_name = nvl(?, table_name)
             order by table_name, column_id
             """
-        elif self.platform == 'sqlite':
+        elif self.platform == 'mssql':
+            return """
+            select table_name, column_name, data_type as type_name,
+                   case when numeric_precision is not null then
+                       numeric_precision else character_maximum_length
+                   end as column_size,
+                   is_nullable as nullable,
+                   numeric_scale as decimal_digits,
+                   column_default as column_def
+            from   information_schema.columns
+            where  table_schema = ? and table_name = coalesce(?, table_name) 
+            """
+        elif tbl_name and self.platform == 'sqlite':
             return f"""
             select name, type, case when "notnull" = 1 then 0 else 1 end as nullable,
                    dflt_value as "default" from pragma_table_info('{tbl_name}')
             """
-        elif self.platform == 'duckdb':
+        elif tbl_name and self.platform == 'duckdb':
             return f"""
             select table_name, column_name as name, is_nullable as nullable,
                    column_default as "default", data_type as type

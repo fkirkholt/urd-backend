@@ -43,3 +43,30 @@ def to_rec(row):
     else:
         return Dict(dict(row._mapping))
 
+
+def format_fkey(fkey, cat, schema, tbl_name, pkey):
+    fkey = Dict(fkey)
+    fkey.base = cat
+    fkey.table_name = tbl_name
+    fkey.schema = schema
+    if (
+        pkey.columns and
+        set(pkey.columns) <= set(fkey.constrained_columns)
+    ):
+        fkey.relationship = '1:1'
+    else:
+        fkey.relationship = '1:M'
+
+    fkey.name = fkey.table_name + '_'
+    fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
+
+    fkey_col = fkey.constrained_columns[-1]
+    ref_col = fkey.referred_columns[-1].strip('_')
+    if fkey_col in [fkey.referred_table + '_' + ref_col,
+                    fkey.referred_columns[-1]]:
+        ref_table_alias = fkey.referred_table
+    else:
+        ref_table_alias = fkey_col.strip('_')
+
+    return fkey, ref_table_alias
+

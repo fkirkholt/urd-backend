@@ -972,7 +972,8 @@ class Database:
         return query
 
     def export_sql(self, dest, dialect, table_defs, no_fkeys, list_recs,
-                   data_recs, select_recs, view_as_table, table, filter):
+                   data_recs, select_recs, view_as_table, no_empty,
+                   table, filter):
         download = True if dest == 'download' else False
         if download:
             dest = tempfile.gettempdir()
@@ -994,8 +995,15 @@ class Database:
             join = '\n'.join(tbl.joins.values())
             cond = grid.get_cond_expr()
             params = grid.cond.params
+
+        views = tuple(self.refl.get_view_names(self.schema))
+        if view_as_table:
+            ordered_tables = (ordered_tables + views)
+            views = []
+
         # Count rows
         total_rows = 0
+        count_recs = Dict()
         for tbl_name in ordered_tables:
             with self.engine.connect() as cnxn:
                 sql = f'select count(*) from {tbl_name}'
@@ -1004,12 +1012,8 @@ class Database:
                     sql += ' where ' + cond
                 sql, params = prepare(sql, params)
                 n = cnxn.execute(sql, params).fetchone()[0]
+                count_recs[tbl_name] = n
                 total_rows += n
-
-        views = tuple(self.refl.get_view_names(self.schema))
-        if view_as_table:
-            ordered_tables = (ordered_tables + views)
-            views = []
 
         file = open(filepath, 'w')
         if hasattr(self, 'circular'):
@@ -1027,6 +1031,8 @@ class Database:
                     ddl += f"drop view if exists {view_name};\n"
 
             for tbl_name in reversed(ordered_tables):
+                if no_empty and count_recs[tbl_name] == 0:
+                    continue
                 if dialect == 'oracle':
                     ddl += f"drop table {tbl_name};\n"
                 else:
@@ -1045,6 +1051,8 @@ class Database:
         for tbl_name in ordered_tables:
             i += 1
 
+            if no_empty and count_recs[tbl_name] == 0:
+                continue
             if tbl_name is None:
                 continue
             if tbl_name == 'sqlite_sequence':
@@ -1053,7 +1061,7 @@ class Database:
                 continue
             table = Table(self, tbl_name)
             if table_defs:
-                file.write(table.export_ddl(dialect, no_fkeys))
+                file.write(table.export_ddl(dialect, no_fkeys, no_empty, count_recs))
                 file.write(table.get_indexes_ddl())
 
             if (

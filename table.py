@@ -696,7 +696,7 @@ class Table:
 
         self._relations = relations
 
-    def export_ddl(self, dialect, no_fkeys):
+    def export_ddl(self, dialect, no_fkeys, no_empty, count_recs):
         """Return ddl for table"""
         ddl = f"\ncreate table {self.name} (\n"
         coldefs = []
@@ -730,6 +730,8 @@ class Table:
 
         if not no_fkeys:
             for fkey in self.fkeys.values():
+                if no_empty and count_recs[fkey.referred_table] == 0:
+                    continue
                 ddl += ",\n    foreign key ("
                 ddl += ", ".join(fkey.constrained_columns) + ") "
                 ddl += f"references {fkey.referred_table}("

@@ -242,9 +242,10 @@ def get_file(path: str):
     type = magic.from_file(filepath, mime=True)
     text_types = ['application/javascript']
     with open(filepath, 'rb') as reader:
-        if reader.read(6) == b'SQLite':
+        string = reader.read(12)
+        if b'SQLite' in string:
             type = 'sqlite'
-        elif reader.read(4) == b'DUCK':
+        elif b'DUCK' in string:
             type = 'duckdb'
     if type.startswith('text/') or type in text_types:
         if size < 100000000:
@@ -366,9 +367,10 @@ def dblist(response: Response, role: str = None, path: str = None):
                     base.columns.type = 'dir'
                 else:
                     with open(filepath, 'rb') as reader:
-                        if reader.read(6) == b'SQLite':
+                        string = reader.read(12)
+                        if b'SQLite' in string:
                             base.columns.type = 'database'
-                        elif reader.read(4) == b'DUCK':
+                        elif b'DUCK' in string:
                             base.columns.type = 'database'
 
                 result.append(base)

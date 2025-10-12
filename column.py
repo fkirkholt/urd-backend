@@ -18,6 +18,8 @@ class Column:
         self.type = col.type
         for attr in col.keys():
             setattr(self, attr, col[attr])
+        if self.size == -1:
+            self.size = None
         # Get size, scale and precision for odbc connection
         if type(col.type) is str and '(' in col.type:
             expr = Expression(self.db.engine.name)

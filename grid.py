@@ -30,7 +30,10 @@ class Grid:
         if 'view' in col:
             select = col.view
         elif col.element == 'textarea':
-            select = "substr(" + col.ref + ', 1, 255)'
+            if self.db.engine.name == 'mssql':
+                select = "substring(" + col.ref + ', 1, 255)'
+            else:
+                select = "substr(" + col.ref + ', 1, 255)'
         else:
             select = col.ref
 

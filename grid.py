@@ -34,6 +34,8 @@ class Grid:
                 select = "substring(" + col.ref + ', 1, 255)'
             else:
                 select = "substr(" + col.ref + ', 1, 255)'
+        elif col.datatype == 'geometry':
+            select = f'{col.ref}.ToString()'
         else:
             select = col.ref
 
@@ -341,11 +343,16 @@ class Grid:
         """Return values for columns in grid"""
         cols = []
         for key in selects.keys():
+            field = self.tbl.fields[key]
             if (
                 (key in self.tbl.fields or key == 'rowid') and
-                'source' not in self.tbl.fields[key]
+                'source' not in field
             ):
-                cols.append(f'{self.tbl.grid_view}.{key}')
+                view = self.tbl.grid_view
+                if field.datatype == 'geometry':
+                    cols.append(f'{view}.{key}.ToString() as {key}')
+                else:
+                    cols.append(f'{view}.{key}')
 
         sql = ''
         if self.access_check:

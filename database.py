@@ -1002,18 +1002,19 @@ class Database:
             views = []
 
         # Count rows
-        total_rows = 0
         count_recs = Dict()
-        for tbl_name in ordered_tables:
-            with self.engine.connect() as cnxn:
-                sql = f'select count(*) from {tbl_name}'
-                if filter:
-                    sql += '\n' + join
-                    sql += ' where ' + cond
-                sql, params = prepare(sql, params)
-                n = cnxn.execute(sql, params).fetchone()[0]
-                count_recs[tbl_name] = n
-                total_rows += n
+        if data_recs or no_empty: 
+            total_rows = 0
+            for tbl_name in ordered_tables:
+                with self.engine.connect() as cnxn:
+                    sql = f'select count(*) from {tbl_name}'
+                    if filter:
+                        sql += '\n' + join
+                        sql += ' where ' + cond
+                    sql, params = prepare(sql, params)
+                    n = cnxn.execute(sql, params).fetchone()[0]
+                    count_recs[tbl_name] = n
+                    total_rows += n
 
         file = open(filepath, 'w')
         if hasattr(self, 'circular'):

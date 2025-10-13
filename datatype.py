@@ -60,7 +60,7 @@ class Datatype:
         elif self.type == "bool":
             return "boolean"
         elif self.type == "Decimal":
-            return f"numeric({str(self.size)})" if self.size else "numeric"
+            return f"decimal({str(self.size)})" if self.size else "numeric"
         elif self.type == "float":
             return "real"
         elif self.type == "bytes":

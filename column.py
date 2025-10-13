@@ -122,11 +122,10 @@ class Column:
     def get_def(self, dialect, blob_to_varchar=False, geometry_to_text=False):
         """Get column definition"""
         size = self.size if hasattr(self, 'size') else None
-        if hasattr(self, 'precision') and self.precision is not None:
+        if hasattr(self, 'scale') and self.scale is not None:
             size = str(self.precision)
-            if hasattr(self, 'scale') and self.scale is not None:
-                size += "," + str(self.scale)
-        if type(self.type) is str: # odbc engine
+            size += "," + str(self.scale)
+        if type(self.type) is str:  # odbc engine
             datatype = Datatype(self.db.refl.expr.to_urd_type(self.type), size)
         else:
             datatype = Datatype(self.type.python_type.__name__, size)

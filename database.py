@@ -984,6 +984,11 @@ class Database:
             ordered_tables = [table]
         else:
             filepath = os.path.join(dest, f"{self.identifier.lower()}.{dialect}.sql")
+            data = json.dumps({
+                'msg': 'Sorting tables (might take a while)',
+                'progress': 0,
+            })
+            yield f"data: {data}\n\n"
             ordered_tables = self.sorted_tbl_names()
 
         ddl = ''
@@ -1072,6 +1077,15 @@ class Database:
                 (table.type == 'list' and not list_recs) or
                 (table.type != 'list' and not data_recs)
             ):
+                progress = '{:.1f}'.format(round(i/len(ordered_tables) * 100, 1))
+                if progress != last_progress:
+                    data = json.dumps({
+                        'msg': (table.name[:17] + "..." if len(table.name) > 17
+                                else table.name),
+                        'progress': progress
+                    })
+                    yield f"data: {data}\n\n"
+                    last_progress = progress
                 continue
 
             if dialect == 'oracle':

@@ -996,10 +996,13 @@ class Database:
             cond = grid.get_cond_expr()
             params = grid.cond.params
 
-        views = tuple(self.refl.get_view_names(self.schema))
-        if view_as_table:
-            ordered_tables = (ordered_tables + views)
+        if table:
             views = []
+        else:
+            views = tuple(self.refl.get_view_names(self.schema))
+            if view_as_table:
+                ordered_tables = (ordered_tables + views)
+                views = []
 
         # Count rows
         count_recs = Dict()

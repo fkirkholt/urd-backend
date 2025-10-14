@@ -698,7 +698,10 @@ class Table:
 
     def export_ddl(self, dialect, no_fkeys, no_empty, count_recs):
         """Return ddl for table"""
-        ddl = f"\ncreate table {self.name} (\n"
+        ddl = "\n"
+        if self.type == 'view':
+            ddl += "-- view exported as table\n"
+        ddl += f"create table {self.name} (\n"
         coldefs = []
         cols = self.columns
         for col in cols:

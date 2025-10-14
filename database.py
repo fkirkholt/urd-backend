@@ -974,6 +974,69 @@ class Database:
     def export_sql(self, dest, dialect, table_defs, no_fkeys, list_recs,
                    data_recs, select_recs, view_as_table, no_empty,
                    table, filter):
+        # Loads metadata so we don't have to load for each table
+        self.pkeys
+        self.fkeys
+        self.columns
+
+        tbl_names = self.refl.get_table_names(self.schema)
+        if table:
+            views = []
+        else:
+            views = tuple(self.refl.get_view_names(self.schema))
+
+        tbl_list = []
+        params = []
+        if filter:
+            tbl = Table(self, table)
+            grid = Grid(tbl)
+            grid.set_search_cond(filter)
+            join = '\n'.join(tbl.joins.values())
+            cond = grid.get_cond_expr()
+            params = grid.cond.params
+        # Count rows
+        count_recs = Dict()
+        if data_recs or no_empty:
+            data = json.dumps({
+                'msg': 'Counting records',
+                'progress': 0,
+            })
+            yield f"data: {data}\n\n"
+            total_rows = 0
+            with self.engine.connect() as cnxn:
+                sql = self.user.expr.rowcount()
+                if sql and not filter:
+                    sql, params = prepare(sql, {'schema': self.schema})
+                    rows = cnxn.execute(sql, params).fetchall()
+                    for row in rows:
+                        count_recs[row.table_name] = row.count_rows
+                        total_rows += row.count_rows
+                        if row.count_rows or not no_empty:
+                            tbl_list.append(row.table_name)
+                    if view_as_table:
+                        for view_name in views:
+                            sql = f'select count(*) from {view_name}'
+                            sql, _ = prepare(sql)
+                            n = cnxn.execute(sql).fetchone()[0]
+                            count_recs[view_name] = n
+                            if n or not no_empty:
+                                tbl_list.append(view_name)
+
+                else:
+                    for tbl_name in tbl_names:
+                        sql = f'select count(*) from {tbl_name}'
+                        if filter:
+                            sql += '\n' + join
+                            sql += ' where ' + cond
+                        sql, params = prepare(sql, params)
+                        n = cnxn.execute(sql, params).fetchone()[0]
+                        count_recs[tbl_name] = n
+                        total_rows += n
+                        if n or not no_empty:
+                            tbl_list.append(tbl_name)
+        else:
+            tbl_list = tbl_names
+
         download = True if dest == 'download' else False
         if download:
             dest = tempfile.gettempdir()
@@ -985,44 +1048,13 @@ class Database:
         else:
             filepath = os.path.join(dest, f"{self.identifier.lower()}.{dialect}.sql")
             data = json.dumps({
-                'msg': 'Sorting tables (might take a while)',
+                'msg': 'Sorting tables',
                 'progress': 0,
             })
             yield f"data: {data}\n\n"
-            ordered_tables = self.sorted_tbl_names()
+            ordered_tables = self.sorted_tbl_names(tbl_list)
 
         ddl = ''
-        params = []
-        if filter:
-            tbl = Table(self, table)
-            grid = Grid(tbl)
-            grid.set_search_cond(filter)
-            join = '\n'.join(tbl.joins.values())
-            cond = grid.get_cond_expr()
-            params = grid.cond.params
-
-        if table:
-            views = []
-        else:
-            views = tuple(self.refl.get_view_names(self.schema))
-            if view_as_table:
-                ordered_tables = (ordered_tables + views)
-                views = []
-
-        # Count rows
-        count_recs = Dict()
-        if data_recs or no_empty: 
-            total_rows = 0
-            for tbl_name in ordered_tables:
-                with self.engine.connect() as cnxn:
-                    sql = f'select count(*) from {tbl_name}'
-                    if filter:
-                        sql += '\n' + join
-                        sql += ' where ' + cond
-                    sql, params = prepare(sql, params)
-                    n = cnxn.execute(sql, params).fetchone()[0]
-                    count_recs[tbl_name] = n
-                    total_rows += n
 
         file = open(filepath, 'w')
         if hasattr(self, 'circular'):
@@ -1033,11 +1065,12 @@ class Database:
             file.write("SET FEEDBACK OFF;\n")
             file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
         if table_defs:
-            for view_name in views:
-                if dialect == 'oracle':
-                    ddl += f"drop view {view_name};\n"
-                else:
-                    ddl += f"drop view if exists {view_name};\n"
+            if dialect == self.engine.name:
+                for view_name in views:
+                    if dialect == 'oracle':
+                        ddl += f"drop view {view_name};\n"
+                    else:
+                        ddl += f"drop view if exists {view_name};\n"
 
             for tbl_name in reversed(ordered_tables):
                 if no_empty and count_recs[tbl_name] == 0:
@@ -1348,15 +1381,16 @@ class Database:
         data = json.dumps({'msg': 'done'})
         yield f"data: {data}\n\n"
 
-    def sorted_tbl_names(self):
+    def sorted_tbl_names(self, tbl_names=None):
         graph = {}
-        tbl_names = self.refl.get_table_names(self.schema)
+        if not tbl_names:
+            tbl_names = self.refl.get_table_names(self.schema)
 
         # Make graph to use in topologic sort
         for tbl_name in tbl_names:
             graph[tbl_name] = []
-            fkeys = self.refl.get_foreign_keys(tbl_name, self.schema)
-            for fkey in fkeys:
+            fkeys = self.fkeys[tbl_name]
+            for fkey in fkeys.values():
                 if fkey['referred_table'] == tbl_name:
                     continue
                 if fkey['referred_table'] in tbl_names:

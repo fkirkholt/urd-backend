@@ -415,6 +415,21 @@ class Expression:
         else:
             return None
 
+    def rowcount(self):
+        if self.platform == 'mssql':
+            return """
+            SELECT t.name as table_name, p.rows as count_rows
+            FROM sys.partitions AS p
+            INNER JOIN sys.tables AS t
+            ON p.[object_id] = t.[object_id]
+            INNER JOIN sys.schemas AS s
+            ON s.[schema_id] = t.[schema_id]
+            WHERE s.name = :schema
+            AND p.index_id IN (0,1);
+            """
+        else:
+            return None
+
     def rows(self, tbl, cond):
 
         fkey = tbl.get_parent_fk()

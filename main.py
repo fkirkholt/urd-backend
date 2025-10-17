@@ -636,6 +636,7 @@ def create_record(base: str, table: str, pkey: str, values: str = Body(...)):
     pkey = json.loads(pkey)
     record = Record(dbo, tbl, pkey)
     vals = json.loads(values)
+    time.sleep(0.5)
     pkey = record.insert(vals)
 
     return {'values': pkey}
@@ -649,6 +650,7 @@ def update_record(base: str, table: str, pkey: str, values: str = Body(...)):
     pkey = json.loads(pkey)
     record = Record(dbo, tbl, pkey)
     vals = json.loads(values)
+    time.sleep(0.5)
 
     return {'result': record.update(vals)}
 

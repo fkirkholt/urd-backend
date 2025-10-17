@@ -22,7 +22,7 @@ from datatype import Datatype
 from odbc_engine import ODBC_Engine
 from reflection import Reflection
 from expression import Expression
-from util import prepare, to_rec
+from util import prepare, to_rec, time_func, time_stream_generator
 
 
 class Database:
@@ -119,6 +119,7 @@ class Database:
 
         return True
 
+    @time_func
     def get_info(self):
         """Get info about database"""
 
@@ -971,9 +972,10 @@ class Database:
 
         return query
 
-    def export_sql(self, dest, dialect, table_defs, no_fkeys, list_recs,
-                   data_recs, select_recs, view_as_table, no_empty,
-                   table, filter):
+    @time_stream_generator
+    async def export_sql(self, dest, dialect, table_defs, no_fkeys, list_recs,
+                         data_recs, select_recs, view_as_table, no_empty,
+                         table, filter):
         # Loads metadata so we don't have to load for each table
         self.pkeys
         self.fkeys
@@ -1213,7 +1215,8 @@ class Database:
             data = json.dumps({'msg': 'done'})
             yield f"data: {data}\n\n"
 
-    def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download, filter):
+    @time_stream_generator
+    async def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download, filter):
         params = []
         if filter:
             tbl = Table(self, tables[0])

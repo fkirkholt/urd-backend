@@ -1217,6 +1217,10 @@ class Database:
 
     @time_stream_generator
     async def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download, filter):
+        # Loads metadata so we don't have to load for each table
+        self.pkeys
+        self.columns
+
         params = []
         if filter:
             tbl = Table(self, tables[0])
@@ -1250,19 +1254,19 @@ class Database:
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             blobcolumns = []
             selects = {}
-            for fieldname in table.fields:
-                field = table.fields[fieldname]
-                if field.datatype == 'bytes' or (
-                    clobs_as_files and field.datatype == 'str' and not field.size
+            for col in table.columns:
+                col.datatype = self.user.expr.to_urd_type(col.type)
+                if col.datatype == 'bytes' or (
+                    clobs_as_files and col.datatype == 'str' and not col.size
                  ):
-                    foldername = table.name + '.' + field.name
+                    foldername = table.name + '.' + col.name
                     path = os.path.join(os.path.dirname(filepath), '../documents', foldername)
                     os.makedirs(path, exist_ok=True)
-                    blobcolumns.append(field.name)
-                if not cols or field.name in cols:
-                    selects[field.name] = field.name
-                    if field.datatype == 'geometry':
-                        selects[field.name] = f"{field.name}.ToString() as {field.name}"
+                    blobcolumns.append(col.name)
+                if not cols or col.name in cols:
+                    selects[col.name] = col.name
+                    if col.datatype == 'geometry':
+                        selects[col.name] = f"{col.name}.ToString() as {col.name}"
 
             select = ', '.join(selects.values())
 
@@ -1273,7 +1277,11 @@ class Database:
                 sql += ' where ' + cond
             with self.engine.connect() as cnxn:
                 sql, params = prepare(sql, params)
-                rows = cnxn.execute(sql, params)
+                try:
+                    rows = cnxn.execute(sql, params)
+                except Exception as e:
+                    print(e)
+                    print(sql)
                 n = 0
                 for row in rows:
                     progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
@@ -1290,8 +1298,8 @@ class Database:
                         file.write('\t'.join(rec.keys()) + '\n')
                     values = []
                     num_files = 0
-                    for col, val in rec.items():
-                        if col in blobcolumns:
+                    for colname, val in rec.items():
+                        if colname in blobcolumns:
                             num_files += 1
                             dir = os.path.dirname(filepath)
                             if table.pkey:
@@ -1302,17 +1310,22 @@ class Database:
                             else:
                                 filename = str(num_files) + '.data'
 
-                            foldername = table.name + '.' + col
+                            foldername = table.name + '.' + colname
                             path = os.path.join(dir, '../documents', foldername, filename)
                             if val is not None:
-                                field = table.fields[col]
-                                mode = 'wb' if field.datatype == 'bytes' else 'w' 
+                                for tbl_col in table.columns:
+                                    if tbl_col.name == colname:
+                                        col = tbl_col
+                                        break
+
+                                mode = 'wb' if col.datatype == 'bytes' else 'w' 
                                 with open(path, mode) as blobfile:
                                     blobfile.write(val)
                                 val = 'documents/' + foldername + '/' + filename
                         if type(val) is bool:
                             val = int(val)
                         if type(val) is str:
+                            val = val.strip()
                             val = val.replace('\t', ' ')
                             val = val.replace('\r\n', ' ')
                             val = val.replace('\r', ' ')

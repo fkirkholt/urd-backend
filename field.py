@@ -1,6 +1,5 @@
 from datetime import date, datetime
 from addict import Dict
-from sqlalchemy import text
 from util import prepare, to_rec
 from expression import Expression
 from settings import Settings

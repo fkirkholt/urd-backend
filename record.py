@@ -3,7 +3,6 @@ import hashlib
 from field import Field
 from addict import Dict
 from datetime import datetime
-from sqlalchemy import text
 from column import Column
 from util import prepare, to_rec
 

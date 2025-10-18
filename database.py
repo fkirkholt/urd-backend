@@ -6,7 +6,6 @@ import csv
 import sys
 import shutil
 import tempfile
-import urllib.parse
 from pathlib import Path
 from graphlib import TopologicalSorter
 from sqlalchemy import inspect, exc

@@ -399,10 +399,10 @@ class Table:
 
     def get_relation(self, alias):
         """Return single relation"""
-        if not hasattr(self, 'relations'):
+        if not hasattr(self, '_relations'):
             self.init_relations()
 
-        return self.relations[alias]
+        return self._relations[alias]
 
     @property
     def relations(self):

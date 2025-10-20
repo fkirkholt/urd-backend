@@ -141,10 +141,12 @@ class Field:
             from_table = fkey.referred_table
             pkey_col = fkey.referred_columns[-1]
             alias = fkey.ref_table_alias
+            select = 'count(*)'
         else:
             from_table = self._tbl.name
             pkey_col = self.name
             alias = self.name
+            select = f'distinct {pkey_col}'
 
         # Field that holds the value of the options
         value_field = f'{alias}.' + pkey_col
@@ -154,7 +156,7 @@ class Field:
         # Count records
 
         sql = f"""
-        select count(distinct {value_field})
+        select {select}
         from {self._db.schema}.{from_table} {alias}
         where {condition}
         """
@@ -163,7 +165,7 @@ class Field:
             sql, params = prepare(sql, params)
             count = cnxn.execute(sql, params).fetchone()[0]
 
-        if (count > 200):
+        if (count > 100):
             return False
 
         view = None if not fkey else self.get_view(fkey)

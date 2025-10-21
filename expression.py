@@ -394,7 +394,7 @@ class Expression:
                    case when numeric_precision is not null then
                        numeric_precision else character_maximum_length
                    end as column_size,
-                   is_nullable as nullable,
+                   case is_nullable when 'YES' then 1 else 0 end as nullable,
                    numeric_scale as decimal_digits,
                    column_default as column_def
             from   information_schema.columns

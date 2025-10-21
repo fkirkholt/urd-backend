@@ -253,8 +253,12 @@ class Grid:
             self._columns = grid_idx.columns
             return self._columns
 
+        i = 0
         for field in self.tbl.fields.values():
+            i += 1
             if not field.nullable:
+                if i > 5:
+                    break
                 self._columns.append(field.name)
 
         fkeys = self.tbl.fkeys

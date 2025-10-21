@@ -582,3 +582,9 @@ class Expression:
             """
         else:
             return None
+
+    def quote(self, object_name):
+        if self.platform in ('mssql'):
+            return '"' + object_name + '"'
+        else:
+            return object_name

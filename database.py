@@ -1220,6 +1220,8 @@ class Database:
         self.pkeys
         self.columns
 
+        expr = Expression(self.engine.name)
+
         params = []
         if filter:
             tbl = Table(self, tables[0])
@@ -1233,7 +1235,7 @@ class Database:
         for table in tables:
             
             with self.engine.connect() as cnxn:
-                sql = f'select count(*) from {table}'
+                sql = f'select count(*) from {expr.quote(table)}'
                 if filter:
                     sql += '\n' + join
                     sql += ' where ' + cond
@@ -1254,7 +1256,7 @@ class Database:
             blobcolumns = []
             selects = {}
             for col in table.columns:
-                col.datatype = self.user.expr.to_urd_type(col.type)
+                col.datatype = expr.to_urd_type(col.type)
                 if col.datatype == 'bytes' or (
                     clobs_as_files and col.datatype == 'str' and not col.size
                  ):
@@ -1270,7 +1272,7 @@ class Database:
             select = ', '.join(selects.values())
 
             file = open(filepath, 'w')
-            sql = f"select {select} from " + table.name
+            sql = f"select {select} from " + expr.quote(table.name)
             if filter:
                 sql += '\n' + join
                 sql += ' where ' + cond

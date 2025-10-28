@@ -122,7 +122,9 @@ class Column:
     def get_def(self, dialect, blob_to_varchar=False, geometry_to_text=False):
         """Get column definition"""
         size = self.size if hasattr(self, 'size') else None
-        if hasattr(self, 'scale') and self.scale is not None:
+        expr = Expression(self.db.engine.name)
+        urd_type = expr.to_urd_type(self.type)
+        if urd_type == 'Decimal':
             size = str(self.precision)
             size += "," + str(self.scale)
         if type(self.type) is str:  # odbc engine

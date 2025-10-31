@@ -1351,7 +1351,8 @@ class Database:
             data = json.dumps({'msg': 'done', 'progress': 100})
             yield f"data: {data}\n\n"
 
-    def import_tsv(self, dir: str):
+    @time_stream_generator
+    async def import_tsv(self, dir: str):
 
         # Increase CSV field size limit to maximim possible
         # https://stackoverflow.com/a/15063941

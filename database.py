@@ -1130,7 +1130,7 @@ class Database:
             else:
                 params = []
                 join = ''
-                cond = '1 = 1'
+                cond = None
                 if filter:
                     grid = Grid(self)
                     grid.set_search_cond(filter)

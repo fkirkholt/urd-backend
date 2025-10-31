@@ -443,6 +443,7 @@ class Expression:
             fkey_cc = fkey['constrained_columns'][0]
             fkey_rc = fkey['referred_columns'][0]
             join = '\n'.join(tbl.joins.values())
+            cond = cond or '1 = 1'
               
             sql = f"""
             with recursive tbl_data as (
@@ -464,7 +465,7 @@ class Expression:
             """
         else:
             sql = f"select {tbl.name}.* from {tbl.name}"
-            if filter:
+            if cond:
                 sql += '\n' + '\n'.join(tbl.joins.values())
                 sql += ' where ' + cond
 

@@ -482,6 +482,7 @@ class Expression:
             if (tbl.name == 'meta_data' and colname == 'cache'):
                 val = ''
             if type(val) is str:
+                val = val.replace('\\n', '\n').replace('\\t', '\t')
                 val = "'" + val.strip().replace("'", "''") + "'"
             elif isinstance(val, date):
                 val = "'" + str(val) + "'"
@@ -492,7 +493,10 @@ class Expression:
                     val = 1
             elif val is None:
                 val = 'null'
-            insert += str(val) + ','
+            if self.platform == 'oracle': 
+                insert += str(val).replace('\n', "' || CHR(10) || '") + ','
+            else:
+                insert += str(val) + ','
         if self.platform == 'oracle':
             insert = insert[:-1] + ' from dual'
         else:

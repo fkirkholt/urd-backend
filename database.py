@@ -1327,10 +1327,10 @@ class Database:
                             val = int(val)
                         if type(val) is str:
                             val = val.strip()
-                            val = val.replace('\t', ' ')
-                            val = val.replace('\r\n', ' ')
-                            val = val.replace('\r', ' ')
-                            val = val.replace('\n', ' ')
+                            val = val.replace('\t', '\\t')
+                            val = val.replace('\r\n', '\\n')
+                            val = val.replace('\r', '\\n')
+                            val = val.replace('\n', '\\n')
                         elif val is None:
                             val = ''
                         else:

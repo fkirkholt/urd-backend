@@ -1366,34 +1366,53 @@ class Database:
                 field_size_limit = int(field_size_limit / 10)
 
         filenames = os.listdir(dir)
-        filecount = len(filenames)
+        expr = Expression('sqlite')
+
+        # count all rows in the tsv files
+        total_rows = 0
+        for filename in filenames:
+            filepath = os.path.join(dir, filename)
+            with open(filepath) as f:
+                total_rows += sum(1 for _ in f) - 1
 
         i = 0
+        count = 0
+        last_progress = 0
         for filename in filenames:
             tbl_name = Path(filename).stem
+            table = Table(self, tbl_name)
             i += 1
-            progress = round(i/filecount * 100)
-            data = json.dumps({'msg': tbl_name, 'progress': progress})
-            yield f"data: {data}\n\n"
             filepath = os.path.join(dir, filename)
 
             cols = self.refl.get_columns(tbl_name, self.schema)
             mandatory = [col['name'] for col in cols if not col['nullable']]
-            
-            with open(filepath) as file:
-                print('importing', filename)
-                records = csv.DictReader(file, delimiter="\t", quoting=csv.QUOTE_NONE)
 
+            with open(filepath, 'r') as file:
                 with self.engine.connect() as cnxn:
+                    records = csv.DictReader(file, delimiter='\t')
+                    sql = f'insert into {tbl_name} values '
 
+                    n = 0
                     for rec in records:
-                        placeholders = ','.join([':' + k for k in rec])
-                        sql = f'insert into {tbl_name} values ({placeholders})'
-                        params = {k: (v if v != '' or k in mandatory else None)
-                                  for k, v in rec.items()}
-                        sql, params = prepare(sql, params)
-                        cnxn.execute(sql, params)
+                        count += 1
+                        n += 1
+                        progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
+                        if progress != last_progress:
+                            data = json.dumps({'msg': tbl_name, 'progress': progress})
+                            yield f"data: {data}\n\n"
+                            last_progress = progress
+                        if n == 10000:
+                            sql, _ = prepare(sql)
+                            cnxn.execute(sql)
+                            cnxn.commit()
+                            sql = f'insert into {tbl_name} values '
+                            n = 1
+                        if n != 1:
+                            sql += ',' 
+                        sql += expr.insert_rec(table, rec) 
 
+                    sql, _ = prepare(sql)
+                    cnxn.execute(sql)
                     cnxn.commit()
 
         data = json.dumps({'msg': 'done'})

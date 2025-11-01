@@ -4,7 +4,8 @@ from field import Field
 from addict import Dict
 from datetime import datetime
 from column import Column
-from util import prepare, to_rec
+from expression import Expression
+from util import to_rec
 
 
 class Record:
@@ -27,6 +28,9 @@ class Record:
         return formatted_pkey
 
     def get(self):
+        # Cache metadata
+        self._db.indexes
+        self._db.fkeys
 
         return Dict({
             'base_name': self._db.identifier,
@@ -81,6 +85,11 @@ class Record:
         from database import Database
         from table import Table, Grid
 
+        # Cache metadata
+        self._db.indexes
+        self._db.columns
+        self._db.fkeys
+
         # values of primary key columns
         values = None if len(self.pkey) == 0 else self.get_values()
 
@@ -95,9 +104,10 @@ class Record:
                 db = self._db
             else:
                 db = Database(self._db.engine, base_name, self._db.user.name)
+                db.indexes
 
             tbl_rel = Table(db, rel.table_name)
-            columns = db.refl.get_columns(rel.table_name, db.schema)
+            columns = db.columns[rel.table_name]
             tbl_rel.cols = {col['name']: Dict(col) for col in columns}
 
             if rel.table_name not in self._db.tablenames:
@@ -181,6 +191,7 @@ class Record:
     def get_relation(self, alias: str):
         from database import Database
         from table import Table, Grid
+        self._db.indexes
         rel = self._tbl.get_relation(alias)
         if self._db.engine.name == 'postgresql':
             base_name = rel.base + '.' + rel.schema
@@ -240,41 +251,45 @@ class Record:
         return values[colname]
 
     def get_values(self):
+        q = Expression(self._db.engine).quote
         if self._cache.get('vals', None):
             return self._cache.vals
-        conds = [f"{key} = :{key}" for key in self.pkey if self.pkey[key] is not None]
-        conds = conds + [f"{key} is null" for key in self.pkey if self.pkey[key] is None]
+        conds = [f"{q(key)} = :{key}" for key in self.pkey if self.pkey[key] is not None]
+        conds = conds + [f"{q(key)} is null" for key in self.pkey if self.pkey[key] is None]
         cond = " and ".join(conds)
         params = {key: val for key, val in self.pkey.items() if self.pkey[key] is not None}
 
         selects = []
         for key, field in self._tbl.fields.items():
             if field.datatype == 'bytes' and self._db.engine.name == 'mssql':
-                selects.append(f"cast(datalength({field.name}) as varchar) + ' bytes' as {field.name}")
+                selects.append(f"cast(datalength({q(field.name)}) as varchar) + ' bytes' as {q(field.name)}")
                 continue
             elif field.datatype == 'bytes':
-                selects.append(f"length({field.name}) || ' bytes' as {field.name}")
+                selects.append(f"length({q(field.name)}) || ' bytes' as {q(field.name)}")
                 continue
             elif field.datatype == 'geometry':
-                selects.append(f"{field.name}.ToString() as {field.name}")
+                selects.append(f"{q(field.name)}.ToString() as {q(field.name)}")
                 continue
-            selects.append(field.name)
+            selects.append(q(field.name))
 
         select = ', '.join(selects)
 
         sql = f"""
-        select {select} from {self._db.schema}.{self._tbl.view}\n
+        select {select} from {self._db.schema}.{q(self._tbl.view)}\n
         where {cond}
         """
 
         with self._db.engine.connect() as cnxn:
-            sql, params = prepare(sql, params)
-            row = cnxn.execute(sql, params).fetchone()
-        self._cache.vals = to_rec(row)
+            sql, params = self._db.expr.prepare(sql, params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            row = crsr.fetchone()
+            self._cache.vals = to_rec(row, crsr)
 
         return self._cache.vals
 
     def get_display_values(self):
+        q = Expression(self._db.engine).quote
         displays = {}
 
         for key, field in self._tbl.fields.items():
@@ -286,19 +301,21 @@ class Record:
 
         select = ', '.join(displays.values())
 
-        conds = [f"{self._tbl.view}.{key} = :{key}" for key in self.pkey]
+        conds = [f"{q(self._tbl.view)}.{q(key)} = :{key}" for key in self.pkey]
         cond = " and ".join(conds)
 
         sql = "select " + select + "\n"
-        sql += f"from {self._db.schema}.{self._tbl.view}\n"
+        sql += f"from {self._db.schema}.{q(self._tbl.view)}\n"
         sql += '\n'.join(self._tbl.joins.values()) + "\n"
         sql += " where " + cond
 
         with self._db.engine.connect() as cnxn:
-            sql, params = prepare(sql, self.pkey)
-            row = cnxn.execute(sql, params).fetchone()
+            sql, params = self._db.expr.prepare(sql, self.pkey)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            row = crsr.fetchone()
 
-        return to_rec(row)
+            return to_rec(row, crsr)
 
     def get_children(self):
         from table import Grid
@@ -338,8 +355,10 @@ class Record:
         """
 
         with self._db.engine.connect() as cnxn:
-            sql, params = prepare(sql, self.pkey)
-            row = cnxn.execute(sql, params).fetchone()
+            sql, params = self._db.expr.prepare(sql, self.pkey)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            row = crsr.fetchone()
 
         return os.path.normpath(row.path)
 
@@ -370,8 +389,10 @@ class Record:
             sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
             with self._db.engine.connect() as cnxn:
-                sql, params = prepare(sql, params)
-                values[inc_col] = cnxn.execute(sql, params).fetchone()[0]
+                sql, params = self._db.expr.prepare(sql, params)
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                values[inc_col] = crsr.fetchone()[0]
             self.pkey[inc_col] = values[inc_col]
 
         # Array of values to be inserted
@@ -396,8 +417,9 @@ class Record:
         """
 
         with self._db.engine.connect() as cnxn:
-            sql, inserts = prepare(sql, inserts)
-            cnxn.execute(sql, inserts)
+            sql, inserts = self._db.expr.prepare(sql, inserts)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, inserts)
             cnxn.commit()
 
         return self.pkey
@@ -446,8 +468,9 @@ class Record:
         """
 
         with self._db.engine.connect() as cnxn:
-            sql, params = prepare(sql, params)
-            cnxn.execute(sql, params)
+            sql, params = self._db.expr.prepare(sql, params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
             cnxn.commit()
 
         # Update primary key
@@ -473,8 +496,9 @@ class Record:
         """
 
         with self._db.engine.connect() as cnxn:
-            sql, params = prepare(sql, self.pkey)
-            cnxn.execute(sql, params)
+            sql, params = self._db.expr.prepare(sql, self.pkey)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
             cnxn.commit()
 
         return 1

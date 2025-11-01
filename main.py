@@ -10,13 +10,14 @@ import urllib.parse
 import re
 import tempfile
 from subprocess import run
-from sqlalchemy import create_engine
 from settings import Settings
+from engine import Engine
 from database import Database
 from table import Table, Grid
 from record import Record
 from field import Field
-from util import prepare
+from util import to_rec
+from expression import Expression
 import json
 import os
 import hashlib
@@ -24,7 +25,6 @@ from addict import Dict
 from jose import jwt
 import time
 import xattr
-import pyodbc
 import magic
 from user import User
 from odbc_engine import ODBC_Engine
@@ -48,56 +48,11 @@ def cleanup(temp_file):
 
 
 def get_engine(cfg, db_name=None):
-    # driver = cfg.driver[cfg.db_system]
-    if cfg.use_odbc:
-        return ODBC_Engine(cfg, db_name)
-    if cfg.system != 'duckdb':
-        driver = getattr(cfg, f'{cfg.system}_driver')
-
-    if cfg.system == 'duckdb':
-        db_name = db_name.split('.')[0]
-        path = os.path.join(cfg.host, db_name)
-        url = f"duckdb:///{path}"
-    elif cfg.system == 'sqlite':
-        path = os.path.join(cfg.host, db_name)
-        url = f"sqlite+{driver}:///{path}"
-    elif cfg.system == 'oracle':
-        parts = cfg.host.split('/')
-        url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{parts[0]}"
-        if len(parts) > 1:
-            url += '?service_name=' + parts[1]
-    elif cfg.system == 'mssql' and driver == 'pyodbc':
-        drivers = [x for x in pyodbc.drivers() if 'SQL Server' in x]
-        odbc_driver = drivers[0].replace(' ', '+')
-        url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}/{db_name}"
-        url += f"?driver={odbc_driver}&TrustServerCertificate=Yes"
-    elif cfg.system == 'mssql' and driver == 'pymssql':
-        url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}/{db_name}"
-        url += '?tds_version=7.4'
-        print('url', url)
+    driver = getattr(cfg, f'{cfg.system}_driver')
+    if cfg.use_odbc or driver == 'pyodbc':
+        engine = ODBC_Engine(cfg, db_name)
     else:
-        url = f"{cfg.system}+{driver}://{cfg.uid}:{cfg.pwd}@{cfg.host}"
-        if db_name:
-            path = db_name.split('.')
-            url += '/' + path[0]
-        elif cfg.system == 'postgresql':
-            url += '/postgres'
-
-    if cfg.system == 'mariadb':
-        url += '?charset=utf8mb4&collation=utf8mb4_unicode_ci'
-
-    try:
-        engine = create_engine(url)
-    except Exception as ex:
-        if str(ex).startswith('No module named'):
-            msg = 'Please install driver ' + driver
-        else:
-            msg = str(ex)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=msg
-        )
-
+        engine = Engine(cfg, db_name)
     try:
         with engine.connect():
             pass
@@ -116,8 +71,11 @@ def get_engine(cfg, db_name=None):
             """
 
             hashed_pwd = hashlib.sha256(cfg.pwd.encode('utf-8')).hexdigest()
-            sql, params = prepare(sql, {'id': cfg.uid, 'pwd': hashed_pwd})
-            count = cnxn.execute(sql, params).fetchone()[0]
+            expr = Expression(engine)
+            sql, params = expr.prepare(sql, {'id': cfg.uid, 'pwd': hashed_pwd})
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            count = crsr.fetchone()[0]
 
             if count == 0:
                 raise HTTPException(
@@ -132,8 +90,9 @@ def get_engine(cfg, db_name=None):
     elif cfg.system == 'sqlite' and cfg_default.database == 'urdr':
         with engine.connect() as cnxn:
             path = os.path.join(cfg.host, cfg_default.database + '.db')
-            sql, _ = prepare('ATTACH DATABASE "' + path + '" as urdr')
-            cnxn.execute(sql)
+            sql = 'ATTACH DATABASE "' + path + '" as urdr'
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
 
     return engine
 
@@ -378,18 +337,21 @@ def dblist(response: Response, role: str = None, path: str = None):
         engine = get_engine(cfg)
         if role:
             with engine.connect() as cnxn:
-                sql, _ = prepare('set default role ' + role)
-                cnxn.execute(sql)
+                sql = 'set default role ' + role
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
         elif cfg.system in ['mysql', 'mariadb']:
             with engine.connect() as cnxn:
-                sql, _ = prepare('select current_role()')
-                rows = cnxn.execute(sql).fetchall()
+                sql = 'select current_role()'
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                rows = crsr.fetchall()
                 role = (None if len(rows) == 0 else rows[0][0]
                         if len(rows) == 1 else 'ALL')
 
                 if role:
-                    sql, _ = prepare('set role ' + role)
-                    cnxn.execute(sql)
+                    sql = 'set role ' + role
+                    crsr.execute(sql)
                     cnxn.commit()
 
         user = User(engine)
@@ -406,8 +368,10 @@ def dblist(response: Response, role: str = None, path: str = None):
         # Find if user has useradmin privileges
         if cfg.system in ['mysql', 'mariadb']:
             with engine.connect() as cnxn:
-                sql, _ = prepare('show grants')
-                rows = cnxn.execute(sql).fetchall()
+                sql = 'show grants'
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                rows = crsr.fetchall()
             for row in rows:
                 stmt = row[0]
                 matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+",
@@ -487,13 +451,15 @@ def userlist():
               and user not in ('PUBLIC', 'root', 'mariadb.sys', '')
             order by user
             """
-            sql, _ = prepare(sql)
-            rows = cnxn.execute(sql).fetchall()
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
+            rows = crsr.fetchall()
 
             for row in rows:
+                rec = to_rec(row, crsr)
                 user = Dict()
-                user.name = row.name
-                user.host = row.host
+                user.name = rec.name
+                user.host = rec.host
                 users.append(user)
 
             sql = """
@@ -503,11 +469,12 @@ def userlist():
               and not length(authentication_string)
               and user != 'PUBLIC'
             """
-            sql, _ = prepare(sql)
-            rows = cnxn.execute(sql).fetchall()
+            crsr = cnxn.cursor()
+            rows = crsr.execute(sql).fechall()
 
             for row in rows:
-                roles.append(row.name)
+                rec = to_rec(row, crsr)
+                roles.append(rec.name)
 
     return {'data': {'users': users, 'roles': roles}}
 
@@ -528,8 +495,8 @@ def change_role(user: str, host: str, role: str, grant: bool):
     else:
         sql = f'revoke {role} from {user}@{host}'
     with engine.connect() as cnxn:
-        sql, _ = prepare(sql)
-        cnxn.execute(sql)
+        crsr = cnxn.cursor()
+        crsr.execute(sql)
         cnxn.commit()
 
 
@@ -543,8 +510,9 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
             return {'data': 'Påloggingsdata mangler. Kontakt administrator.'}
         engine = get_engine(cfg2)
         with engine.connect() as cnxn:
-            sql, _ = prepare(f"alter user {cfg.uid}@{cfg.host} identified by '{new_pwd}'")
-            cnxn.execute(sql)
+            sql = f"alter user {cfg.uid}@{cfg.host} identified by '{new_pwd}'"
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
             cnxn.commit()
 
         return {'data': 'Passord endret'}
@@ -555,8 +523,10 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
         sql = f"update {urdr}.user set password = :pwd where id = :uid"
         pwd = hashlib.sha256(new_pwd.encode('utf-8')).hexdigest()
         with engine.connect() as cnxn:
-            sql, params = prepare(sql, {'uid': cfg.uid, 'pwd': pwd})
-            cnxn.execute(sql, params)
+            expr = Expression(engine)
+            sql, params = expr.prepare(sql, {'uid': cfg.uid, 'pwd': pwd})
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
             cnxn.commit()
         return {'data': 'Passord endret'}
 
@@ -568,9 +538,10 @@ def change_password(base: str, old_pwd: str, new_pwd: str):
 def create_user(name: str, pwd: str):
     engine = get_engine(cfg)
     if cfg.system in ['mysql', 'mariadb']:
-        sql, _ = prepare(f"create user '{name}'@'{cfg.host}' identified by '{pwd}'")
+        sql = f"create user '{name}'@'{cfg.host}' identified by '{pwd}'"
         with engine.connect() as cnxn:
-            cnxn.execute(sql)
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
             cnxn.commit()
 
         return userlist()
@@ -760,19 +731,19 @@ async def update_cache(base: str, config: str):
             dbo.create_html_attributes()
         tbl_count = len(dbo.tablenames)
         i = 0
-        for tbl_name in dbo.tablenames:
+        for tbl in dbo.refl.tables:
             i += 1
             progress = round(i/tbl_count * 100) 
-            data = json.dumps({'msg': tbl_name, 'progress': progress})
+            data = json.dumps({'msg': tbl.name, 'progress': progress})
             yield f"data: {data}\n\n"
 
-            if tbl_name[-5:] == '_view' and tbl_name[:-5] in dbo.tablenames:
+            if tbl.name[-5:] == '_view' and tbl.name[:-5] in dbo.tablenames:
                 continue
             if '_fts' in tbl_name:
                 continue
 
-            table = Table(dbo, tbl_name)
-            dbo.tables[tbl_name] = table.get()
+            table = Table(dbo, tbl.name, type=tbl.type, comment=tbl.comment)
+            dbo.tables[tbl.name] = table.get()
 
         dbo.get_contents()
         data = json.dumps({'msg': 'done'})

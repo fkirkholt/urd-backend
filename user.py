@@ -1,10 +1,8 @@
 import re
 from addict import Dict
-from sqlalchemy import inspect
 from settings import Settings
 from reflection import Reflection
-from odbc_engine import ODBC_Engine
-from util import prepare
+from util import to_rec
 from expression import Expression
 
 
@@ -13,7 +11,7 @@ class User:
     def __init__(self, engine, name=None):
         self.name = name or engine.url.username
         self.engine = engine
-        self.expr = Expression(engine.name) 
+        self.expr = Expression(engine) 
         self.current = name is None
         self._is_admin = {}
 
@@ -24,18 +22,21 @@ class User:
             if self.engine.name == 'sqlite':
                 params = {'uid': self.name}
             else:
-                params = {'schema': schema, 'cat': cat}
-            sql, params = prepare(sql, params)
-            rows = cnxn.execute(sql, params).fetchall()
+                params = {'schema_name': schema, 'cat': cat}
+            sql, params = self.expr.prepare(sql, params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
+            recs = [to_rec(row, crsr, lowercase=True) for row in rows]
 
-        return rows
+        return recs
 
     def tables(self, cat, schema):
         if hasattr(self, '_tbl_names'):
             return self._tbl_names
         cfg = Settings()
-        refl = Reflection(self.engine, cat) if type(self.engine) is ODBC_Engine else inspect(self.engine)
-        tbl_names = refl.get_table_names(schema)
+        refl = Reflection(self.engine, cat)
+        tbl_names = refl.tables(schema).keys()
         if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             db_path = self.engine.url.database
             db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')
@@ -59,11 +60,14 @@ class User:
             params = {'uid': self.name, 'db': db_name}
 
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, params)
-                rows = cnxn.execute(sql, params).fetchall()
+                sql, params = self.expr.prepare(sql, params)
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                rows = crsr.fetchall()
 
                 for row in rows:
-                    tbl_names.remove(row.table_name)
+                    rec = to_rec(row, crsr)
+                    tbl_names.remove(rec.table_name)
 
         self._tbl_names = tbl_names
 
@@ -89,8 +93,10 @@ class User:
                 params = {'user': self.name}
 
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, params)
-                rows = cnxn.execute(sql, params).fetchall()
+                sql, params = self.expr.prepare(sql, params)
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                rows = crsr.fetchall()
 
             for row in rows:
                 roles.append(row[0])
@@ -121,11 +127,13 @@ class User:
 
             self._access_codes = []
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {'uid': self.name})
-                rows = cnxn.execute(sql, params).fetchall()
+                sql, params = self.expr.prepare(sql, {'uid': self.name})
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                rows = crsr.fetchall()
 
             for row in rows:
-                self._access_codes.append(row.code)
+                self._access_codes.append(row[0])
 
         return self._access_codes
 
@@ -153,15 +161,18 @@ class User:
             """
 
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {'db_name': db_name})
-                row = cnxn.execute(sql, params).fetchone()
+                sql, params = self.expr.prepare(sql, {'db_name': db_name})
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                row = crsr.fetchone()
 
-            if row:
-                read_access = row.read_access
-                write_access = row.write_access
-            else:
-                read_access = None
-                write_access = None
+                if row:
+                    rec = to_rec(row, crsr)
+                    read_access = rec.read_access
+                    write_access = rec.write_access
+                else:
+                    read_access = None
+                    write_access = None
 
             if read_access is None or read_access in self.access_codes:
                 privilege.select = 1
@@ -174,8 +185,10 @@ class User:
 
         elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
-                sql, _ = prepare('show grants')
-                rows = cnxn.execute(sql).fetchall()
+                sql = 'show grants'
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                rows = crsr.fetchall()
             for row in rows:
                 stmt = row[0]
                 m = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
@@ -224,8 +237,10 @@ class User:
             where database_name = :db_name and table_name = :table
             """
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {'db_name': db_name, 'table': table})
-                count = cnxn.execute(sql, params).fetchone()[0]
+                sql, params = self.expr.prepare(sql, {'db_name': db_name, 'table': table})
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                count = crsr.fetchone()[0]
             if count:
                 privilege.select = 0
                 privilege.insert = 0
@@ -249,8 +264,10 @@ class User:
                       read_access in (select code from cte_access))
                 """
                 with self.engine.connect() as cnxn:
-                    sql, params = prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
-                    count_read = cnxn.execute(sql, params).fetchone()[0]
+                    sql, params = self.expr.prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
+                    crsr = cnxn.cursor()
+                    crsr.execute(sql, params)
+                    count_read = crsr.fetchone()[0]
 
                 sql = f"""
                 with recursive cte_access (code, parent) as (
@@ -268,8 +285,10 @@ class User:
                       write_access in (select code from cte_access)
                 """
                 with self.engine.connect() as cnxn:
-                    sql, params = prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
-                    count_write = cnxn.execute(sql, params).fetchone()[0]
+                    sql, params = self.expr.prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
+                    crsr = cnxn.cursor()
+                    crsr.execute(sql, params)
+                    count_write = crsr.fetchone()[0]
 
                 if count_read:
                     privilege.select = 1
@@ -280,8 +299,10 @@ class User:
 
         if self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
-                sql, _ = prepare('show grants')
-                rows = cnxn.execute(sql).fetchall()
+                sql = 'show grants'
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                rows = crsr.fetchall()
             for row in rows:
                 stmt = row[0]
                 matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+",
@@ -314,18 +335,21 @@ class User:
             and table_schema = :schema
             and table_name = :table;
             """
-            sql, params = prepare(sql, {'schema': schema, 'table': table})
+            sql, params = self.expr.prepare(sql, {'schema': schema, 'table': table})
             with self.engine.connect() as cnxn:
-                rows = cnxn.execute(sql, params).fetchall()
-            for row in rows:
-                if row.privilege_type == 'SELECT':
-                    privilege.select = 1
-                elif row.privilege_type == 'INSERT':
-                    privilege.insert = 1
-                elif row.privilege_type == 'UPDATE':
-                    privilege['update'] = 1
-                elif row.privilege_type == 'DELETE':
-                    privilege.delete = 1
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                rows = crsr.fetchall()
+                for row in rows:
+                    rec = to_rec(row, crsr)
+                    if rec.privilege_type == 'SELECT':
+                        privilege.select = 1
+                    elif rec.privilege_type == 'INSERT':
+                        privilege.insert = 1
+                    elif rec.privilege_type == 'UPDATE':
+                        privilege['update'] = 1
+                    elif rec.privilege_type == 'DELETE':
+                        privilege.delete = 1
 
         return privilege
 
@@ -339,8 +363,10 @@ class User:
             return 'sysadmin' in self.access_codes
         elif self.engine.name in ['mysql', 'mariadb']:
             with self.engine.connect() as cnxn:
-                sql, _ = prepare('show grants')
-                rows = cnxn.execute(sql).fetchall()
+                sql = 'show grants'
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                rows = crsr.fetchall()
             for row in rows:
                 stmt = row[0]
                 grant = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+", stmt)
@@ -356,8 +382,10 @@ class User:
         elif self.engine.name == 'postgresql':
             sql = "select usesuper from pg_user where usename = current_user;"
             with self.engine.connect() as cnxn:
-                sql, _ = prepare(sql)
-                row = cnxn.execute(sql).fetchone()
+                sql, _ = self.expr.prepare(sql)
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                row = crsr.fetchone()
             super = row[0]
             if super:
                 self._is_admin[schema] = True
@@ -369,10 +397,13 @@ class User:
             where d.datname = :cat
             """
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {'cat': self.engine.url.database})
-                row = cnxn.execute(sql, params).fetchone()
-            if row.db_owner == self.name:
-                self._is_admin[schema] = True
+                sql, params = self.expr.prepare(sql, {'cat': self.engine.url.database})
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                row = crsr.fetchone()
+                rec = to_rec(row, crsr)
+                if rec.db_owner == self.name:
+                    self._is_admin[schema] = True
 
         elif self.engine.name == 'oracle' and self.name == schema:
             self._is_admin[schema] = True

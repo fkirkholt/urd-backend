@@ -1,6 +1,5 @@
 from addict import Dict
 from datatype import Datatype
-from util import prepare
 from expression import Expression
 
 
@@ -22,7 +21,7 @@ class Column:
             self.size = None
         # Get size, scale and precision for odbc connection
         if type(col.type) is str and '(' in col.type:
-            expr = Expression(self.db.engine.name)
+            expr = Expression(self.db.engine)
             urd_type = expr.to_urd_type(col.type)
             size = col.type.split('(')[1].strip(')')
             if urd_type == 'str':
@@ -54,8 +53,9 @@ class Column:
         """
 
         with self.db.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            return cnxn.execute(sql).fetcone()[0]
+            sql, _ = self.db.expr.prepare(sql)
+            crsr = cnxn.cursor()
+            return crsr.execute(sql).fetcone()[0]
 
     def create_index(self, col_type):
         if col_type not in ['blob', 'clob', 'text']:
@@ -71,10 +71,11 @@ class Column:
             """
 
         with self.db.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
+            sql, _ = self.db.expr.prepare(sql)
+            crsr = cnxn.cursor()
 
             try:
-                cnxn.execute(sql)
+                crsr.execute(sql)
                 cnxn.commit()
             except Exception as e:
                 print(e)
@@ -90,8 +91,10 @@ class Column:
         """
 
         with self.db.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            count = cnxn.execute(sql).fetchone()[0]
+            sql, _ = self.db.expr.prepare(sql)
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
+            count = crsr.fetchone()[0]
 
         rowcount = self.tbl.rowcount
         use = (rowcount - count)/rowcount
@@ -112,8 +115,10 @@ class Column:
         """
 
         with self.db.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            max_in_group = cnxn.execute(sql).fetchone()[0]
+            sql, _ = self.db.expr.prepare(sql)
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
+            max_in_group = crsr.fetchone()[0]
 
         frequency = max_in_group/self.tbl.rowcount
 
@@ -122,7 +127,6 @@ class Column:
     def get_def(self, dialect, blob_to_varchar=False, geometry_to_text=False):
         """Get column definition"""
         size = self.size if hasattr(self, 'size') else None
-        expr = Expression(self.db.engine.name)
         if type(self.type) is str:  # odbc engine
             datatype = Datatype(self.db.refl.expr.to_urd_type(self.type), size)
         else:

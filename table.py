@@ -5,7 +5,7 @@ from record import Record
 from column import Column
 from field import Field
 from grid import Grid
-from util import prepare, to_rec, format_fkey
+from util import to_rec, format_fkey
 from sqlglot import parse_one, exp
 from settings import Settings
 from expression import Expression
@@ -16,19 +16,21 @@ cfg = Settings()
 class Table:
     """Contains methods for getting metadata for table"""
 
-    def __init__(self, db, tbl_name, alias=None):
+    def __init__(self, db, tbl_name, type=None, comment=None, alias=None):
         self.db = db
         self.name = tbl_name
         self.label = db.get_label(tbl_name)
         self.view = tbl_name
+        self.main_type = type
+        self.comment = comment
         if tbl_name + '_view' in db.tablenames:
-            cols = self.db.refl.get_columns(tbl_name + '_view', self.db.schema)
+            cols = self.db.refl.columns(self.db.schema, tbl_name + '_view')
             colnames = [col['name'] for col in cols]
             if set(colnames) >= set(self.pkey.columns):
                 self.view = tbl_name + '_view'
         self.grid_view = self.view
         if tbl_name + '_grid' in db.tablenames:
-            cols = self.db.refl.get_columns(tbl_name + '_grid', self.db.schema)
+            cols = self.db.refl.columns(self.db.schema, tbl_name + '_grid')
             colnames = [col['name'] for col in cols]
             if set(colnames) >= set(self.pkey.columns):
                 self.grid_view = tbl_name + '_grid'
@@ -38,10 +40,7 @@ class Table:
     def get(self):
         grid = Grid(self)
 
-        tbl_names = self.db.user.tables(self.db.cat, self.db.schema)
-        view_names = self.db.refl.get_view_names(self.db.schema)
-
-        self.main_type = 'table' if self.name in (tbl_names) else 'view'
+        view_names = self.db.viewnames
 
         hidden = self.name[0:1] == "_" or self.name == 'html_attributes'
 
@@ -67,11 +66,6 @@ class Table:
         if self.name + '_view' in view_names:
             view = self.name + '_view'
 
-        if self.db.engine.name == 'sqlite' or self.name not in self.db.comments:
-            comment = None
-        else:
-            comment = self.db.comments[self.name]
-
         return Dict({
             'name': self.name,
             'type': self.type,
@@ -81,7 +75,7 @@ class Table:
             'rowcount': (None if not self.db.config.update_cache
                          else self.rowcount),
             'pkey': self.pkey,
-            'description': comment,
+            'description': self.comment,
             'fkeys': self.fkeys,
             # Get more info about relations for cache, including use
             'relations': self.relations,
@@ -140,7 +134,7 @@ class Table:
                             pkey_col = Column(self, col)
                             break
                     if type(pkey_col.type) is str:
-                        expr = Expression(self.db.engine.name)
+                        expr = Expression(self.db.engine)
                         pkey_col_type = expr.to_urd_type(pkey_col.type)
                     else:
                         pkey_col_type = pkey_col.type.python_type.__name__
@@ -195,9 +189,11 @@ class Table:
     @property
     def rowcount(self):
         if not hasattr(self, '_rowcount'):
-            sql, _ = prepare(f'select count(*) from "{self.name}"')
+            sql = f'select count(*) from "{self.name}"'
             with self.db.engine.connect() as cnxn:
-                self._rowcount = cnxn.execute(sql).fetchone()[0]
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                self._rowcount = crsr.fetchone()[0]
 
         return self._rowcount
 
@@ -273,7 +269,7 @@ class Table:
         if self.db.pkeys_loaded:
             self._pkey = self.db.pkeys[self.name]
         else:
-            pkey = self.db.refl.get_pk_constraint(self.name, self.db.schema)
+            pkey = self.db.refl.pkeys(self.db.schema, self.name)
             self._pkey = Dict({
                 'table_name': self.name,
                 'name': pkey['name'] or 'PRIMARY',
@@ -305,7 +301,7 @@ class Table:
         if self.db.columns_loaded:
             self._columns = self.db.columns[self.name]
         else:
-            self._columns = self.db.refl.get_columns(self.name, self.db.schema)
+            self._columns = self.db.refl.columns(self.db.schema, self.name)
 
         return self._columns
 
@@ -322,6 +318,7 @@ class Table:
     @property
     def joins(self):
         """Return all joins to table as single string"""
+        q = Expression(self.db.engine).quote
         if hasattr(self, '_joins'):
             return self._joins
         joins = {}
@@ -340,13 +337,13 @@ class Table:
                 continue
 
             # Get the ON statement in the join
-            ons = [f'{fkey.ref_table_alias}.{fkey.referred_columns[idx]} = '
-                   f'{self.alias}.{col}'
+            ons = [f'{q(fkey.ref_table_alias)}.{q(fkey.referred_columns[idx])} = '
+                   f'{q(self.alias)}.{q(col)}'
                    for idx, col in enumerate(fkey.constrained_columns)]
             on_list = ' AND '.join(ons)
 
-            joins[fkey.name] = (f'left join {self.db.schema}.{fkey.referred_table} '
-                                f'{fkey.ref_table_alias} on {on_list}')
+            joins[fkey.name] = (f'left join {self.db.schema}.{q(fkey.referred_table)} '
+                                f'{q(fkey.ref_table_alias)} on {on_list}')
 
             # Join with 1:1 relation carrying access code
             fkey_table = Table(self.db, fkey.referred_table)
@@ -367,11 +364,11 @@ class Table:
             if fkey.relationship == '1:1':
                 prefix = fkey.referred_table.rstrip('_') + '_'
                 alias = fkey.table_name.replace(prefix, '')
-                ons = [f"{alias}.{fkey.constrained_columns[idx]} = "
-                       f"{self.view}.{col}"
+                ons = [f"{alias}.{q(fkey.constrained_columns[idx])} = "
+                       f"{q(self.view)}.{q(col)}"
                        for idx, col in enumerate(fkey.referred_columns)]
                 on_list = ' AND '.join(ons)
-                joins[fkey.name] = (f"left join {self.db.schema}.{fkey.table_name} {alias} "
+                joins[fkey.name] = (f"left join {self.db.schema}.{q(fkey.table_name)} {alias} "
                                     f"on {on_list}")
 
                 rel_tbl = Table(self.db, fkey.table_name, alias=alias)
@@ -383,7 +380,7 @@ class Table:
 
         if self.grid_view != self.name and self.grid_view in self.db.tablenames:
             join_view = "join " + self.grid_view + " on "
-            ons = [f'{self.grid_view}.{col} = {self.view}.{col}'
+            ons = [f'{q(self.grid_view)}.{q(col)} = {q(self.view)}.{q(col)}'
                    for col in self.pkey.columns]
             join_view += ' AND '.join(ons) + "\n"
 
@@ -509,20 +506,12 @@ class Table:
         if self.db.fkeys_loaded:
             self._fkeys = self.db.fkeys[self.name]
         else:
-            fkeys = self.db.refl.get_foreign_keys(self.name, self.db.schema)
+            fkeys = self.db.refl.fkeys(self.db.schema, fk_table=self.name)
 
             self._fkeys = Dict()
             for fkey in fkeys:
-                fkey, alias = format_fkey(fkey, self.db.cat, self.db.schema,
-                                          self.name, self.pkey)
-                fkey_col = fkey.constrained_columns[-1]
-                ref_col = fkey.referred_columns[-1].strip('_')
-                if fkey_col in [fkey.referred_table + '_' + ref_col,
-                                fkey.referred_columns[-1]]:
-                    ref_table_alias = fkey.referred_table
-                else:
-                    ref_table_alias = fkey_col.strip('_')
-                fkey.ref_table_alias = ref_table_alias
+                fkey, alias = format_fkey(fkey, self.pkey)
+                fkey.ref_table_alias = alias
                 self._fkeys[fkey.name] = fkey
 
     def init_fields(self):
@@ -538,17 +527,10 @@ class Table:
         # contents = None if not self.db.cache \
         #     else self.db.cache.contents
 
-        if not cfg.use_odbc and self.db.engine.name in ['sqlite', 'duckdb']:
-            # Must get native column types for sqlite, to find if
-            # there is a column defined as json
-            expr = Expression(self.db.engine.name)
-            sql = expr.columns(self.name)
-            with self.db.engine.connect() as cnxn:
-                sql, _ = prepare(sql)
-                rows = cnxn.execute(sql).fetchall()
-                cols = [to_rec(row) for row in rows]
+        if self.db.columns_loaded:
+            cols = self.db.columns[self.name]
         else:
-            cols = self.db.refl.get_columns(self.name, self.db.schema)
+            cols = self.db.refl.columns(self.db.schema, self.name)
 
         for col in cols:
             col = Dict(col)
@@ -624,7 +606,7 @@ class Table:
         if self.db.indexes_loaded:
             self._indexes = self.db.indexes[self.name]
         else:
-            indexes = self.db.refl.get_indexes(self.name, self.db.schema)
+            indexes = self.db.refl.indexes(self.db.schema, self.name)
             self._indexes = Dict()
             for idx in indexes:
                 idx = Dict(idx)
@@ -637,7 +619,7 @@ class Table:
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
         table_name = self.name
-        if self.type == 'view':
+        if self.name in self.db.viewnames:
             try:
                 view_def = (self.db.refl
                             .get_view_definition(self.name, self.db.schema))
@@ -684,13 +666,14 @@ class Table:
             for name, relation in relations.items():
                 fkey_col = relation.constrained_columns[-1]
 
-                sql, _ = prepare(f"""
+                sql = f"""
                 select count(distinct({fkey_col})) from {relation.table_name}
-                """)
+                """
 
                 with self.db.engine.connect() as cnxn:
-                    sql, _ = prepare(sql)
-                    count = cnxn.execute(sql).fetchone()[0]
+                    crsr = cnxn.cursor()
+                    crsr.execute(sql)
+                    count = crsr.fetchone()[0]
 
                 relations[name].use = count/self.rowcount if self.rowcount > 0 else 0
 
@@ -775,17 +758,18 @@ class Table:
         """
 
         with self.db.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            rows = cnxn.execute(sql).fetchall()
-        for row in rows:
-            rec = to_rec(row)
-            if rec[colname] is None:
-                continue
-            wheres = []
-            params = {}
-            for key in self.pkey.columns:
-                wheres.append(key + '= :' + key)
-                params[key] = rec[key]
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
+            rows = crsr.fetchall()
+            for row in rows:
+                rec = to_rec(row, crsr)
+                if rec[colname] is None:
+                    continue
+                wheres = []
+                params = {}
+                for key in self.pkey.columns:
+                    wheres.append(key + '= :' + key)
+                    params[key] = rec[key]
 
             where = ', '.join(wheres)
 
@@ -805,8 +789,9 @@ class Table:
             """
 
             with self.db.engine.connect() as cnxn:
-                sql, params = prepare(sql, params)
-                cnxn.execute(sql, params)
+                sql, params = self.db.expr.prepare(sql, params)
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
                 cnxn.commit()
 
         return 'success'

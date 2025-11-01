@@ -1,14 +1,17 @@
+import yaml
+import simplejson as json
 from addict import Dict
 from expression import Expression
+from util import to_rec
 
 
 class Reflection:
 
     def __init__(self, engine, catalog):
         self.engine = engine
-        self.expr = Expression(engine.name)
+        self.expr = Expression(engine)
         self.cat = catalog
-        self.fkeys = None
+        self._fkeys = None
 
     def get_schema_names(self):
         """Get all schemata in database"""
@@ -19,318 +22,259 @@ class Reflection:
         if self.engine.name == 'sqlite':
             sql = "PRAGMA database_list"
             with self.engine.connect() as cnxn:
-                rows = cnxn.execute(sql).fetchall()
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                rows = crsr.fetchall()
                 for row in rows:
                     self._schema_names.append(row[1])
 
-        if self.engine.name == 'postgres':
-            # sql = self.expr.schemata()
-            with self.engine.connect(lowercase=True) as cnxn:
-                rows = cnxn.execute(sql).fetchall()
+        if self.engine.name == 'postgresql':
+            sql = self.expr.schemata()
+            with self.engine.connect() as cnxn:
+                crsr = cnxn.cursor()
+                crsr.execute(sql)
+                rows = crsr.fetchall()
                 for row in rows:
-                    self._schema_names.append(row.schema_name)
+                    self._schema_names.append(row[0])
 
         return self._schema_names
 
-    def get_table_names(self, schema):
+    def tables(self, schema, table=None):
         if hasattr(self, '_tbl_names'):
             return self._tbl_names
-        self._tbl_names = []
-        with self.engine.connect(lowercase=True) as cnxn:
-            cursor = cnxn.cursor()
-            if self.engine.name in ('mysql', 'mariadb'):
-                rows = cursor.tables(catalog=schema).fetchall()
-            else:
-                rows = cursor.tables(catalog=self.cat, schema=schema).fetchall()
-            self._tbl_names = [row.table_name for row in rows if row.table_type == 'TABLE']
 
-        return self._tbl_names
+        self._tables = Dict()
+        with self.engine.connect() as cnxn:
+            sql = self.expr.user_tables()
+            sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
 
-    def get_multi_table_comment(self, schema):
-        if hasattr(self, '_comments'):
-            return self._comments
-        self._comments = Dict()
-        with self.engine.connect(lowercase=True) as cnxn:
-            cursor = cnxn.cursor()
-            if self.engine.name in ('mysql', 'mariadb'):
-                rows = cursor.tables(catalog=schema).fetchall()
-            else:
-                rows = cursor.tables(catalog=self.cat, schema=schema).fetchall()
             for row in rows:
-                self._comments[schema, row.table_name].text = row.remarks
+                rec = to_rec(row, crsr, lowercase=True)
+                self._tables[rec.table_name].name = rec.table_name
+                self._tables[rec.table_name].type = rec.table_type.lower()
+                self._tables[rec.table_name].comment = rec.remarks
 
-        return self._comments
+        return self._tables
 
-    def get_view_names(self, schema):
-        if hasattr(self, '_view_names'):
-            return self._view_names
-        self._view_names = []
-        with self.engine.connect(lowercase=True) as cnxn:
-            cursor = cnxn.cursor()
-            if self.engine.name in ('mysql', 'mariadb'):
-                rows = cursor.tables(catalog=schema).fetchall()
-            else:
-                rows = cursor.tables(catalog=self.cat, schema=schema).fetchall()
-            self._view_names = [row.table_name for row in rows
-                                if row.table_type == 'VIEW']
-
-        return self._view_names
-
-    def get_pk_constraint(self, tbl_name, schema):
-        with self.engine.connect(lowercase=True) as cnxn:
+    def pkeys(self, schema, table=None):
+        with self.engine.connect() as cnxn:
+            sql = self.expr.pkeys()
+            sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
             crsr = cnxn.cursor()
-            if self.expr.pkeys():
-                sql = self.expr.pkeys()
-                rows = crsr.execute(sql, schema, tbl_name).fetchall()
-            else:
-                rows = crsr.primaryKeys(catalog=self.cat, schema=schema,
-                                        table=tbl_name)
-        pkey = Dict()
-        for row in rows:
-            pkey.table_name = tbl_name
-            pkey.pkey_name = row.pk_name
-            if 'constrained_columns' not in pkey:
-                pkey.constrained_columns = []
-            pkey.constrained_columns.append(row.column_name)
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
 
-        return pkey
+            pkeys = Dict()
+            for row in rows:
+                rec = to_rec(row, crsr, lowercase=True)
+                pkeys[rec.table_name].table_name = rec.table_name
+                pkeys[rec.table_name].pkey_name = rec.pk_name
+                if 'column_names' in rec:
+                    if type(rec.column_names) is str:
+                        rec.column_names = yaml.safe_load(rec.column_names)
+                    pkeys[rec.table_name].constrained_columns = rec.column_names
+                if 'constrained_columns' not in pkeys[rec.table_name]:
+                    pkeys[rec.table_name].constrained_columns = []
+                if 'column_name' in rec:
+                    if (
+                        hasattr(row, '_mapping') and self.engine.name == 'oracle'
+                        and rec.column_name == rec.column_name.upper()
+                    ):
+                        rec.column_name = rec.column_name.lower()
+                    pkeys[rec.table_name].constrained_columns.append(rec.column_name)
 
-    def get_multi_pk_constraint(self, schema):
-        if hasattr(self, '_pkeys'):
-            return self._pkeys
-        tbls = self.get_table_names(schema)
-        self._pkeys = Dict()
-        with self.engine.connect(lowercase=True) as cnxn:
-            crsr = cnxn.cursor()
-            if self.expr.pkeys():
-                sql = self.expr.pkeys()
-                pkeys = Dict()
-                for row in crsr.execute(sql, schema or self.cat, None):
-                    tblname = row.table_name
-                    if 'constrained_columns' not in pkeys[(schema, tblname)]:
-                        pkeys[(schema, tblname)].constrained_columns = []
-                    pkeys[(schema, tblname)].table_name = tblname
-                    pkeys[(schema, tblname)].pkey_name = row.pk_name
-                    pkeys[(schema, tblname)].constrained_columns.append(row.column_name)
+        return pkeys[table] if table else pkeys
 
-                return pkeys
-
-            for tbl_name in tbls:
-                if self.engine.name in ['sqlite']:
-                    # Wrong order for pkeys using cursor.primaryKeys
-                    sql = self.expr.pkey(tbl_name)
-                    rows = cnxn.execute(sql).fetchall()
-                elif self.engine.name in ('mysql', 'mariadb'):
-                    rows = crsr.primaryKeys(table=tbl_name, catalog=schema)
-                else:
-                    rows = crsr.primaryKeys(table=tbl_name,
-                                            catalog=self.cat,
-                                            schema=schema)
-                for row in rows:
-                    self._pkeys[(schema, tbl_name)].table_name = tbl_name
-                    self._pkeys[(schema, tbl_name)].pkey_name = row.pk_name
-                    if 'constrained_columns' not in self._pkeys[(schema, tbl_name)]:
-                        self._pkeys[(schema, tbl_name)].constrained_columns = []
-                    self._pkeys[(schema, tbl_name)].constrained_columns.append(row.column_name)
-        return self._pkeys
-
-    def get_multi_columns(self, schema):
+    def columns(self, schema, table=None):
         """ Return all columns in schema by reflection """
-        if hasattr(self, '_columns'):
-            return self._columns
-        with self.engine.connect(lowercase=True) as cnxn:
-            cursor = cnxn.cursor()
-            if self.expr.columns():
-                # cursor.columns doesn't work for all types of oracle columns
-                sql = self.expr.columns()
-                rows = cursor.execute(sql, schema, None).fetchall()
-            elif self.engine.name in ('mysql', 'mariadb'):
-                rows = cursor.columns(catalog=schema).fetchall()
-            else:
-                rows = cursor.columns(catalog=self.cat, schema=schema).fetchall()
-
-        self._columns = Dict()
-        colnames = [column[0] for column in cursor.description]
-        for row in rows:
-            row = Dict(zip(colnames, row))
-            col = Dict()
-            col.name = row.column_name
-            col.type = row.type_name
-            col.nullable = row.nullable
-            col.default = row.column_def
-            col.size = int(row.column_size) if row.column_size else None
-            col.precision = col.size
-            col.scale = int(row.decimal_digits) if row.decimal_digits else None
-            if (schema, row.table_name) not in self._columns:
-                self._columns[(schema, row.table_name)] = []
-            self._columns[(schema, row.table_name)].append(col)
-
-        return self._columns
-
-    def get_columns(self, tbl_name, schema):
-        """ Return all columns in table by reflection """
-        with self.engine.connect(lowercase=True) as cnxn:
+        # if hasattr(self, '_columns'):
+        #     return self._columns
+        with self.engine.connect() as cnxn:
+            sql = self.expr.columns()
+            sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
             crsr = cnxn.cursor()
-            if self.expr.columns():
-                sql = self.expr.columns()
-                rows = crsr.execute(sql, schema, tbl_name).fetchall()
-            else:
-                rows = crsr.columns(catalog=self.cat, schema=schema,
-                                    table=tbl_name)
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
 
-        cols = []
-        for row in rows:
-            col = Dict()
-            col.name = row.column_name
-            col.type = row.type_name
-            col.nullable = row.nullable
-            col.default = row.column_def
-            col.size = int(row.column_size) if row.column_size else None
-            col.precision = col.size
-            col.scale = int(row.decimal_digits) if row.decimal_digits else None
-            cols.append(col)
+            self._columns = Dict()
+            for row in rows:
+                rec = to_rec(row, crsr, lowercase=True)
+                if (type(rec.column_def) is bytes):
+                    # default value CURRENT_TIMESTAMP is returned as bytes in mysql
+                    rec.column_def = rec.column_def.decode('utf8')
+                col = Dict()
+                col.table_name = rec.table_name
+                col.schema_name = schema
+                col.name = rec.column_name
+                if (
+                    hasattr(row, '_mapping') and self.engine.name == 'oracle'
+                    and col.name == col.name.upper()
+                ):
+                    col.name = col.name.lower()
+                col.type = rec.type_name
+                col.nullable = rec.nullable
+                col.default = rec.column_def
+                col.size = rec.column_size if 'column_size' in rec else None
+                col.precision = col.size
+                col.scale = rec.decimal_digits if 'decimal_digits' in rec else None
+                if rec.table_name not in self._columns:
+                    self._columns[rec.table_name] = []
+                self._columns[rec.table_name].append(col)
 
-        return cols
+        return self._columns[table] if table else self._columns
 
-    def get_foreign_keys(self, tbl_name, schema):
-        with self.engine.connect(lowercase=True) as cnxn:
-            crsr = cnxn.cursor()
-            if self.expr.fkeys():
-                sql = self.expr.fkeys()
-                rows = crsr.execute(sql, schema, tbl_name).fetchall()
-            else:
-                rows = crsr.foreignKeys(catalog=self.cat, schema=schema,
-                                        foreignTable=tbl_name)
-
-        fkeys = Dict()
-        fk_nbr = 0
-        for row in rows:
-            if not row.fk_name:
-                if row.key_seq == 1:
-                    fk_nbr += 1
-                    name = tbl_name + '_fk' + str(fk_nbr)
-            else:
-                name = row.fk_name
-            if 'constrained_columns' not in fkeys[name]:
-                fkeys[name].constrained_columns = []
-                fkeys[name].referred_columns = []
-            fkeys[name].name = row.fk_name
-            fkeys[name].constrained_columns.append(row.fkcolumn_name)
-            fkeys[name].referred_columns.append(row.pkcolumn_name)
-            fkeys[name].referred_schema = row.pktable_schem
-            fkeys[name].referred_table = row.pktable_name
-
-        return fkeys.values()
-
-    def get_multi_foreign_keys(self, schema):
-        if self.fkeys:
-            return self.fkeys
+    def fkeys(self, schema, fk_table=None, pk_table=None):
         all_fkeys = Dict()
-        with self.engine.connect(lowercase=True) as cnxn:
+        fkeys = Dict()
+        with self.engine.connect() as cnxn:
             crsr = cnxn.cursor()
-            if self.expr.fkeys():
-                sql = self.expr.fkeys()
-                fkeys = Dict()
-                for row in crsr.execute(sql, schema or self.cat, None):
-                    key = (schema, row.fktable_name)
-                    if key not in all_fkeys:
-                        all_fkeys[key] = Dict()
-                    tblname = row.fktable_name
-                    name = row.fk_name
-                    if 'constrained_columns' not in fkeys[tblname][name]:
-                        fkeys[tblname][name].constrained_columns = []
-                        fkeys[tblname][name].referred_columns = []
-                    fkeys[tblname][name].name = row.fk_name
-                    fkeys[tblname][name].constrained_columns.append(row.fkcolumn_name)
-                    fkeys[tblname][name].referred_columns.append(row.pkcolumn_name)
-                    fkeys[tblname][name].referred_schema = row.pktable_schem
-                    fkeys[tblname][name].referred_table = row.pktable_name
-                for tblname in fkeys:
-                    all_fkeys[schema, tblname] = fkeys[tblname].values() 
-            else:
-                tbl_names = self.get_table_names(schema)
-                for tbl_name in tbl_names:
-                    fkeys = Dict()
-                    fk_nbr = 0
-                    rows = crsr.foreignKeys(catalog=self.cat, schema=schema, foreignTable=tbl_name).fetchall()
-                    for row in rows:
-                        if not row.fk_name:
-                            if row.key_seq == 1:
-                                fk_nbr += 1
-                                name = tbl_name + '_fk' + str(fk_nbr)
-                        else:
-                            name = row.fk_name
-                        fkeys[name].name = name
-                        if 'constrained_columns' not in fkeys[name]:
-                            fkeys[name].constrained_columns = []
-                            fkeys[name].referred_columns = []
-                        fkeys[name].constrained_columns.append(row.fkcolumn_name)
-                        fkeys[name].referred_columns.append(row.pkcolumn_name)
-                        fkeys[name].referred_schema = row.pktable_schem
-                        fkeys[name].referred_table = row.pktable_name
-                    all_fkeys[schema, tbl_name] = fkeys.values()
+            params = {
+                'schema_name': schema,
+                'table_name': fk_table,
+            }
+            sql, params = self.expr.prepare(self.expr.fkeys(), params)
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
+            for row in rows:
+                rec = to_rec(row, crsr, lowercase=True)
+                name = rec.fk_name
+                tblname = rec.fktable_name
+                if 'fkcolumn_names' in rec:
+                    if type(rec.fkcolumn_names) is str:
+                        rec.fkcolumn_names = yaml.safe_load(rec.fkcolumn_names)
+                        rec.pkcolumn_names = yaml.safe_load(rec.pkcolumn_names)
+                    fkeys[tblname][name].constrained_columns = rec.fkcolumn_names
+                    fkeys[tblname][name].referred_columns = rec.pkcolumn_names
+                if 'constrained_columns' not in fkeys[tblname][name]:
+                    fkeys[tblname][name].constrained_columns = []
+                    fkeys[tblname][name].referred_columns = []
+                fkeys[tblname][name].name = rec.fk_name
+                fkeys[tblname][name].table_name = rec.fktable_name
+                if 'fktable_schem' in rec:
+                    fkeys[tblname][name].schema = rec.fktable_schem
+                else:
+                    fkeys[tblname][name].schema = schema
+                if 'fkcolumn_name' in rec:
+                    fkeys[tblname][name].constrained_columns.append(rec.fkcolumn_name)
+                    fkeys[tblname][name].referred_columns.append(rec.pkcolumn_name)
+                if 'pktable_schem' in rec:
+                    fkeys[tblname][name].referred_schema = rec.pktable_schem
+                else:
+                    fkeys[tblname][name].referred_schema = schema
+                fkeys[tblname][name].referred_table = rec.pktable_name
+            for tblname in fkeys:
+                all_fkeys[tblname] = fkeys[tblname].values() 
 
-        self.fkeys = all_fkeys
+        self._fkeys = all_fkeys
 
-        return all_fkeys
+        if len(self._fkeys):
+            return all_fkeys if (fk_table is None) else all_fkeys[fk_table]
 
-    def get_indexes(self, tbl_name, schema):
-        with self.engine.connect(lowercase=True) as cnxn:
-            crsr = cnxn.cursor()
-            if self.expr.indexes():
-                sql = self.expr.indexes()
-                rows = crsr.execute(sql, schema, tbl_name).fetchall()
-            else:
-                rows = crsr.statistics(tbl_name)
-
-        indexes = Dict()
-        for row in rows:
-            name = row.index_name
-            indexes[name].name = name
-            indexes[name].unique = not row.non_unique
-            if 'column_names' not in indexes[name]:
-                indexes[name].column_names = []
-            indexes[name].column_names.append(row.column_name)
-
-        return indexes.values()
-
-    def get_multi_indexes(self, schema):
-        crsr = self.engine.connect().cursor()
-        if self.expr.indexes():
-            sql = self.expr.indexes()
-            rows = crsr.execute(sql, schema, None).fetchall()
+        columns = self.columns(schema)
+        if fk_table or pk_table is None:
+            table_names = [fk_table] if fk_table else self.tables(schema).keys()
+            for fk_tbl_name in table_names:
+                for fk_col in columns[fk_tbl_name]:
+                    for pk_tbl_name in table_names:
+                        if (pk_tbl_name.rstrip('_') + '_') not in fk_col.name:
+                            continue
+                        for pk_col in columns[pk_tbl_name]:
+                            if fk_col.name == pk_col.name and fk_tbl_name == pk_tbl_name:
+                                continue
+                            fkey = self.fkey_from_colname(fk_col, pk_col, fkeys[fk_tbl_name])
+                            if fkey:
+                                fkeys[fk_tbl_name][fkey.name] = fkey
         else:
-            tbls = crsr.tables(catalog=self.cat, schema=schema).fetchall()
-            rows = []
-            for tbl in tbls:
-                tbl_name = tbl.table_name
-                rows = rows + crsr.statistics(tbl_name).fetchall()
-        indexes = Dict()
-        for row in rows:
-            name = row.index_name
-            indexes[row.table_name][name].name = name
-            indexes[row.table_name][name].unique = not row.non_unique
-            if 'column_names' not in indexes[row.table_name][name]:
-                indexes[row.table_name][name].column_names = []
-            indexes[row.table_name][name].column_names.append(row.column_name)
+            for pk_col in columns[pk_table]:
+                for fk_tbl_name in columns:
+                    for fk_col in columns[fk_tbl_name]:
+                        if fk_col.name == pk_col.name and fk_tbl_name == pk_tbl_name:
+                            continue
+                        fkey = self.fkey_from_colname(fk_col, pk_col, fkeys[pk_tbl_name])
+                        fkeys[pk_tbl_name][fkey.name] = fkey
+
+        for tblname in fkeys:
+            all_fkeys[tblname] = fkeys[tblname].values()
+
+        return all_fkeys if (fk_table is None) else all_fkeys[fk_table]
+
+    def fkey_from_colname(self, fk_col, pk_col, fkeys):
+        fkey = Dict()
+        if fk_col.name == pk_col.name and fk_col.table_name == pk_col.table_name:
+            # Hvis dette er samme kolonnen
+            return None
+        ref = (pk_col.table_name + '_' + pk_col.name).replace('__', '_').rstrip('_')
+        if fk_col.name.endswith(ref) or fk_col.name == pk_col.name:
+            prefix = fk_col.name.replace(ref, '').rstrip('_')
+            prefix = '_' + prefix if prefix else ''
+            # Genererer navn til fremmednøkkelen
+            fk_name = fk_col.table_name + '_' + pk_col.table_name + prefix + '_fkey'
+            
+            if fk_name not in fkeys:
+                fkey.constrained_columns = []
+                fkey.referred_columns = []
+                fkey.name = fk_name
+                fkey.table_name = fk_col.table_name
+                fkey.schema = fk_col.schema_name
+            else:
+                fkey = fkeys[fk_name]
+            fkey.constrained_columns.append(fk_col.name)
+            fkey.referred_columns.append(pk_col.name)
+            fkey.referred_schema = pk_col.schema_name
+            fkey.referred_table = pk_col.table_name
+
+            return fkey
+        else:
+            return None
+
+    def indexes(self, schema, table=None):
+        with self.engine.connect() as cnxn:
+            sql = self.expr.indexes()
+            params = {'schema_name': schema, 'table_name': table}
+            sql, params = self.expr.prepare(sql, params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
+
+            indexes = Dict()
+            for row in rows:
+                rec = to_rec(row, crsr, lowercase=True)
+                name = rec.index_name
+                indexes[rec.table_name][name].name = name
+                indexes[rec.table_name][name].unique = not rec.non_unique
+                if 'column_names' in rec:
+                    if type(rec.column_names) is str:
+                        rec.column_names = yaml.safe_load(rec.column_names)
+                    indexes[rec.table_name][name].column_names = rec.column_names
+                if 'column_names' not in indexes[rec.table_name][name]:
+                    indexes[rec.table_name][name].column_names = []
+                if 'column_name' in rec:
+                    indexes[rec.table_name][name].column_names.append(rec.column_name)
 
         all_indexes = Dict()
         for tbl_name in indexes:
-            all_indexes[schema, tbl_name] = []
+            all_indexes[tbl_name] = []
             for key, idx in indexes[tbl_name].items():
-                all_indexes[schema, tbl_name].append(idx)
-        return all_indexes
+                all_indexes[tbl_name].append(idx)
+
+        return all_indexes if not table else all_indexes[table] 
 
     def get_view_definition(self, tbl_name, schema):
         sql = self.expr.view_definition()
         view_def = None
-        with self.engine.connect(lowercase=True) as cnxn:
+        with self.engine.connect() as cnxn:
             crsr = cnxn.cursor()
             if self.engine.name in ['oracle', 'sqlite']:
-                view_def = crsr.execute(sql, tbl_name).fetchone()[0]
+                crsr.execute(sql, tbl_name)
+                view_def = crsr.fetchone()[0]
             elif sql:
-                params = [schema, tbl_name]
-                view_def = crsr.execute(sql, params).fetchone()[0]
+                params = {'schema_name': schema, 'table_name': tbl_name}
+                sql, params = self.expr.prepare(sql, params)
+                crsr.execute(sql, params)
+                view_def = crsr.fetchone()[0]
 
         if self.engine.name == 'oracle':
             view_def = 'create view ' + tbl_name + ' as\n' + view_def

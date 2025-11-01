@@ -1,8 +1,9 @@
 import re
 import math
 from addict import Dict
-from util import prepare, to_rec
+from util import to_rec
 from settings import Settings
+from expression import Expression
 
 cfg = Settings()
 
@@ -24,8 +25,10 @@ class Grid:
 
     def get_select_expression(self, col):
         """Get select expression for column in grid"""
+        q = Expression(self.db.engine).quote
         select = ''
-        col.ref = f'{self.tbl.grid_view}.{col.name}'
+
+        col.ref = f'{q(self.tbl.grid_view)}.{q(col.name)}'
 
         if 'view' in col:
             select = col.view
@@ -43,6 +46,9 @@ class Grid:
 
     def get(self, pkey_vals=None):
         """Return all metadata and data to display grid"""
+
+        # Cahe metadata
+        self.db.indexes
 
         return Dict({
             'name': self.tbl.name,
@@ -158,9 +164,11 @@ class Grid:
         {rec_cond};
         """
 
-        sql, params = prepare(sql, self.cond.params | params)
+        sql, params = self.db.expr.prepare(sql, self.cond.params | params)
         with self.db.engine.connect() as cnxn:
-            row = cnxn.execute(sql, params).fetchone()
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            row = crsr.fetchone()
         idx = row[0] if row else None
         if idx is not None:
             page_nr = math.floor(idx / self.tbl.limit)
@@ -230,7 +238,7 @@ class Grid:
         self._columns = []
         if self.tbl.name != self.tbl.grid_view:
             view = Table(self.db, self.tbl.grid_view)
-            cols = self.db.refl.get_columns(self.tbl.grid_view, self.db.schema)
+            cols = self.db.refl.columns(self.db.schema, self.tbl.grid_view)
             self._columns = [col['name'] for col in cols]
             for field_name, field in view.fields.items():
                 if field_name not in self.tbl.fields:
@@ -313,6 +321,7 @@ class Grid:
     def make_order_by(self):
         """Return 'order by'-clause"""
 
+        q = Expression(self.db.engine).quote
         order = "order by "
         sort_fields = Dict()
         for alias, sort in self.sort_columns.items():
@@ -337,7 +346,7 @@ class Grid:
 
         if len(self.sort_columns) == 0:
             for field in self.tbl.pkey.columns:
-                order += f'{self.tbl.view}.{field}, '
+                order += f'{q(self.tbl.view)}.{q(field)}, '
 
         order = order[0:-2]
 
@@ -345,6 +354,7 @@ class Grid:
 
     def get_values(self, selects):
         """Return values for columns in grid"""
+        q = Expression(self.db.engine).quote
         cols = []
         for key in selects.keys():
             field = self.tbl.fields[key]
@@ -354,9 +364,9 @@ class Grid:
             ):
                 view = self.tbl.grid_view
                 if field.datatype == 'geometry':
-                    cols.append(f'{view}.{key}.ToString() as {key}')
+                    cols.append(f'{q(view)}.{q(key)}.ToString() as {q(key)}')
                 else:
-                    cols.append(f'{view}.{key}')
+                    cols.append(f'{q(view)}.{q(key)}')
 
         sql = ''
         if self.access_check:
@@ -367,7 +377,7 @@ class Grid:
         order = self.make_order_by()
 
         sql += "select " + select + "\n"
-        sql += f'from {self.db.schema}.{self.tbl.view}\n'
+        sql += f'from {self.db.schema}.{q(self.tbl.view)}\n'
         sql += '\n'.join(self.tbl.joins.values())
         sql += "" if not cond else "\nwhere " + cond + "\n"
         sql += '\n' + order + "\n"
@@ -379,15 +389,18 @@ class Grid:
             sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
         with self.db.engine.connect() as cnxn:
-            sql, params = prepare(sql, self.cond.params)
-            rows = cnxn.execute(sql, params).fetchall()
-            records = [to_rec(row) for row in rows]
+            sql, params = self.db.expr.prepare(sql, self.cond.params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
+            records = [to_rec(row, crsr) for row in rows]
 
         return records
 
     def get_rowcount(self):
         """Return rowcount for grid"""
 
+        q = Expression(self.db.engine).quote
         conds = self.get_cond_expr()
 
         sql = ''
@@ -398,7 +411,7 @@ class Grid:
             sql += "select * \n"
         else:
             sql += "select count(*)\n"
-        sql += f'from {self.db.schema}.{self.tbl.view}\n'
+        sql += f'from {self.db.schema}.{q(self.tbl.view)}\n'
         sql += '\n'.join(self.tbl.joins.values()) + "\n"
         sql += "" if not conds else f"where {conds}\n"
 
@@ -407,8 +420,10 @@ class Grid:
             sql = f"select count(*) from (\n{sql}\nlimit 1000)"
 
         with self.db.engine.connect() as cnxn:
-            sql, params = prepare(sql, self.cond.params)
-            count = cnxn.execute(sql, params).fetchone()[0]
+            sql, params = self.db.expr.prepare(sql, self.cond.params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            count = crsr.fetchone()[0]
 
         return count
 
@@ -417,9 +432,11 @@ class Grid:
 
         from table import Table
 
+        q = Expression(self.db.engine).quote
+
         alias_selects = {}
         for key, value in selects.items():
-            alias_selects[key] = f'{value} as {key}'
+            alias_selects[key] = f'{value} as {q(key)}'
         select = ', '.join(alias_selects.values())
 
         sql = ''
@@ -455,7 +472,7 @@ class Grid:
         conds = self.get_cond_expr()
 
         sql += "select " + select + "\n"
-        sql += f'from {self.db.schema}.{self.tbl.view}\n'
+        sql += f'from {self.db.schema}.{q(self.tbl.view)}\n'
         sql += '\n'.join(self.tbl.joins.values())
         sql += "" if not conds else "\nwhere " + conds + "\n"
         sql += '\n' + order + "\n"
@@ -467,9 +484,11 @@ class Grid:
             sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
         with self.db.engine.connect() as cnxn:
-            sql, params = prepare(sql, self.cond.params)
-            rows = cnxn.execute(sql, params).fetchall()
-            records = [to_rec(row) for row in rows]
+            sql, params = self.db.expr.prepare(sql, self.cond.params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
+            records = [to_rec(row, crsr) for row in rows]
 
         return records
 
@@ -505,9 +524,10 @@ class Grid:
         sql += '' if not cond else "where " + cond + "\n"
 
         with self.db.engine.connect() as cnxn:
-            sql, params = prepare(sql, self.cond.params)
-            row = cnxn.execute(sql, params).fetchone()
-            rec = to_rec(row)
+            sql, params = self.db.expr.prepare(sql, self.cond.params)
+            crsr = cnxn.cursor()
+            row = crsr.execute(sql, params).fechone()
+            rec = to_rec(row, crsr)
 
             if row:
                 for col in rec:
@@ -548,6 +568,7 @@ class Grid:
     def set_search_cond(self, query):
         """Set search conditions for grid queries"""
         from table import Table
+        q = Expression(self.db.engine).quote
         filters = query.split(";")
         for fltr in filters:
             parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|"
@@ -592,16 +613,16 @@ class Grid:
 
                         for field in self.tbl.fields.values():
                             if field.fkey:
-                                view = field.name if not field.view else field.view
+                                view = q(field.name) if not field.view else field.view
                                 if case_sensitive:
                                     concats.append(f"{view}")
                                 else:
                                     concats.append(f"lower({view})")
                             elif field.datatype == "str":
                                 if case_sensitive:
-                                    concats.append(f"{self.tbl.view}.{field.name}")
+                                    concats.append(f"{q(self.tbl.view)}.{q(field.name)}")
                                 else:
-                                    concats.append(f"lower({self.tbl.view}.{field.name})")
+                                    concats.append(f"lower({q(self.tbl.view)}.{q(field.name)})")
 
                         if self.db.engine.name == 'oracle':
                             row = '||'.join(concats)
@@ -614,8 +635,8 @@ class Grid:
                         conds.append(f"{row} {op} :{mark}")
                         params[mark] = value
                                 
-                expr = "(" + " AND ".join(conds) + ")"
-                self.cond.prep_stmnts.append(expr)
+                conds_expr = "(" + " AND ".join(conds) + ")"
+                self.cond.prep_stmnts.append(conds_expr)
                 self.cond.params.update(params)
             else:
                 field_expr = parts[0].strip()
@@ -625,11 +646,12 @@ class Grid:
                     else:
                         tbl_name = self.tbl.name + '_grid'
                     field = self.tbl.fields[field_expr]
-                    field_expr = tbl_name + "." + field_expr
+                    field_expr = q(tbl_name) + "." + q(field_expr)
                 else:
                     field_parts = field_expr.split('.')
                     tbl_alias = field_parts[0]
                     field_name = field_parts[1]
+                    field_expr = q(tbl_alias) + '.' + q(field_name)
                     if tbl_alias == self.tbl.name:
                         field = self.tbl.fields[field_name]
                     else:

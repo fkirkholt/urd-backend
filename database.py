@@ -8,7 +8,6 @@ import shutil
 import tempfile
 from pathlib import Path
 from graphlib import TopologicalSorter
-from sqlalchemy import inspect, exc
 import sqlglot
 import simplejson as json
 import pyodbc
@@ -21,7 +20,7 @@ from datatype import Datatype
 from odbc_engine import ODBC_Engine
 from reflection import Reflection
 from expression import Expression
-from util import prepare, to_rec, time_func, time_stream_generator
+from util import to_rec, time_func, time_stream_generator, format_fkey
 
 
 class Database:
@@ -33,6 +32,7 @@ class Database:
         self.columns_loaded = False
         self.indexes_loaded = False
         self.engine = engine
+        self.expr = Expression(engine)
         self.identifier = db_name
         self.user = User(engine, name=uid)
         path = db_name.split('.')
@@ -48,7 +48,7 @@ class Database:
         else:
             self.schema = db_name
             self.cat = None
-        self.refl = Reflection(engine, self.cat) if type(engine) is ODBC_Engine else inspect(engine)
+        self.refl = Reflection(engine, self.cat)
 
         if 'urdr' in self.refl.get_schema_names() or db_name == 'urdr':
             schema = 'main' if db_name == 'urdr' else 'urdr'
@@ -89,34 +89,15 @@ class Database:
             """
             try:
                 with self.engine.connect() as cnxn:
-                    sql, _ = prepare(sql)
-                    rows = cnxn.execute(sql)
-                for row in rows:
-                    attrs[row.selector] = json.loads(row.attrs)
+                    sql, _ = self.expr.prepare(sql)
+                    crsr = cnxn.cursor()
+                    for row in crsr.execute(sql):
+                        rec = to_rec(row, crsr)
+                        attrs[rec.selector] = json.loads(rec.attrs)
             except Exception as e:
                 print(e)
 
         return attrs
-
-    def filter_schema(self, schema):
-        system_schemas = [
-            'information_schema',
-            'performance_schema',
-            'mysql'
-        ]
-        if self.engine.name == 'postgresql' and schema.startswith('pg_'):
-            return False
-        elif self.engine.name == 'duckdb' and (
-            schema.endswith('.information_schema') or
-            schema.startswith('system.') or
-            schema.startswith('temp.') or
-            '.fts_' in schema
-        ):
-            return False
-        elif schema in system_schemas:
-            return False
-
-        return True
 
     @time_func
     def get_info(self):
@@ -131,7 +112,6 @@ class Database:
                 "name": self.identifier,
                 "cat": self.cat,
                 "system": self.engine.name,
-                "server": self.engine.url.host,
                 "schema": self.schema,
                 "schemata": [s for s in self.schemas if s != 'urdr'],
                 "label": self.get_label(self.identifier),
@@ -152,11 +132,7 @@ class Database:
 
     def get_comment(self):
         """Get database comment"""
-        if self.engine.name in ['mysql', 'mariadb', 'postgresql']:
-            user = User(self.engine)
-            comment = user.databases(self.schema, self.cat)[0].db_comment
-        else:
-            comment = None
+        comment = self.user.databases(self.schema, self.cat)[0].db_comment
 
         return comment
 
@@ -175,8 +151,9 @@ class Database:
         """
 
         with self.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            cnxn.execute(sql)
+            sql, _ = self.expr.prepare(sql)
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
             cnxn.commit()
 
         self.tablenames.append('html_attributes')
@@ -192,8 +169,9 @@ class Database:
         """
 
         with self.engine.connect() as cnxn:
-            sql, _ = prepare(sql)
-            cnxn.execute(sql)
+            sql, _ = self.expr.prepare(sql)
+            crsr = cnxn.cursor()
+            crsr.execute(sql)
             cnxn.commit()
 
         # Refresh attributes
@@ -216,17 +194,17 @@ class Database:
         self.indexes
         self.pkeys
 
-        for tbl_name in self.tablenames:
-            if tbl_name[-5:] == '_view' and tbl_name[:-5] in self.tablenames:
+        for tbl in self.refl.tables(self.schema).values():
+            if tbl.name[-5:] == '_view' and tbl.name[:-5] in self.tablenames:
                 continue
-            if '_fts' in tbl_name:
+            if '_fts' in tbl.name:
                 continue
 
-            table = Table(self, tbl_name)
+            table = Table(self, tbl.name, type=tbl.type, comment=tbl.comment)
 
-            self.tables[tbl_name] = table.get()
-            self.tables[tbl_name].fkeys = self.fkeys[tbl_name]
-            self.tables[tbl_name].relations = self.relations[tbl_name]
+            self.tables[tbl.name] = table.get()
+            self.tables[tbl.name].fkeys = self.fkeys[tbl.name]
+            self.tables[tbl.name].relations = self.relations[tbl.name]
 
         return self.tables
 
@@ -235,25 +213,7 @@ class Database:
         if hasattr(self, '_schemas'):
             return self._schemas
 
-        if self.engine.name == 'postgresql' and not self.user.is_admin(self.schema):
-            sql = """
-            select table_schema
-            from information_schema.role_table_grants
-            where table_catalog = :cat
-                and grantee = :user
-            """
-
-            params = {
-                'cat': self.cat,
-                'user': self.user.name
-            }
-            with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, params)
-                rows = cnxn.execute(sql, params).fetchall()
-            self._schemas = [row[0] for row in rows]
-        else:
-            self._schemas = list(filter(self.filter_schema,
-                                 self.refl.get_schema_names()))
+        self._schemas = self.refl.get_schema_names()
 
         return self._schemas
 
@@ -261,34 +221,21 @@ class Database:
     def tablenames(self):
         if hasattr(self, '_tablenames'):
             return self._tablenames
-        if self.engine.name == 'postgresql' and not self.user.is_admin(self.schema):
-            sql = """
-            select table_name
-            from information_schema.role_table_grants
-            where table_catalog = :cat
-              and table_schema = :schema
-              and grantee in (
-                WITH RECURSIVE cte AS (
-                   SELECT oid FROM pg_roles WHERE rolname = current_user
 
-                   UNION ALL
-                   SELECT m.roleid
-                   FROM   cte
-                   JOIN   pg_auth_members m ON m.member = cte.oid
-                   )
-                SELECT oid::regrole::text AS rolename FROM cte
-            )
-            """
-            with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {'cat': self.cat, 'schema': self.schema})
-                rows = cnxn.execute(sql, params).fetchall()
-            self._tablenames = [row[0] for row in rows]
-        else:
-            table_names = self.user.tables(self.cat, self.schema)
-            view_names = self.refl.get_view_names(self.schema)
-            self._tablenames = table_names + view_names
+        self._tablenames = [t.name for t in self.refl.tables(self.schema).values()
+                            if t.type == 'table']
 
         return self._tablenames
+
+    @property
+    def viewnames(self):
+        if hasattr(self, '_viewnames'):
+            return self._viewnames
+
+        self._viewnames = [t.name for t in self.refl.tables(self.schema).values()
+                           if t.type == 'view']
+
+        return self._viewnames
 
     @property
     def columns(self):
@@ -296,28 +243,7 @@ class Database:
         self.columns_loaded = True
 
         if not hasattr(self, '_columns'):
-            self._columns = Dict()
-
-            if self.engine.name == 'duckdb':
-                sql = """
-                select table_name, column_name as name, is_nullable as nullable,
-                       column_default as "default", data_type as type
-                from duckdb_columns
-                where schema_name = 'main'
-                """
-                with self.engine.connect() as cnxn:
-                    sql, _ = prepare(sql)
-                    rows = cnxn.execute(sql).fetchall()
-                    for row in rows:
-                        if row.table_name not in self._columns:
-                            self._columns[row.table_name] = []
-                        col = to_rec(row)
-                        self._columns[row.table_name].append(col)
-
-            else:
-                columns = self.refl.get_multi_columns(self.schema)
-                for (schema, table), cols in columns.items():
-                    self._columns[table] = cols
+            self._columns = self.refl.columns(self.schema)
 
         return self._columns
 
@@ -611,8 +537,10 @@ class Database:
             """
 
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {'selector': 'base'})
-                count = cnxn.execute(sql, params).fetchone()[0]
+                sql, params = self.expr.prepare(sql, {'selector': 'base'})
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                count = crsr.fetchone()[0]
 
             cache = {
                 "tables": self.tables,
@@ -637,39 +565,15 @@ class Database:
                 """
 
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {
+                sql, params = self.expr.prepare(sql, {
                     'attrs': attrs_txt,
                     'selector': 'base'
                 })
-                cnxn.execute(sql, params)
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
                 cnxn.commit()
 
         return contents
-
-    @property
-    def comments(self):
-        self._comments = {}
-        # SQLAlchemy reflection doesn't work for comments in mysql/mariadb
-        if self.engine.name in ['mysql', 'mariadb']:
-            # Must have column aliases to avoid error in SQLAlchemy for this
-            # query in MySQL. Don't know why 
-            sql = """
-            select table_name as table_name, table_comment as table_comment
-            from   information_schema.tables
-            where table_schema = :schema
-            """
-
-            with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, {'schema': self.schema})
-                rows = cnxn.execute(sql, params)
-                for row in rows:
-                    self._comments[row.table_name] = row.table_comment
-        else:
-            rows = self.refl.get_multi_table_comment(self.schema)
-            for (schema, table), row in rows.items():
-                self._comments[table] = row['text']
-
-        return self._comments
 
     @property
     def pkeys(self):
@@ -680,32 +584,14 @@ class Database:
 
         self.pkeys_loaded = True
         self._pkeys = Dict()
-        # reflection of constraints is not implemented for duckdb yet
-        if self.engine.name == 'duckdb':
-            sql = """
-            select * from duckdb_constraints()
-            where constraint_type = 'PRIMARY KEY'
-            """
-            with self.engine.connect() as cnxn:
-                sql, _ = prepare(sql)
-                rows = cnxn.execute(sql).fetchall()
-                for row in rows:
-                    pkey = Dict({
-                        'table_name': row.table_name,
-                        'name': 'PRIMARY',
-                        'unique': True,
-                        'columns': row.constraint_column_names
-                    })
-                    self._pkeys[row.table_name] = pkey
-        else:
-            pkey_constraints = self.refl.get_multi_pk_constraint(self.schema)
-            for (schema, table), pkey in pkey_constraints.items():
-                self._pkeys[table] = Dict({
-                    'table_name': table,
-                    'name': pkey['name'] or 'PRIMARY',
-                    'unique': True,
-                    'columns': pkey['constrained_columns']
-                })
+        pkey_constraints = self.refl.pkeys(self.schema)
+        for table, pkey in pkey_constraints.items():
+            self._pkeys[table] = Dict({
+                'table_name': table,
+                'name': pkey['name'] or 'PRIMARY',
+                'unique': True,
+                'columns': pkey['constrained_columns']
+            })
 
         return self._pkeys
 
@@ -716,39 +602,21 @@ class Database:
             return self._indexes
 
         self._indexes = Dict()
-        if self.engine.name == 'duckdb':
-            sql, _ = prepare("select * from duckdb_indexes()")
-            with self.engine.connect() as cnxn:
-                rows = cnxn.execute(sql).fetchall()
-                for row in rows:
-                    idx = Dict({
-                        'table_name': row.table_name,
-                        'name': row.index_name,
-                        'unique': row.is_unique
-                    })
-                    expr = row.sql
-                    x = re.search(r"\bON \w+\s?\(([^)]*)\)", expr)
-                    cols_delim = x.group(1).split(',')
-                    idx.columns = [s.strip() for s in cols_delim]
-                    self._indexes[row.table_name][idx.name] = idx
-            for table, pkey in self.pkeys.items():
-                self._indexes[table][pkey.name] = pkey
-        else:
-            schema_indexes = self.refl.get_multi_indexes(self.schema)
+        schema_indexes = self.refl.indexes(self.schema)
 
-            for (schema, table), indexes in schema_indexes.items():
+        for table, indexes in schema_indexes.items():
 
-                for idx in indexes:
-                    idx = Dict(idx)
-                    idx.columns = idx.pop('column_names')
-                    idx.pop('dialect_options', None)
+            for idx in indexes:
+                idx = Dict(idx)
+                idx.columns = idx.pop('column_names')
+                idx.pop('dialect_options', None)
 
-                    if idx.name and idx.columns != [None]:
-                        self._indexes[table][idx.name] = idx
+                if idx.name and idx.columns != [None]:
+                    self._indexes[table][idx.name] = idx
 
-            for table in self.pkeys:
-                pkey = self.pkeys[table]
-                self._indexes[table][pkey.name] = pkey
+        for table in self.pkeys:
+            pkey = self.pkeys[table]
+            self._indexes[table][pkey.name] = pkey
 
         return self._indexes
 
@@ -761,45 +629,15 @@ class Database:
 
         self._fkeys = Dict()
         self._relations = Dict()
-        aliases = {}
 
-        schema_fkeys = self.refl.get_multi_foreign_keys(self.schema)
+        schema_fkeys = self.refl.fkeys(self.schema)
 
-        for key, fkeys in schema_fkeys.items():
+        for tbl_name, fkeys in schema_fkeys.items():
             for fkey in fkeys:
-                fkey = Dict(fkey)
-                fkey.base = self.cat
-                fkey.table_name = key[-1]
-                fkey.schema = key[0] or self.db.schema
-                if (
-                    self.pkeys[fkey.table_name].columns and
-                    set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns)
-                ):
-                    fkey.relationship = '1:1'
-                else:
-                    fkey.relationship = '1:M'
-
-                fkey.name = fkey.table_name + '_'
-                fkey.name += '_'.join(fkey.constrained_columns)+'_fkey'
-
-                fkey_col = fkey.constrained_columns[-1]
-                ref_col = fkey.referred_columns[-1].strip('_')
-                if fkey_col in [fkey.referred_table + '_' + ref_col,
-                                fkey.referred_columns[-1]]:
-                    ref_table_alias = fkey.referred_table
-                else:
-                    ref_table_alias = fkey_col.strip('_')
-                # In seldom cases there might be two foreign keys ending
-                # in same column
-                if fkey.table_name not in aliases:
-                    aliases[fkey.table_name] = []
-                if ref_table_alias in aliases[fkey.table_name]:
-                    ref_table_alias = ref_table_alias + '2'
-                fkey.ref_table_alias = ref_table_alias
-                aliases[fkey.table_name].append(ref_table_alias)
-
-                self._fkeys[fkey.table_name][fkey.name] = Dict(fkey)
-                self._relations[fkey.referred_table][fkey.name] = Dict(fkey)
+                fkey, alias = format_fkey(fkey, self.pkeys[fkey.table_name])
+                fkey.ref_table_alias = alias
+                self._fkeys[fkey.table_name][fkey.name] = fkey
+                self._relations[fkey.referred_table][fkey.name] = fkey
 
         if len(self._fkeys) == 0:
             fkeys = Dict()
@@ -869,13 +707,16 @@ class Database:
         if sql is None:
             return functions
         with self.engine.connect() as cnxn:
-            sql, params = prepare(sql, {'owner': self.schema})
-            rows = cnxn.execute(sql, params).fetchall()
-        for row in rows:
-            if row.name not in functions:
-                functions[row.name] = row.text
-            else:
-                functions[row.name] += row.text
+            sql, params = self.expr.prepare(sql, {'owner': self.schema})
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
+            for row in rows:
+                rec = to_rec(row, crsr)
+                if rec.name not in functions:
+                    functions[rec.name] = rec.text
+                else:
+                    functions[rec.name] += rec.text
         return functions
 
     @property
@@ -886,13 +727,16 @@ class Database:
         if sql is None:
             return procedures
         with self.engine.connect() as cnxn:
-            sql, params = prepare(sql, {'owner': self.schema})
-            rows = cnxn.execute(sql, params).fetchall()
-        for row in rows:
-            if row.name not in procedures:
-                procedures[row.name] = row.text
-            else:
-                procedures[row.name] += row.text
+            sql, params = self.expr.prepare(sql, {'owner': self.schema})
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params)
+            rows = crsr.fetchall()
+            for row in rows:
+                rec = to_rec(row, crsr)
+                if rec.name not in procedures:
+                    procedures[rec.name] = rec.text
+                else:
+                    procedures[rec.name] += rec.text
         return procedures
 
     def query_result(self, sql, limit, cnxn):
@@ -903,10 +747,11 @@ class Database:
         if len(query.string) == 0:
             return None
         t1 = time.time()
-        sql, _ = prepare(sql)
+        sql, _ = self.expr.prepare(sql)
+        crsr = cnxn.cursor()
         if type(self.engine) is ODBC_Engine:
             try:
-                result = cnxn.execute(sql)
+                crsr.execute(sql)
             except pyodbc.Error as ex:
                 sqlstate = ex.args[1]
                 sqlstate = sqlstate.replace('[HY000]', '')
@@ -924,12 +769,12 @@ class Database:
             os.chdir(folder)
 
             try:
-                result = cnxn.execute(sql)
-            except exc.StatementError as ex:
+                crsr.execute(sql)
+            except Exception as ex:
                 os.chdir(cwd)
                 query.time = round(time.time() - t1, 4)
                 query.success = False
-                query.result = 'ERROR: {}'.format(ex.orig)
+                query.result = 'ERROR: {}'.format(ex)
 
                 return query
 
@@ -937,24 +782,24 @@ class Database:
         query.success = True
         query.time = round(time.time() - t1, 4)
 
-        if type(self.engine) is ODBC_Engine:
-            returns_rows = result.description
+        if type(self.engine) is ODBC_Engine or True:
+            returns_rows = crsr.description
         else:
-            returns_rows = result.returns_rows
+            returns_rows = crsr.returns_rows
 
         if returns_rows:
             if limit:
-                rows = result.fetchmany(limit)
+                rows = crsr.fetchmany(limit)
             else:
-                rows = result.fetchall()
+                rows = crsr.fetchall()
 
-            query.data = [to_rec(row) for row in rows]
+            query.data = [to_rec(row, crsr) for row in rows]
             # Find the table selected from
             query.table = str(sqlglot.parse_one(query.string)
                               .find(sqlglot.exp.Table))
 
             # Get table name in correct case
-            tbl_names = self.refl.get_table_names(self.schema)
+            tbl_names = self.refl.tables(self.schema).keys()
 
             for tbl_name in tbl_names:
                 if tbl_name.lower() == query.table.lower():
@@ -962,7 +807,7 @@ class Database:
                     break
 
         else:
-            rowcount = result.rowcount
+            rowcount = crsr.rowcount
 
             query.rowcount = rowcount
             query.result = f"Query OK, {rowcount} rows affected"
@@ -980,11 +825,10 @@ class Database:
         self.fkeys
         self.columns
 
-        tbl_names = self.refl.get_table_names(self.schema)
         if table:
             views = []
         else:
-            views = tuple(self.refl.get_view_names(self.schema))
+            views = self.viewnames
 
         tbl_list = []
         params = []
@@ -1006,37 +850,41 @@ class Database:
             total_rows = 0
             with self.engine.connect() as cnxn:
                 sql = self.user.expr.rowcount()
+                crsr = cnxn.cursor()
                 if sql and not filter:
-                    sql, params = prepare(sql, {'schema': self.schema})
-                    rows = cnxn.execute(sql, params).fetchall()
+                    sql, params = self.expr.prepare(sql, {'schema': self.schema})
+                    crsr.execute(sql, params)
+                    rows = crsr.fetchall()
                     for row in rows:
-                        count_recs[row.table_name] = row.count_rows
-                        total_rows += row.count_rows
-                        if row.count_rows or not no_empty:
-                            tbl_list.append(row.table_name)
+                        rec = to_rec(row, crsr)
+                        count_recs[rec.table_name] = rec.count_rows
+                        total_rows += rec.count_rows
+                        if rec.count_rows or not no_empty:
+                            tbl_list.append(rec.table_name)
                     if view_as_table:
                         for view_name in views:
                             sql = f'select count(*) from {view_name}'
-                            sql, _ = prepare(sql)
-                            n = cnxn.execute(sql).fetchone()[0]
+                            crsr.execute(sql)
+                            n = crsr.fetchone()[0]
                             count_recs[view_name] = n
                             if n or not no_empty:
                                 tbl_list.append(view_name)
 
                 else:
-                    for tbl_name in tbl_names:
+                    for tbl_name in self.tablenames:
                         sql = f'select count(*) from {tbl_name}'
                         if filter:
                             sql += '\n' + join
                             sql += ' where ' + cond
-                        sql, params = prepare(sql, params)
-                        n = cnxn.execute(sql, params).fetchone()[0]
+                        sql, params = self.expr.prepare(sql, params)
+                        crsr.execute(sql, params)
+                        n = crsr.fetchone()[0]
                         count_recs[tbl_name] = n
                         total_rows += n
                         if n or not no_empty:
                             tbl_list.append(tbl_name)
         else:
-            tbl_list = tbl_names
+            tbl_list = self.tablenames
 
         download = True if dest == 'download' else False
         if download:
@@ -1094,7 +942,7 @@ class Database:
         count = 0
         last_progress = 0
         i = 0
-        expr = Expression(dialect)
+        expr = Expression(Dict({'name': dialect, 'driver_name': None}))
         for tbl_name in ordered_tables:
             i += 1
 
@@ -1142,8 +990,9 @@ class Database:
                     params = grid.cond.params
                 sql = expr.rows(table, cond)
                 with self.engine.connect() as cnxn:
-                    sql, params = prepare(sql, params)
-                    cursor = cnxn.execute(sql, params)
+                    sql, params = self.expr.prepare(sql, params)
+                    crsr = cnxn.cursor()
+                    crsr.execute(sql, params)
                     
                     # Insert time grows exponentially with number of inserts
                     # per `insert all` in Oracle after a certain value.
@@ -1151,7 +1000,7 @@ class Database:
                     max = 50 if dialect == 'oracle' else 1000;
 
                     while True:
-                        rows = cursor.fetchmany(max)
+                        rows = crsr.fetchmany(max)
                         if not rows:
                             break
 
@@ -1173,8 +1022,8 @@ class Database:
                             insert = ''
                             if dialect == 'oracle' and i > 1:
                                 insert += ' union all\n'
-                            rec = to_rec(row)
                             if i != 1:
+                            rec = to_rec(row, crsr)
                                 insert += ','
                             insert += expr.insert_rec(table, rec) 
                             file.write(insert)
@@ -1226,7 +1075,7 @@ class Database:
         self.pkeys
         self.columns
 
-        expr = Expression(self.engine.name)
+        expr = Expression(self.engine)
 
         params = []
         if filter:
@@ -1245,8 +1094,10 @@ class Database:
                 if filter:
                     sql += '\n' + join
                     sql += ' where ' + cond
-                sql, params = prepare(sql, params)
-                n = cnxn.execute(sql, params).fetchone()[0]
+                sql, params = self.expr.prepare(sql, params)
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                n = crsr.fetchone()[0]
                 if limit and n > limit:
                     n = limit
                 total_rows += n
@@ -1291,9 +1142,11 @@ class Database:
                 sql += '\n' + join
                 sql += ' where ' + cond
             with self.engine.connect() as cnxn:
-                sql, params = prepare(sql, params)
+                sql, params = self.expr.prepare(sql, params)
+                crsr = cnxn.cursor()
                 try:
-                    rows = cnxn.execute(sql, params)
+                    crsr.execute(sql, params)
+                    rows = crsr.fetchall()
                 except Exception as e:
                     print(e)
                     print(sql)
@@ -1308,7 +1161,7 @@ class Database:
                         break
                     n += 1
                     count += 1
-                    rec = to_rec(row)
+                    rec = to_rec(row, crsr)
                     if n == 1:
                         file.write('\t'.join(rec.keys()) + '\n')
                     values = []
@@ -1380,7 +1233,7 @@ class Database:
                 field_size_limit = int(field_size_limit / 10)
 
         filenames = os.listdir(dir)
-        expr = Expression('sqlite')
+        expr = Expression(self.engine)
 
         # count all rows in the tsv files
         total_rows = 0
@@ -1398,13 +1251,14 @@ class Database:
             i += 1
             filepath = os.path.join(dir, filename)
 
-            cols = self.refl.get_columns(tbl_name, self.schema)
+            cols = self.refl.columns(self.schema, tbl_name)
             mandatory = [col['name'] for col in cols if not col['nullable']]
 
             with open(filepath, 'r') as file:
                 with self.engine.connect() as cnxn:
                     records = csv.DictReader(file, delimiter='\t')
                     sql = f'insert into {tbl_name} values '
+                    crsr = cnxn.cursor()
 
                     n = 0
                     for rec in records:
@@ -1416,8 +1270,8 @@ class Database:
                             yield f"data: {data}\n\n"
                             last_progress = progress
                         if n == 10000:
-                            sql, _ = prepare(sql)
-                            cnxn.execute(sql)
+                            sql, _ = self.expr.prepare(sql)
+                            crsr.execute(sql)
                             cnxn.commit()
                             sql = f'insert into {tbl_name} values '
                             n = 1
@@ -1425,8 +1279,8 @@ class Database:
                             sql += ',' 
                         sql += expr.insert_rec(table, rec) 
 
-                    sql, _ = prepare(sql)
-                    cnxn.execute(sql)
+                    sql, _ = self.expr.prepare(sql)
+                    crsr.execute(sql)
                     cnxn.commit()
 
         data = json.dumps({'msg': 'done'})
@@ -1435,7 +1289,7 @@ class Database:
     def sorted_tbl_names(self, tbl_names=None):
         graph = {}
         if not tbl_names:
-            tbl_names = self.refl.get_table_names(self.schema)
+            tbl_names = self.refl.tables(self.schema).keys()
 
         # Make graph to use in topologic sort
         for tbl_name in tbl_names:

@@ -1,7 +1,6 @@
 from datetime import date, datetime
 from addict import Dict
-from util import prepare, to_rec
-from expression import Expression
+from util import to_rec
 from settings import Settings
 
 cfg = Settings()
@@ -22,8 +21,7 @@ class Field:
 
     def set_attrs_from_col(self, col):
         if type(col.type) is str:  # odbc engine
-            expr = Expression(self._db.engine.name)
-            self.datatype = expr.to_urd_type(col.type) 
+            self.datatype = self._db.expr.to_urd_type(col.type) 
         else:
             try:
                 self.datatype = col.type.python_type.__name__
@@ -122,6 +120,7 @@ class Field:
     def get_options(self, condition, params, get_parent=True):
         from table import Table
 
+        q = self._db.expr.quote
         fkey = self._tbl.get_fkey(self.name)
 
         parent = 'NULL'
@@ -149,7 +148,7 @@ class Field:
             select = f'count(distinct {pkey_col})'
 
         # Field that holds the value of the options
-        value_field = f'{alias}.' + pkey_col
+        value_field = f'{q(alias)}.' + q(pkey_col)
 
         condition = condition or '1=1'
 
@@ -162,8 +161,10 @@ class Field:
         """
 
         with self._db.engine.connect() as cnxn:
-            sql, params = prepare(sql, params)
-            count = cnxn.execute(sql, params).fetchone()[0]
+            sql, params1 = self._db.expr.prepare(sql, params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params1)
+            count = crsr.fetchone()[0]
 
         if (count > 100):
             return False
@@ -175,21 +176,24 @@ class Field:
         select distinct {value_field} as value,
                {self.view or value_field} as label,
                {parent} as parent
-        from   {self._db.schema}.{from_table} {alias}
+        from   {self._db.schema}.{q(from_table)} {q(alias)}
         where  {condition}
         order by {self.view or value_field}
         """
 
         with self._db.engine.connect() as cnxn:
-            sql, params = prepare(sql, params)
-            rows = cnxn.execute(sql, params).fetchall()
+            sql, params2 = self._db.expr.prepare(sql, params)
+            crsr = cnxn.cursor()
+            crsr.execute(sql, params2)
+            rows = crsr.fetchall()
 
-        # Return list of recular python dicts so that it can be
-        # json serialized and put in cache
-        return [to_rec(row) for row in rows]
+            # Return list of regular python dicts so that it can be
+            # json serialized and put in cache
+            return [to_rec(row, crsr) for row in rows]
 
     def get_view(self, fkey):
         """ Decide what should be shown in options """
+        q = self._db.expr.quote
         if hasattr(self, 'view'):
             return self.view
         from table import Table
@@ -199,7 +203,7 @@ class Field:
         if fkey.referred_table in self._db.tablenames:
 
             ref_tbl = Table(self._db, fkey.referred_table)
-            self.view = fkey.ref_table_alias + '.' + fkey.referred_columns[-1]
+            self.view = q(fkey.ref_table_alias) + '.' + q(fkey.referred_columns[-1])
 
             if ref_tbl.is_hidden() is False and ref_tbl.type != 'list':
                 self.expandable = True
@@ -211,7 +215,8 @@ class Field:
                 if index.columns != ref_tbl.pkey.columns and index.unique:
                     # Only last pk column is used in display value,
                     # other pk columns are usually foreign keys
-                    cols = [f'{fkey.ref_table_alias}.{col}' for col in index.columns
+                    cols = [f'{q(fkey.ref_table_alias)}.{q(col)}'
+                            for col in index.columns
                             if col not in ref_tbl.pkey.columns[0:-1]]
                     if len(cols) == 1:
                         self.view = cols[0]

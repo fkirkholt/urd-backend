@@ -1,0 +1,71 @@
+pyodbc:
+    system:
+        sqlite:
+            string: "Database=%s"
+            params: [path]
+        duckdb:
+            string: "Database=%s"
+            params: [path]
+        mysql:
+            string: "Server=%s;Port=%s;Uid=%s;Pwd=%s;Database=%s"
+            params: [host, port, user, pass, dbname]
+        mariadb:
+            string: "Server=%s;Port=%s;Uid=%s;Pwd=%s;Database=%s"
+            params: [host, port, user, pass, dbname]
+        oracle:
+            string: "DBQ=%s:%s/%s;Uid=%s;Pwd=%s"
+            params: [host, port, sid, user, pass]
+        mssql:
+            string: "Server=%s\\%s;Port=%s;Uid=%s;Pwd=%s;Database=%s;Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes;"
+            params: [host, sid, port, user, pass, dbname]
+        postgresql:
+            string: "Server=%s;Port=%s;Uid=%s;Pwd=%s;Database=%s;"
+            params: [host, port, user, pass, dbname]
+            dbname: postgres  # default dbname
+    placeholder: '?'
+sqlite3:
+    system:
+        sqlite:
+            string: "%s"
+            params: [path]
+    placeholder: '?'
+sqlean:
+    system:
+        sqlite:
+            string: "%s"
+            params: [path]
+    placeholder: '?'
+duckdb:
+    system:
+        duckdb:
+            string: "%s"
+            params: [path]
+    placeholder: '?'
+mysql.connector:
+    system:
+        mysql:
+            string: "host=%s;port=%s;user=%s;password=%s"
+            params: [host, port, user, pass]
+        mariadb:
+            string: "host=%s;port=%s;user=%s;password=%s"
+            params: [host, port, user, pass]
+    placeholder: '%s'
+oracledb:
+    system:
+        oracle:
+            string: "host=%s;port=%s;service_name=%s;user=%s;password=%s;disable_oob=True"
+            params: [host, port, sid, user, pass]
+    placeholder: colon-prefixed
+pymssql:
+    system:
+        mssql:
+            string: "host=%s\\%s;port=%s;user=%s;password=%s;database=%s"
+            params: [host, sid, port, user, pass, dbname]
+    placeholder: '%s'
+psycopg2:
+    system:
+        postgresql:
+            string: "host=%s;port=%s;user=%s;password=%s;dbname=%s"
+            params: [host, port, user, pass, dbname]
+            dbname: postgres
+    placeholder: '%s'

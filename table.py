@@ -16,19 +16,21 @@ cfg = Settings()
 class Table:
     """Contains methods for getting metadata for table"""
 
-    def __init__(self, db, tbl_name, alias=None):
+    def __init__(self, db, tbl_name, type=None, comment=None, alias=None):
         self.db = db
         self.name = tbl_name
         self.label = db.get_label(tbl_name)
         self.view = tbl_name
+        self.main_type = type
+        self.comment = comment
         if tbl_name + '_view' in db.tablenames:
-            cols = self.db.refl.get_columns(tbl_name + '_view', self.db.schema)
+            cols = self.db.refl.columns(self.db.schema, tbl_name + '_view')
             colnames = [col['name'] for col in cols]
             if set(colnames) >= set(self.pkey.columns):
                 self.view = tbl_name + '_view'
         self.grid_view = self.view
         if tbl_name + '_grid' in db.tablenames:
-            cols = self.db.refl.get_columns(tbl_name + '_grid', self.db.schema)
+            cols = self.db.refl.columns(self.db.schema, tbl_name + '_grid')
             colnames = [col['name'] for col in cols]
             if set(colnames) >= set(self.pkey.columns):
                 self.grid_view = tbl_name + '_grid'
@@ -40,8 +42,6 @@ class Table:
 
         tbl_names = self.db.user.tables(self.db.cat, self.db.schema)
         view_names = self.db.refl.get_view_names(self.db.schema)
-
-        self.main_type = 'table' if self.name in (tbl_names) else 'view'
 
         hidden = self.name[0:1] == "_" or self.name == 'html_attributes'
 
@@ -67,11 +67,6 @@ class Table:
         if self.name + '_view' in view_names:
             view = self.name + '_view'
 
-        if self.db.engine.name == 'sqlite' or self.name not in self.db.comments:
-            comment = None
-        else:
-            comment = self.db.comments[self.name]
-
         return Dict({
             'name': self.name,
             'type': self.type,
@@ -81,7 +76,7 @@ class Table:
             'rowcount': (None if not self.db.config.update_cache
                          else self.rowcount),
             'pkey': self.pkey,
-            'description': comment,
+            'description': self.comment,
             'fkeys': self.fkeys,
             # Get more info about relations for cache, including use
             'relations': self.relations,
@@ -273,7 +268,7 @@ class Table:
         if self.db.pkeys_loaded:
             self._pkey = self.db.pkeys[self.name]
         else:
-            pkey = self.db.refl.get_pk_constraint(self.name, self.db.schema)
+            pkey = self.db.refl.pkeys(self.db.schema, self.name)
             self._pkey = Dict({
                 'table_name': self.name,
                 'name': pkey['name'] or 'PRIMARY',
@@ -305,7 +300,7 @@ class Table:
         if self.db.columns_loaded:
             self._columns = self.db.columns[self.name]
         else:
-            self._columns = self.db.refl.get_columns(self.name, self.db.schema)
+            self._columns = self.db.refl.columns(self.db.schema, self.name)
 
         return self._columns
 
@@ -509,20 +504,12 @@ class Table:
         if self.db.fkeys_loaded:
             self._fkeys = self.db.fkeys[self.name]
         else:
-            fkeys = self.db.refl.get_foreign_keys(self.name, self.db.schema)
+            fkeys = self.db.refl.fkeys(self.db.schema, fk_table=self.name)
 
             self._fkeys = Dict()
             for fkey in fkeys:
-                fkey, alias = format_fkey(fkey, self.db.cat, self.db.schema,
-                                          self.name, self.pkey)
-                fkey_col = fkey.constrained_columns[-1]
-                ref_col = fkey.referred_columns[-1].strip('_')
-                if fkey_col in [fkey.referred_table + '_' + ref_col,
-                                fkey.referred_columns[-1]]:
-                    ref_table_alias = fkey.referred_table
-                else:
-                    ref_table_alias = fkey_col.strip('_')
-                fkey.ref_table_alias = ref_table_alias
+                fkey, alias = format_fkey(fkey, self.pkey)
+                fkey.ref_table_alias = alias
                 self._fkeys[fkey.name] = fkey
 
     def init_fields(self):
@@ -537,18 +524,7 @@ class Table:
 
         # contents = None if not self.db.cache \
         #     else self.db.cache.contents
-
-        if not cfg.use_odbc and self.db.engine.name in ['sqlite', 'duckdb']:
-            # Must get native column types for sqlite, to find if
-            # there is a column defined as json
-            expr = Expression(self.db.engine.name)
-            sql = expr.columns(self.name)
-            with self.db.engine.connect() as cnxn:
-                sql, _ = prepare(sql)
-                rows = cnxn.execute(sql).fetchall()
-                cols = [to_rec(row) for row in rows]
-        else:
-            cols = self.db.refl.get_columns(self.name, self.db.schema)
+        cols = self.db.refl.columns(self.db.schema, self.name)
 
         for col in cols:
             col = Dict(col)
@@ -624,7 +600,7 @@ class Table:
         if self.db.indexes_loaded:
             self._indexes = self.db.indexes[self.name]
         else:
-            indexes = self.db.refl.get_indexes(self.name, self.db.schema)
+            indexes = self.db.refl.indexes(self.db.schema, self.name)
             self._indexes = Dict()
             for idx in indexes:
                 idx = Dict(idx)

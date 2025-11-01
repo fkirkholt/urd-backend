@@ -760,19 +760,19 @@ async def update_cache(base: str, config: str):
             dbo.create_html_attributes()
         tbl_count = len(dbo.tablenames)
         i = 0
-        for tbl_name in dbo.tablenames:
+        for tbl in dbo.refl.tables:
             i += 1
             progress = round(i/tbl_count * 100) 
-            data = json.dumps({'msg': tbl_name, 'progress': progress})
+            data = json.dumps({'msg': tbl.name, 'progress': progress})
             yield f"data: {data}\n\n"
 
-            if tbl_name[-5:] == '_view' and tbl_name[:-5] in dbo.tablenames:
+            if tbl.name[-5:] == '_view' and tbl.name[:-5] in dbo.tablenames:
                 continue
             if '_fts' in tbl_name:
                 continue
 
-            table = Table(dbo, tbl_name)
-            dbo.tables[tbl_name] = table.get()
+            table = Table(dbo, tbl.name, type=tbl.type, comment=tbl.comment)
+            dbo.tables[tbl.name] = table.get()
 
         dbo.get_contents()
         data = json.dumps({'msg': 'done'})

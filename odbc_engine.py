@@ -57,9 +57,9 @@ class ODBC_Engine:
             'database': path if cfg.system == 'sqlite' else db_name
         })
 
-    def connect(self, lowercase=False):
+    def connect(self):
         cnxn = pyodbc.connect(self.cnxnstr)
-        pyodbc.lowercase = lowercase
+        pyodbc.lowercase = True
         return cnxn
 
     def get_driver(self):

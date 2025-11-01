@@ -97,7 +97,7 @@ class Record:
                 db = Database(self._db.engine, base_name, self._db.user.name)
 
             tbl_rel = Table(db, rel.table_name)
-            columns = db.refl.get_columns(rel.table_name, db.schema)
+            columns = db.refl.columns(db.schema, rel.table_name)
             tbl_rel.cols = {col['name']: Dict(col) for col in columns}
 
             if rel.table_name not in self._db.tablenames:

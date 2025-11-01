@@ -34,8 +34,8 @@ class User:
         if hasattr(self, '_tbl_names'):
             return self._tbl_names
         cfg = Settings()
-        refl = Reflection(self.engine, cat) if type(self.engine) is ODBC_Engine else inspect(self.engine)
-        tbl_names = refl.get_table_names(schema)
+        refl = Reflection(self.engine, cat)
+        tbl_names = refl.tables(schema).keys()
         if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             db_path = self.engine.url.database
             db_name = self.engine.url.database.split(cfg.host)[1].lstrip('/')

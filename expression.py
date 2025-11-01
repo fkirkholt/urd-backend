@@ -135,6 +135,17 @@ class Expression:
             """
 
     def indexes(self):
+        if self.platform == 'sqlite':
+            return """
+            select c.name as index_name, m.name as table_name,
+                   case when c."unique" = 1 then 0 else 1 end as non_unique,
+                   i.name as column_name
+            from sqlite_master m
+            join pragma_index_list(m.name) c
+            join pragma_index_info(c.name) i
+            where c.origin = 'c'
+            order by c.name, i.seqno;
+            """
         if self.platform == 'oracle':
             return """
             select i.index_name as "index_name",
@@ -143,17 +154,25 @@ class Expression:
             i.table_name as "table_name"
             from all_indexes i
             join all_ind_columns col on col.index_name = i.index_name
-            where i.table_owner = ?
-                  and i.table_name = nvl(?, i.table_name) 
+            where i.table_owner = :schema
+                  and i.table_name = nvl(:table, i.table_name) 
                   and column_name not like '%$'
             order by column_position
+            """
+        elif self.platform == 'duckdb':
+            return """
+            select index_name, table_name, expressions as column_names,
+                   case when is_unique = 1 then 0 else 1 end as non_unique,
+            from duckdb_indexes()
+            where schema_name = :schema
+                  and table_name = coalesce(:table, table_name)
             """
         elif self.platform in ('mysql', 'mariadb'):
             return """
             select index_name, column_name, non_unique, table_name
             from information_schema.statistics
-            where table_schema = ?
-                  and table_name = coalesce(?, table_name)
+            where table_schema = :schema
+                  and table_name = coalesce(:table, table_name)
             order by index_name, seq_in_index;
             """
         elif self.platform == 'mssql':
@@ -172,8 +191,8 @@ class Expression:
             JOIN 
                 sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
             WHERE 
-                OBJECT_SCHEMA_NAME(i.object_id) = ?
-                and OBJECT_NAME(ic.object_id) = coalesce(?, OBJECT_NAME(ic.object_id))
+                OBJECT_SCHEMA_NAME(i.object_id) = :schema
+                and OBJECT_NAME(ic.object_id) = coalesce(:table, OBJECT_NAME(ic.object_id))
             ORDER BY 
                 table_name, index_name, ic.key_ordinal;
             """
@@ -181,6 +200,16 @@ class Expression:
             return None
 
     def pkeys(self):
+        if self.platform == 'sqlite':
+            return """
+            select concat(m.name, '_pkey') as pk_name, m.name as table_name,
+                   c.name as column_name 
+            from sqlite_master m
+            join pragma_table_info(m.name) c
+            where m.type = 'table'
+                  and c.pk = 1
+                  and m.name = coalesce(:table, m.name)
+            """
         if self.platform == 'oracle':
             return """
             SELECT cols.table_name, cols.column_name, cols.position as key_seq,
@@ -189,8 +218,8 @@ class Expression:
             WHERE cons.constraint_type = 'P'
             AND cons.constraint_name = cols.constraint_name
             AND cons.owner = cols.owner
-            AND cons.owner = ?
-            AND cols.table_name = nvl(?, cols.table_name)
+            AND cons.owner = :schema
+            AND cols.table_name = nvl(:table, cols.table_name)
             ORDER BY cols.table_name, cols.position;
             """
         elif self.platform in ('mysql', 'mariadb'):
@@ -202,8 +231,8 @@ class Expression:
               on c.table_schema = s.table_schema and
                  c.table_name = s.table_name and
                  c.column_name = s.column_name
-            where s.table_schema = ? and s.index_name = 'primary'
-              and s.table_name = coalesce(?, s.table_name)
+            where s.table_schema = :schema and s.index_name = 'primary'
+              and s.table_name = coalesce(:table, s.table_name)
             order by s.table_name, seq_in_index;
             """
         elif self.platform == 'mssql':
@@ -223,8 +252,8 @@ class Expression:
                 inner join sys.columns col
                     on pk.object_id = col.object_id
                     and col.column_id = ic.column_id
-            where schema_name(tab.schema_id) = ?
-              and tab.[name] = coalesce(?, tab.[name])
+            where schema_name(tab.schema_id) = :schema
+              and tab.[name] = coalesce(:table, tab.[name])
             order by
                 pk.[name],
                 ic.index_column_id
@@ -243,6 +272,21 @@ class Expression:
             return f"show index from {table_name} where Key_name = 'PRIMARY'"
 
     def fkeys(self):
+        if self.platform == 'sqlite':
+            return """
+            select concat(m.name, '_fk_', p.id) as fk_name,
+                   m.name as fktable_name,
+                   p."from" as fkcolumn_name,
+                   p."table" as pktable_name,
+                   p."to" as pkcolumn_name,
+                   p.on_update as update_rule,
+                   p.on_delete as delete_rule
+            from sqlite_master m
+            join pragma_foreign_key_list(m.name) p on m.name != p."table"
+            where m.type = 'table'
+                  and m.name = coalesce(:table, m.name)
+            order by m.name
+            """
         if self.platform in ('mysql', 'mariadb'):
             return """
             SELECT kcu.constraint_name as fk_name,
@@ -255,8 +299,8 @@ class Expression:
             FROM INFORMATION_SCHEMA.key_column_usage kcu
             JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
                  on kcu.constraint_name = rc.constraint_name
-            WHERE kcu.referenced_table_schema = ?
-                  and kcu.table_name = coalesce(?, kcu.table_name)
+            WHERE kcu.referenced_table_schema = :schema
+                  and kcu.table_name = coalesce(:table, kcu.table_name)
             AND kcu.referenced_table_name IS NOT NULL
             ORDER BY kcu.table_name, kcu.ordinal_position
             """
@@ -282,8 +326,8 @@ class Expression:
                 AND ra.constraint_name = c_pk.constraint_name
                 AND ra.position = a.position
             WHERE c.constraint_type = 'R'
-                  AND a.owner = ?
-                  AND a.table_name = nvl(?, a.table_name)
+                  AND a.owner = :schema
+                  AND a.table_name = nvl(:table, a.table_name)
             ORDER BY a.position
             """
         elif self.platform == 'postgresql':
@@ -327,8 +371,8 @@ class Expression:
                     join pg_constraint con1 on con1.conrelid = cl.oid
                 where
                     con1.contype = 'f'
-                    and ns.nspname = ?
-                    and cl.relname = coalesce(?, cl.relname)
+                    and ns.nspname = :schema
+                    and cl.relname = coalesce(:table, cl.relname)
 
             ) con
             join pg_attribute att on
@@ -370,22 +414,44 @@ class Expression:
                         AND C2.CONSTRAINT_NAME = KCU2.CONSTRAINT_NAME
                         AND KCU.ORDINAL_POSITION = KCU2.ORDINAL_POSITION
             WHERE  C.CONSTRAINT_TYPE = 'FOREIGN KEY'
-                   AND C.TABLE_SCHEMA = ?
-                   AND C.TABLE_NAME = coalesce(?, C.TABLE_NAME) 
+                   AND C.TABLE_SCHEMA = :schema
+                   AND C.TABLE_NAME = coalesce(:table, C.TABLE_NAME) 
             """
         else:
             return None
 
     def columns(self, tbl_name=None):
-        if self.platform == 'oracle':
+        if self.platform == 'sqlite':
+            return"""
+            select m.name as table_name,
+                   c.name as column_name,
+                   c.type as type_name,
+                   c.dflt_value as column_def,
+                   null as column_size,
+                   case c."notnull" when 0 then 1 else 0 end as nullable
+            from sqlite_master m
+            join pragma_table_info(m.name) c
+            where m.type = 'table'
+                  and m.name = coalesce(:table, m.name)
+            order by m.name
+            """
+        elif self.platform == 'duckdb':
+            return """
+            select table_name, column_name, is_nullable as nullable,
+                   column_default as column_def, data_type as type_name
+            from duckdb_columns
+            where schema_name = 'main'
+                  and table_name = coalesce(:table, table_name)
+            """
+        elif self.platform == 'oracle':
             return """
             select  table_name as "table_name",
                     column_name as "column_name",
                     data_type as "type_name", data_length as "column_size",
                     case nullable when 'Y' then 1 else 0 end as "nullable"
             from all_tab_columns
-            where owner = ?
-                  and table_name = nvl(?, table_name)
+            where owner = :schema
+                  and table_name = nvl(:table, table_name)
             order by table_name, column_id
             """
         elif self.platform == 'mssql':
@@ -398,7 +464,7 @@ class Expression:
                    numeric_scale as decimal_digits,
                    column_default as column_def
             from   information_schema.columns
-            where  table_schema = ? and table_name = coalesce(?, table_name) 
+            where  table_schema = :schema and table_name = coalesce(:table, table_name) 
             """
         elif tbl_name and self.platform == 'sqlite':
             return f"""
@@ -518,22 +584,26 @@ class Expression:
     def user_tables(self):
         if self.platform == 'sqlite':
             return """
-            SELECT name as table_name
+            SELECT name as table_name, type as table_type, null as remarks
             FROM   sqlite_master
-            WHERE  type IN ('table', 'view');
+            WHERE  type IN ('table', 'view')
+                   AND name = coalesce(:table, name)
             """
         elif self.platform == 'oracle':
             return """
-            SELECT object_name as table_name
+            SELECT object_name as table_name, object_type as table_type,
+                   null as remarks
             FROM   all_objects
             WHERE  object_type in ('TABLE', 'VIEW')
-                   AND owner = ?;
+                   AND owner = :schema;
+                   AND object_name = coalesce(:table, object_name)
             """
         else:
             return """
-            SELECT table_name
+            SELECT table_name, table_type, table_comment as remarks
             FROM   information_schema.tables
-            WHERE  table_schema = ?;
+            WHERE  table_schema = :schema;
+                   AND table_name =  coalesce(:table, table_name)
             """
 
     def table_privileges(self):
@@ -547,21 +617,29 @@ class Expression:
         else:
             return None
 
+    def view_names(self):
+        if self.platform == 'sqlite':
+            return """
+            SELECT name as table_name, type as table_type 
+            FROM sqlite_schema
+            WHERE type = 'view';
+            """
+
     def view_definition(self):
         if self.platform in ('mysql', 'mariadb'):
             return """
             SELECT  VIEW_DEFINITION
             FROM    INFORMATION_SCHEMA.VIEWS
-            WHERE   TABLE_SCHEMA    = ?
-            AND     TABLE_NAME      = ?;
+            WHERE   TABLE_SCHEMA    = :schema
+            AND     TABLE_NAME      = :table;
             """
         elif self.platform == 'oracle':
             return """
-            SELECT text FROM user_views where view_name = ?;
+            SELECT text FROM user_views where view_name = :table;
             """
         elif self.platform == 'sqlite':
             return """
-            select sql from sqlite_master where name = ?
+            select sql from sqlite_master where name = :table
             """
         else:
             return None

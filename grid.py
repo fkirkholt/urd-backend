@@ -230,7 +230,7 @@ class Grid:
         self._columns = []
         if self.tbl.name != self.tbl.grid_view:
             view = Table(self.db, self.tbl.grid_view)
-            cols = self.db.refl.get_columns(self.tbl.grid_view, self.db.schema)
+            cols = self.db.refl.columns(self.db.schema, self.tbl.grid_view)
             self._columns = [col['name'] for col in cols]
             for field_name, field in view.fields.items():
                 if field_name not in self.tbl.fields:

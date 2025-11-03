@@ -146,7 +146,7 @@ class Field:
             from_table = self._tbl.name
             pkey_col = self.name
             alias = self.name
-            select = f'distinct {pkey_col}'
+            select = f'count(distinct {pkey_col})'
 
         # Field that holds the value of the options
         value_field = f'{alias}.' + pkey_col

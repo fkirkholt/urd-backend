@@ -1170,6 +1170,8 @@ class Database:
                             if dialect == 'oracle' and i > 1:
                                 insert += ' union all\n'
                             rec = to_rec(row)
+                            if i != 1:
+                                insert += ','
                             insert += expr.insert_rec(table, rec) 
                             file.write(insert)
 

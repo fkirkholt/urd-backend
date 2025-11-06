@@ -126,7 +126,7 @@ class Column:
         urd_type = expr.to_urd_type(self.type)
         if urd_type == 'Decimal':
             size = str(self.precision)
-            size += "," + str(self.scale)
+            size += "," + (str(self.scale) if self.scale else '0')
         if type(self.type) is str:  # odbc engine
             datatype = Datatype(self.db.refl.expr.to_urd_type(self.type), size)
         else:

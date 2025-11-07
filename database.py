@@ -1047,7 +1047,11 @@ class Database:
             filepath = os.path.join(dest, f"{table}.{dialect}.sql")
             ordered_tables = [table]
         else:
-            filepath = os.path.join(dest, f"{self.identifier.lower()}.{dialect}.sql")
+            if self.engine.name in ('sqlite', 'duckdb'):
+                filename = f"{self.identifier.removesuffix('.db')}.{dialect}.sql"
+                filepath = os.path.join(dest, filename)
+            else:
+                filepath = os.path.join(dest, f"{self.schema.lower()}.{dialect}.sql")
             data = json.dumps({
                 'msg': 'Sorting tables',
                 'progress': 0,

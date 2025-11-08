@@ -434,7 +434,7 @@ class Expression:
 
         fkey = tbl.get_parent_fk()
         if fkey and self.platform in ['mysql', 'postgresql', 'sqlite']:
-            cols = tbl.db.refl.get_columns(self.name, self.db.schema)
+            cols = tbl.db.refl.get_columns(tbl.name, tbl.db.schema)
             colnames = []
             for col in cols:
                 colnames.append(col['name'])

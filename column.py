@@ -155,7 +155,9 @@ class Column:
                 default = default.split('ON UPDATE')[0]
             elif dialect == 'mysql' and default in ('CURRENT_DATE', 'CURRENT_USER'):
                 default = '(' + default + ')'
-            elif datatype == 'str':
+            elif dialect == 'mysql' and native_type == 'date' and default == 'CURRENT_TIMESTAMP':
+                default = '(CURRENT_DATE)'
+            elif datatype.type == 'str':
                 default = "'" + default + "'"
 
             coldef += " DEFAULT " + default

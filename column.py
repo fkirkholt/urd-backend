@@ -123,14 +123,14 @@ class Column:
         """Get column definition"""
         size = self.size if hasattr(self, 'size') else None
         expr = Expression(self.db.engine.name)
-        urd_type = expr.to_urd_type(self.type)
-        if urd_type == 'Decimal':
-            size = str(self.precision)
-            size += "," + (str(self.scale) if self.scale else '0')
         if type(self.type) is str:  # odbc engine
             datatype = Datatype(self.db.refl.expr.to_urd_type(self.type), size)
         else:
             datatype = Datatype(self.type.python_type.__name__, size)
+        if datatype.type == 'Decimal':
+            size = str(self.precision)
+            size += "," + (str(self.scale) if self.scale else '0')
+            datatype.size = size
         # Used to hold file path when exporting blobs as files
         if blob_to_varchar and datatype.type == 'bytes':
             native_type = 'varchar(200)'

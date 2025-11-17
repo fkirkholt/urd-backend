@@ -828,9 +828,8 @@ class Grid:
                     rel.order = len(rel_tbl.pkey.columns) - \
                         rel_tbl.pkey.columns.index(rel.constrained_columns[-1])
 
-                if rel_tbl.type == 'xref':
+                if rel_tbl.type == 'xref' and len(rel_tbl.pkey.columns):
                     # set label based on column names of fkey columns
-                    diff = set(rel_tbl.pkey.columns) - set(rel.constrained_columns)
                     diff = [col for col in rel_tbl.pkey.columns
                             if col not in rel.constrained_columns]
                     colname = list(diff)[-1]

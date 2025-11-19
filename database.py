@@ -1262,7 +1262,15 @@ class Database:
             blobcolumns = []
             selects = {}
             for col in table.columns:
-                col.datatype = expr.to_urd_type(col.type)
+                col = Dict(col)
+                if type(col.type) is str:  # odbc engine
+                    self.datatype = expr.to_urd_type(col.type) 
+                else:
+                    try:
+                        self.datatype = col.type.python_type.__name__
+                    except Exception:
+                        self.datatype = ('int' if str(col.type).startswith('YEAR')
+                                         else 'unknown')
                 if col.datatype == 'bytes' or (
                     clobs_as_files and col.datatype == 'str' and not col.size
                  ):

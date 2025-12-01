@@ -377,7 +377,7 @@ class User:
                 privs = [priv.strip() for priv in re.findall(expr, privs)]
                 obj = grant.group(2).replace('"', '').strip()
                 if obj == schema + '.*' or obj == '*.*':
-                    if 'all privileges' in privs:
+                    if 'super' in privs:
                         self._is_admin[schema] = True
         elif self.engine.name == 'postgresql':
             sql = "select usesuper from pg_user where usename = current_user;"

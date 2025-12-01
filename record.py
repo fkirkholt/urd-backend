@@ -5,7 +5,7 @@ from addict import Dict
 from datetime import datetime
 from column import Column
 from expression import Expression
-from util import to_rec
+from util import to_rec, log_caller
 
 
 class Record:

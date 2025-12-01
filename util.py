@@ -1,5 +1,6 @@
 import re
 import time
+import inspect
 from functools import wraps
 from sqlalchemy import text
 from settings import Settings
@@ -7,6 +8,7 @@ from addict import Dict
 
 
 cfg = Settings()
+indent = 2
 
 
 def time_func(func):
@@ -16,7 +18,7 @@ def time_func(func):
         result = func(*args, **kwargs)
         end = time.perf_counter()
         if (end - start) > 0.1:
-            print(f"{func.__name__} took {end - start:.6f} seconds")
+            print(f"{func.__module__}.{func.__name__} took {end - start:.6f} seconds")
         return result
     return wrapper
 
@@ -57,3 +59,27 @@ def format_fkey(fkey, pkey):
     return fkey, ref_table_alias
 
 
+def log_caller(func):
+    """A decorator to log the name of the caller function."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        global indent
+        # Get the call stack
+        stack = inspect.stack()
+        # The frame record at index 1 is the caller of the current wrapper function
+        caller_frame_record = stack[1]
+        # The fourth element of the frame record (index 3) is the function name
+        caller_name = caller_frame_record[3]
+        caller_file = caller_frame_record[1].split('/')[-1]
+        caller_lnr = caller_frame_record[2]
+        caller_ref = caller_file + ':' + str(caller_lnr)
+        
+        print(f"{'>' * indent} Function '{func.__name__}' was called by '{caller_name}' in '{caller_ref}' ---")
+        start = time.perf_counter()
+        indent += 2
+        result = func(*args, **kwargs)
+        indent -= 2
+        end = time.perf_counter()
+        print(f"{'<' * indent} Function '{func.__name__}' finished executing in {end - start:.6f} seconds ---")
+        return result
+    return wrapper

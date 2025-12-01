@@ -5,7 +5,7 @@ from record import Record
 from column import Column
 from field import Field
 from grid import Grid
-from util import to_rec, format_fkey
+from util import to_rec, format_fkey, time_func, log_caller
 from sqlglot import parse_one, exp
 from settings import Settings
 from expression import Expression

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from addict import Dict
-from util import to_rec
+from util import to_rec, log_caller
 from settings import Settings
 
 cfg = Settings()

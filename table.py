@@ -619,7 +619,8 @@ class Table:
     def init_relations(self):
         """Store Dict of 'has many' relations as attribute of table object"""
         table_name = self.name
-        if self.name in self.db.viewnames:
+        # TODO: Disabled for now
+        if self.name in self.db.viewnames and False:
             try:
                 view_def = (self.db.refl
                             .get_view_definition(self.name, self.db.schema))

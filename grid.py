@@ -729,9 +729,6 @@ class Grid:
                 field.hidden = True
                 continue
 
-            # Group by prefix
-            parts = field.name.split("_")
-
             # Don't add fields that start with _
             # They are treated as hidden fields
             if field.name.startswith('_'):
@@ -739,8 +736,10 @@ class Grid:
                 continue
 
             placed = False
-            for group in col_groups:
-                if field.name.startswith(group + '_'):
+            for group, items in col_groups.items():
+                if field.name in items:
+                    placed = True
+                elif field.name.startswith(group + '_'):
                     col_groups[group].append(field.name)
                     placed = True
 
@@ -748,15 +747,26 @@ class Grid:
                 continue
 
             group = None
-            for part in parts:
-                test_group = group + '_' + part if group else part
-                if (
-                    len(fields) > i and
-                    list(fields.keys())[i].startswith(test_group+'_')
-                ):
-                    group = test_group
-                elif group is None:
-                    group = part
+
+            for idx in self.tbl.indexes.values():
+                if idx.name.startswith(self.tbl.name + '_fieldset_'):
+                    start = len(self.tbl.name + '_fieldset_')
+                    if field.name in idx.columns:
+                        group = idx.name[start:]
+
+            if not group:
+                # Group by prefix
+                parts = field.name.split("_")
+
+                for part in parts:
+                    test_group = group + '_' + part if group else part
+                    if (
+                        len(fields) > i and
+                        list(fields.keys())[i].startswith(test_group+'_')
+                    ):
+                        group = test_group
+                    elif group is None:
+                        group = part
 
             if group not in col_groups:
                 col_groups[group] = []

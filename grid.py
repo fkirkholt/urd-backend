@@ -343,7 +343,7 @@ class Grid:
                 order += f"{tbl_name}.{sort_col} {sort.dir}, "
 
         if (len(self.tbl.pkey.columns) == 0 and len(sort_fields) == 0):
-            return ""
+            return "order by 1"
 
         if len(self.sort_columns) == 0:
             for field in self.tbl.pkey.columns:

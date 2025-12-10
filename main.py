@@ -756,7 +756,7 @@ async def update_cache(base: str, config: str):
 def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                no_fkeys: bool, list_recs: bool, data_recs: bool,
                select_recs: bool, view_as_table: bool, no_empty: bool, 
-               table: str = None, filter: str = None):
+               view_defs: bool, table: str = None, filter: str = None):
     """Create sql for exporting a database
 
     Parameters:
@@ -775,7 +775,8 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
 
     return StreamingResponse(dbo.export_sql(dest, dialect, table_defs, no_fkeys,
                                             list_recs, data_recs, select_recs,
-                                            view_as_table, no_empty, table, filter),
+                                            view_as_table, no_empty, view_defs,
+                                            table, filter),
                              media_type="text/event-stream")
 
 

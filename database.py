@@ -819,7 +819,7 @@ class Database:
     @time_stream_generator
     async def export_sql(self, dest, dialect, table_defs, no_fkeys, list_recs,
                          data_recs, select_recs, view_as_table, no_empty,
-                         table, filter):
+                         view_defs, table, filter):
         # Loads metadata so we don't have to load for each table
         self.pkeys
         self.fkeys
@@ -917,14 +917,13 @@ class Database:
             file.write("SET DEFINE OFF;\n")
             file.write("SET FEEDBACK OFF;\n")
             file.write("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';\n")
+        if view_defs and not view_as_table:
+            for view_name in views:
+                if dialect == 'oracle':
+                    ddl += f"drop view {view_name};\n"
+                else:
+                    ddl += f"drop view if exists {view_name};\n"
         if table_defs:
-            if dialect == self.engine.name:
-                for view_name in views:
-                    if dialect == 'oracle':
-                        ddl += f"drop view {view_name};\n"
-                    else:
-                        ddl += f"drop view if exists {view_name};\n"
-
             for tbl_name in reversed(ordered_tables):
                 if no_empty and count_recs[tbl_name] == 0:
                     continue
@@ -1030,7 +1029,7 @@ class Database:
 
                         file.write(';\n\n')
 
-        if table_defs and dialect == self.engine.name:
+        if view_defs and not view_as_table:
             i = 0
             for view_name in views:
                 if i == 0:
@@ -1043,6 +1042,8 @@ class Database:
                     view_def = f"-- ERROR: Couldn't get definition for view {view_name} "
                     print(e)
                 if view_def:
+                    if not view_def.lower().startswith('create view'):
+                        ddl += f'create view {view_name} as '
                     ddl += f'{view_def}; \n\n'
                 else:
                     ddl += f"-- View definition not supported for {self.engine.name} yet\n"

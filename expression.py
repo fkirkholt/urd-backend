@@ -709,6 +709,16 @@ class Expression:
             return """
             select sql from sqlite_master where name = :table_name
             """
+        elif self.dialect == 'mssql':
+            return """
+            select definition
+            from sys.objects obj
+            join sys.sql_modules m on m.object_id = obj.object_id
+            join sys.schemas on schemas.schema_id = obj.schema_id
+            where schemas.name = :schema_name
+              and obj.name = :table_name
+              and obj.type = 'V';
+            """
         else:
             return None
 

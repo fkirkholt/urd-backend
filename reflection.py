@@ -267,16 +267,10 @@ class Reflection:
         view_def = None
         with self.engine.connect() as cnxn:
             crsr = cnxn.cursor()
-            if self.engine.name in ['oracle', 'sqlite']:
-                crsr.execute(sql, tbl_name)
-                view_def = crsr.fetchone()[0]
-            elif sql:
+            if sql:
                 params = {'schema_name': schema, 'table_name': tbl_name}
                 sql, params = self.expr.prepare(sql, params)
                 crsr.execute(sql, params)
                 view_def = crsr.fetchone()[0]
-
-        if self.engine.name == 'oracle':
-            view_def = 'create view ' + tbl_name + ' as\n' + view_def
 
         return view_def

@@ -141,13 +141,19 @@ class Expression:
             return None
 
     def schemata(self):
-        if self.dialect == 'postgresql':
+        if self.dialect == 'sqlite':
+            return """
+            select name from pragma_database_list
+            """
+        elif self.dialect == 'postgresql':
             return """
             select schema_name
             from information_schema.schemata
             where schema_name != 'information_schema'
               and schema_name not like 'pg_%'
             """
+        else:
+            return None
 
     def indexes(self):
         if self.dialect == 'sqlite':

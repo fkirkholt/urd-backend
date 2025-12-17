@@ -19,17 +19,8 @@ class Reflection:
             return self._schema_names
         self._schema_names = []
 
-        if self.engine.name == 'sqlite':
-            sql = "PRAGMA database_list"
-            with self.engine.connect() as cnxn:
-                crsr = cnxn.cursor()
-                crsr.execute(sql)
-                rows = crsr.fetchall()
-                for row in rows:
-                    self._schema_names.append(row[1])
-
-        if self.engine.name == 'postgresql':
-            sql = self.expr.schemata()
+        sql = self.expr.schemata()
+        if sql:
             with self.engine.connect() as cnxn:
                 crsr = cnxn.cursor()
                 crsr.execute(sql)

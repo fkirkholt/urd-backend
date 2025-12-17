@@ -804,6 +804,8 @@ def export_tsv(base: str, tables: str, dest: str, clobs_as_files: bool,
         tempdir = tempfile.TemporaryDirectory()
         dest = tempdir.name
     else:
+        if cfg.system in ['sqlite', 'duckdb']:
+            dest = os.path.join(cfg.host, dest)
         if not os.path.exists(dest):
             os.makedirs(dest)
 

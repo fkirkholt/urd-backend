@@ -78,6 +78,29 @@ class Expression:
 
         return sql
 
+    def column(self, col):
+        """Get select expression for column in grid"""
+        col.ref = f'{self.quote(col.tbl)}.{self.quote(col.name)}'
+
+        if 'view' in col:
+            select = col.view
+        elif col.element == 'textarea':
+            if self.db.engine.name == 'mssql':
+                select = "substring(" + col.ref + ', 1, 255)'
+            else:
+                select = "substr(" + col.ref + ', 1, 255)'
+        elif col.datatype == 'geometry':
+            select = f'{col.ref}.ToString()'
+        elif col.datatype == 'date' and self.dialect == 'oracle':
+            select = f"""
+                case when to_char({col.ref}, 'YYYY-MM-DD') = '0000-00-00' then NULL
+                else {col.ref} end
+            """
+        else:
+            select = col.ref
+
+        return select
+
     def databases(self, schema=None):
         if self.dialect == 'sqlite' and schema == 'urdr':
             # For selecting from `urdr.database_`

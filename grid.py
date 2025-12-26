@@ -24,27 +24,6 @@ class Grid:
         self.access_check = False
         self.is_relation = False
 
-    def get_select_expression(self, col):
-        """Get select expression for column in grid"""
-        q = Expression(self.db.engine).quote
-        select = ''
-
-        col.ref = f'{q(self.tbl.grid_view)}.{q(col.name)}'
-
-        if 'view' in col:
-            select = col.view
-        elif col.element == 'textarea':
-            if self.db.engine.name == 'mssql':
-                select = "substring(" + col.ref + ', 1, 255)'
-            else:
-                select = "substr(" + col.ref + ', 1, 255)'
-        elif col.datatype == 'geometry':
-            select = f'{col.ref}.ToString()'
-        else:
-            select = col.ref
-
-        return select
-
     def get(self, pkey_vals=None):
         """Return all metadata and data to display grid"""
 
@@ -104,7 +83,8 @@ class Grid:
         # Uses grid_columns from view if exists
         for colname in self.columns:
             col = self.tbl.fields[colname]
-            selects[colname] = self.get_select_expression(col)
+            col.tbl = self.tbl.grid_view 
+            selects[colname] = self.db.expr.column(col)
 
         display_values = self.get_display_values(selects)
 
@@ -357,17 +337,13 @@ class Grid:
         """Return values for columns in grid"""
         q = Expression(self.db.engine).quote
         cols = []
-        for key in selects.keys():
+        for key, value in selects.items():
             field = self.tbl.fields[key]
             if (
                 (key in self.tbl.fields or key == 'rowid') and
                 'source' not in field
             ):
-                view = self.tbl.grid_view
-                if field.datatype == 'geometry':
-                    cols.append(f'{q(view)}.{q(key)}.ToString() as {q(key)}')
-                else:
-                    cols.append(f'{q(view)}.{q(key)}')
+                cols.append(f'{value} as {q(key)}')
 
         sql = ''
         if self.access_check:
@@ -437,7 +413,8 @@ class Grid:
 
         alias_selects = {}
         for key, value in selects.items():
-            alias_selects[key] = f'{value} as {q(key)}'
+            field = self.tbl.fields[key]
+            alias_selects[key] = f'{field.view or value} as {q(key)}'
         select = ', '.join(alias_selects.values())
 
         sql = ''

@@ -1040,7 +1040,7 @@ class Database:
                 try:
                     # Fails in mssql if user hasn't got permission VIEW DEFINITION
                     view_def = self.refl.get_view_definition(view_name, self.schema)
-                    view_def = view_def.replace('\r\n', '\n').rstrip(';')
+                    view_def = view_def.replace('\r\n', '\n').rstrip('\n;')
                 except Exception as e:
                     view_def = f"-- ERROR: Couldn't get definition for view {view_name} "
                     print(e)

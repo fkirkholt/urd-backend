@@ -942,92 +942,94 @@ class Database:
         last_progress = 0
         i = 0
         expr = Expression(Dict({'name': dialect, 'driver_name': None}))
-        for tbl_name in ordered_tables:
-            i += 1
 
-            if no_empty and count_recs[tbl_name] == 0:
-                continue
-            if tbl_name is None:
-                continue
-            if tbl_name == 'sqlite_sequence':
-                continue
-            if '_fts' in tbl_name:
-                continue
-            table = Table(self, tbl_name)
-            if table_defs:
-                file.write(table.export_ddl(dialect, no_fkeys, no_empty, count_recs))
-                file.write(table.get_indexes_ddl())
+        if table_defs:
+            for tbl_name in ordered_tables:
+                i += 1
 
-            if (
-                (table.type == 'list' and not list_recs) or
-                (table.type != 'list' and not data_recs)
-            ):
-                progress = '{:.1f}'.format(round(i/len(ordered_tables) * 100, 1))
-                if progress != last_progress:
-                    data = json.dumps({
-                        'msg': (table.name[:17] + "..." if len(table.name) > 17
-                                else table.name),
-                        'progress': progress
-                    })
-                    yield f"data: {data}\n\n"
-                    last_progress = progress
-                continue
+                if no_empty and count_recs[tbl_name] == 0:
+                    continue
+                if tbl_name is None:
+                    continue
+                if tbl_name == 'sqlite_sequence':
+                    continue
+                if '_fts' in tbl_name:
+                    continue
+                table = Table(self, tbl_name)
+                if table_defs:
+                    file.write(table.export_ddl(dialect, no_fkeys, no_empty, count_recs))
+                    file.write(table.get_indexes_ddl())
 
-            if dialect == 'oracle':
-                file.write(f'prompt inserts into {table.name}\n')
-            if select_recs:
-                file.write(f'insert into {table.name}\n')
-                file.write(f'select * from {self.schema}.{table.name};\n')
-            else:
-                params = []
-                join = ''
-                cond = None
-                if filter:
-                    grid = Grid(self)
-                    grid.set_search_cond(filter)
-                    cond = grid.get_cond_expr()
-                    params = grid.cond.params
-                sql = expr.rows(table, cond)
-                with self.engine.connect() as cnxn:
-                    sql, params = self.expr.prepare(sql, params)
-                    crsr = cnxn.cursor()
-                    crsr.execute(sql, params)
-                    
-                    # Insert time grows exponentially with number of inserts
-                    # per `insert all` in Oracle after a certain value.
-                    # This value is around 50 for version 19c
-                    max = 50 if dialect == 'oracle' else 1000;
+                if (
+                    (table.type == 'list' and not list_recs) or
+                    (table.type != 'list' and not data_recs)
+                ):
+                    progress = '{:.1f}'.format(round(i/len(ordered_tables) * 100, 1))
+                    if progress != last_progress:
+                        data = json.dumps({
+                            'msg': (table.name[:17] + "..." if len(table.name) > 17
+                                    else table.name),
+                            'progress': progress
+                        })
+                        yield f"data: {data}\n\n"
+                        last_progress = progress
+                    continue
 
-                    while True:
-                        rows = crsr.fetchmany(max)
-                        if not rows:
-                            break
+                if dialect == 'oracle':
+                    file.write(f'prompt inserts into {table.name}\n')
+                if select_recs:
+                    file.write(f'insert into {table.name}\n')
+                    file.write(f'select * from {self.schema}.{table.name};\n')
+                else:
+                    params = []
+                    join = ''
+                    cond = None
+                    if filter:
+                        grid = Grid(self)
+                        grid.set_search_cond(filter)
+                        cond = grid.get_cond_expr()
+                        params = grid.cond.params
+                    sql = expr.rows(table, cond)
+                    with self.engine.connect() as cnxn:
+                        sql, params = self.expr.prepare(sql, params)
+                        crsr = cnxn.cursor()
+                        crsr.execute(sql, params)
+                        
+                        # Insert time grows exponentially with number of inserts
+                        # per `insert all` in Oracle after a certain value.
+                        # This value is around 50 for version 19c
+                        max = 50 if dialect == 'oracle' else 1000;
 
-                        # rowcount = len(rows)
-                        i = 0
-                        if dialect == 'oracle':
-                            insert = f'insert into {table.name}\n'
-                        else:
-                            insert = f'insert into {table.name} values '
-                        file.write(insert)
-                        for row in rows:
-                            progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
-                            if progress != last_progress:
-                                data = json.dumps({'msg': table.name, 'progress': progress})
-                                yield f"data: {data}\n\n"
-                                last_progress = progress
-                            i += 1
-                            count += 1
-                            insert = ''
-                            if dialect == 'oracle' and i > 1:
-                                insert += ' union all\n'
-                            rec = to_rec(row, crsr)
-                            if i != 1 and dialect != 'oracle':
-                                insert += ','
-                            insert += expr.insert_rec(table, rec) 
+                        while True:
+                            rows = crsr.fetchmany(max)
+                            if not rows:
+                                break
+
+                            # rowcount = len(rows)
+                            i = 0
+                            if dialect == 'oracle':
+                                insert = f'insert into {table.name}\n'
+                            else:
+                                insert = f'insert into {table.name} values '
                             file.write(insert)
+                            for row in rows:
+                                progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
+                                if progress != last_progress:
+                                    data = json.dumps({'msg': table.name, 'progress': progress})
+                                    yield f"data: {data}\n\n"
+                                    last_progress = progress
+                                i += 1
+                                count += 1
+                                insert = ''
+                                if dialect == 'oracle' and i > 1:
+                                    insert += ' union all\n'
+                                rec = to_rec(row, crsr)
+                                if i != 1 and dialect != 'oracle':
+                                    insert += ','
+                                insert += expr.insert_rec(table, rec) 
+                                file.write(insert)
 
-                        file.write(';\n\n')
+                            file.write(';\n\n')
 
         if view_defs and not view_as_table:
             i = 0

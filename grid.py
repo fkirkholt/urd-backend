@@ -304,7 +304,6 @@ class Grid:
 
         q = Expression(self.db.engine).quote
         order = "order by "
-        sort_fields = Dict()
         for alias, sort in self.sort_columns.items():
             if alias == 'rank':
                 tbl_name = 'fts'
@@ -322,7 +321,7 @@ class Grid:
                 sort_col = sort.col
                 order += f"{tbl_name}.{sort_col} {sort.dir}, "
 
-        if (len(self.tbl.pkey.columns) == 0 and len(sort_fields) == 0):
+        if (len(self.tbl.pkey.columns) == 0 and len(self.sort_columns) == 0):
             return "order by 1"
 
         if len(self.sort_columns) == 0:

@@ -104,8 +104,8 @@ class Table:
             self._type = self.db.cache.tables[self.name].type
             return self._type
 
-        if not hasattr(self, 'main_type'):
-            tbl_names = self.db.refl.get_table_names(self.db.schema)
+        if self.main_type is None:
+            tbl_names = self.db.tablenames
             self.main_type = 'table' if self.name in tbl_names else 'view'
 
         if self.main_type == 'view':

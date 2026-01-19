@@ -525,7 +525,7 @@ class Expression:
                    case c."notnull" when 0 then 1 else 0 end as nullable
             from sqlite_master m
             join pragma_table_info(m.name) c
-            where m.type = 'table'
+            where m.type in ('table', 'view')
                   and m.name = coalesce(:table_name, m.name)
             order by m.name
             """

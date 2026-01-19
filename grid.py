@@ -649,6 +649,11 @@ class Grid:
                 value = parts[2].replace("*", "%")
                 mark = field_expr.replace('.', '_').replace('__', '_')
 
+                if operator == '=' and '%' in value:
+                    operator = 'LIKE'
+                elif operator == '!=' and '%' in value:
+                    operator = 'NOT LIKE'
+
                 if (
                     value and (
                         (field and field.datatype in ['int', 'Decimal']) or

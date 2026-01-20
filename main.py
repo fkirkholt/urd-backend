@@ -865,12 +865,8 @@ def convert(base: str, table: str, from_format: str, to_format: str,
 def query(base: str, sql: str, limit: str):
     engine = get_engine(cfg, base)
     dbo = Database(engine, base, cfg.uid)
-    if not hasattr(app.state, 'cnxn'):
-        app.state.cnxn = dict()
-    if base not in app.state.cnxn:
-        app.state.cnxn[base] = engine.connect()
     limit = 0 if not limit else int(limit)
-    result = dbo.query_result(sql, limit, app.state.cnxn[base])
+    result = dbo.query_result(sql, limit)
 
     return {'result': result}
 

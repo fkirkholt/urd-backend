@@ -739,7 +739,7 @@ class Database:
                     procedures[rec.name] += rec.text
         return procedures
 
-    def query_result(self, sql, limit, cnxn):
+    def query_result(self, sql, limit):
         """Get query result for user defined sql"""
         query = Dict()
         sql = sql.strip()
@@ -748,71 +748,72 @@ class Database:
             return None
         t1 = time.time()
         sql, _ = self.expr.prepare(sql)
-        crsr = cnxn.cursor()
-        if type(self.engine) is ODBC_Engine:
-            try:
-                crsr.execute(sql)
-            except pyodbc.Error as ex:
-                sqlstate = ex.args[1]
-                sqlstate = sqlstate.replace('[HY000]', '')
-                sqlstate = sqlstate.replace('[SQLite]', '')
-                sqlstate = sqlstate.replace('(1)', '')
-                sqlstate = sqlstate.replace('(SQLExecDirectW)', '')
-                query.time = round(time.time() - t1, 4)
-                query.success = False
-                query.result = 'ERROR: ' + sqlstate.strip()
+        with self.engine.connect() as cnxn:
+            crsr = cnxn.cursor()
+            if type(self.engine) is ODBC_Engine:
+                try:
+                    crsr.execute(sql)
+                except pyodbc.Error as ex:
+                    sqlstate = ex.args[1]
+                    sqlstate = sqlstate.replace('[HY000]', '')
+                    sqlstate = sqlstate.replace('[SQLite]', '')
+                    sqlstate = sqlstate.replace('(1)', '')
+                    sqlstate = sqlstate.replace('(SQLExecDirectW)', '')
+                    query.time = round(time.time() - t1, 4)
+                    query.success = False
+                    query.result = 'ERROR: ' + sqlstate.strip()
 
-                return query
-        else:
-            cwd = os.getcwd()
-            folder = Path(self.engine.url.database).parent
-            os.chdir(folder)
-
-            try:
-                crsr.execute(sql)
-            except Exception as ex:
-                os.chdir(cwd)
-                query.time = round(time.time() - t1, 4)
-                query.success = False
-                query.result = 'ERROR: {}'.format(ex)
-
-                return query
-
-            os.chdir(cwd)
-        query.success = True
-        query.time = round(time.time() - t1, 4)
-
-        if type(self.engine) is ODBC_Engine or True:
-            returns_rows = crsr.description
-        else:
-            returns_rows = crsr.returns_rows
-
-        if returns_rows:
-            if limit:
-                rows = crsr.fetchmany(limit)
+                    return query
             else:
-                rows = crsr.fetchall()
+                cwd = os.getcwd()
+                folder = Path(self.engine.url.database).parent
+                os.chdir(folder)
 
-            query.data = [to_rec(row, crsr) for row in rows]
-            # Find the table selected from
-            query.table = str(sqlglot.parse_one(query.string)
-                              .find(sqlglot.exp.Table))
+                try:
+                    crsr.execute(sql)
+                except Exception as ex:
+                    os.chdir(cwd)
+                    query.time = round(time.time() - t1, 4)
+                    query.success = False
+                    query.result = 'ERROR: {}'.format(ex)
 
-            # Get table name in correct case
-            tbl_names = self.refl.tables(self.schema).keys()
+                    return query
 
-            for tbl_name in tbl_names:
-                if tbl_name.lower() == query.table.lower():
-                    query.table = tbl_name
-                    break
+                os.chdir(cwd)
+            query.success = True
+            query.time = round(time.time() - t1, 4)
 
-        else:
-            rowcount = crsr.rowcount
+            if type(self.engine) is ODBC_Engine or True:
+                returns_rows = crsr.description
+            else:
+                returns_rows = crsr.returns_rows
 
-            query.rowcount = rowcount
-            query.result = f"Query OK, {rowcount} rows affected"
+            if returns_rows:
+                if limit:
+                    rows = crsr.fetchmany(limit)
+                else:
+                    rows = crsr.fetchall()
 
-        cnxn.commit()
+                query.data = [to_rec(row, crsr) for row in rows]
+                # Find the table selected from
+                query.table = str(sqlglot.parse_one(query.string)
+                                  .find(sqlglot.exp.Table))
+
+                # Get table name in correct case
+                tbl_names = self.refl.tables(self.schema).keys()
+
+                for tbl_name in tbl_names:
+                    if tbl_name.lower() == query.table.lower():
+                        query.table = tbl_name
+                        break
+
+            else:
+                rowcount = crsr.rowcount
+
+                query.rowcount = rowcount
+                query.result = f"Query OK, {rowcount} rows affected"
+
+            cnxn.commit()
 
         return query
 

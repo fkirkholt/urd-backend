@@ -243,7 +243,10 @@ class Reflection:
                 if 'column_names' not in indexes[rec.table_name][name]:
                     indexes[rec.table_name][name].column_names = []
                 if 'column_name' in rec:
-                    indexes[rec.table_name][name].column_names.append(rec.column_name)
+                    idx = indexes[rec.table_name][name]
+                    idx.column_names.append(rec.column_name)
+                    if 'direction' in rec:
+                        idx.column_sorting[rec.column_name] = rec.direction
 
         all_indexes = Dict()
         for tbl_name in indexes:

@@ -532,7 +532,7 @@ class Grid:
 
         self._sort_columns = Dict()
         for idx, col in enumerate(columns):
-            dir = 'ASC' if col not in direction else direction[col][0]
+            dir = 'ASC' if col not in direction else direction[col]
             sort = Dict({'col': col, 'dir': dir, 'idx': idx})
             self._sort_columns[sort.col] = sort
 

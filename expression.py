@@ -183,11 +183,15 @@ class Expression:
             return """
             select c.name as index_name, m.name as table_name,
                    case when c."unique" = 1 then 0 else 1 end as non_unique,
-                   i.name as column_name
+                   i.name as column_name,
+                   CASE i.desc
+                       WHEN 0 THEN 'ASC'
+                       WHEN 1 THEN 'DESC'
+                   END AS direction
             from sqlite_master m
             join pragma_index_list(m.name) c
-            join pragma_index_info(c.name) i
-            where c.origin = 'c'
+            join pragma_index_xinfo(c.name) i
+            where c.origin = 'c' and i.name is not null 
             order by c.name, i.seqno;
             """
         elif self.dialect == 'postgresql':

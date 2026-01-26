@@ -108,9 +108,9 @@ class Reflection:
                 col.type = rec.type_name
                 col.nullable = rec.nullable
                 col.default = rec.column_def
-                col.size = rec.column_size if 'column_size' in rec else None
+                col.size = int(rec.column_size) if 'column_size' in rec else None
                 col.precision = col.size
-                col.scale = rec.decimal_digits if 'decimal_digits' in rec else None
+                col.scale = int(rec.decimal_digits) if 'decimal_digits' in rec else None
                 if rec.table_name not in self._columns:
                     self._columns[rec.table_name] = []
                 self._columns[rec.table_name].append(col)

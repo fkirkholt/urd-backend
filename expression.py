@@ -45,7 +45,9 @@ class Expression:
 
         if re.search("json", type_):
             return "json"
-        elif re.search("char|text|clob|xml|sysname|uniqueidentifier", type_):
+        elif re.search("blob|image|long raw|binary", type_):
+            return "bytes"
+        elif re.search("char|text|clob|long|xml|sysname|uniqueidentifier", type_):
             return "str"
         elif re.search("bool|bit|tinyint", type_):
             return "bool"
@@ -57,8 +59,6 @@ class Expression:
             return "float"
         elif re.search("date|time", type_):
             return "date"
-        elif re.search("blob|image|binary", type_):
-            return "bytes"
         elif type_ == "geometry":
             return "geometry"
         elif type_ == "":

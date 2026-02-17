@@ -1117,16 +1117,17 @@ class Database:
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             blobcolumns = []
             selects = {}
-            for col in table.columns:
+            for idx, col in enumerate(table.columns):
                 col = Dict(col)
                 if type(col.type) is str:  # odbc engine
-                    self.datatype = expr.to_urd_type(col.type) 
+                    col.datatype = expr.to_urd_type(col.type) 
                 else:
                     try:
-                        self.datatype = col.type.python_type.__name__
+                        col.datatype = col.type.python_type.__name__
                     except Exception:
-                        self.datatype = ('int' if str(col.type).startswith('YEAR')
+                        col.datatype = ('int' if str(col.type).startswith('YEAR')
                                          else 'unknown')
+                table.columns[idx] = col
                 if col.datatype == 'bytes' or (
                     clobs_as_files and col.datatype == 'str' and not col.size
                  ):
@@ -1151,12 +1152,12 @@ class Database:
                 crsr = cnxn.cursor()
                 try:
                     crsr.execute(sql, params)
-                    rows = crsr.fetchall()
                 except Exception as e:
                     print(e)
                     print(sql)
                 n = 0
-                for row in rows:
+                num_files = 0
+                for row in crsr:
                     progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
                     if progress != last_progress:
                         data = json.dumps({'msg': table.name, 'progress': progress})
@@ -1170,7 +1171,6 @@ class Database:
                     if n == 1:
                         file.write('\t'.join(rec.keys()) + '\n')
                     values = []
-                    num_files = 0
                     for colname, val in rec.items():
                         if colname in blobcolumns:
                             num_files += 1
@@ -1191,7 +1191,7 @@ class Database:
                                         col = tbl_col
                                         break
 
-                                mode = 'wb' if col.datatype == 'bytes' else 'w' 
+                                mode = 'wb' if col.datatype == 'bytes' else 'w'
                                 with open(path, mode) as blobfile:
                                     blobfile.write(val)
                                 val = 'documents/' + foldername + '/' + filename

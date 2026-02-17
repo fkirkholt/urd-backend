@@ -85,7 +85,7 @@ class Expression:
         if 'view' in col:
             select = col.view
         elif col.element == 'textarea':
-            if self.db.engine.name == 'mssql':
+            if self.dialect == 'mssql':
                 select = "substring(" + col.ref + ', 1, 255)'
             else:
                 select = "substr(" + col.ref + ', 1, 255)'

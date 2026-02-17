@@ -544,7 +544,7 @@ class Expression:
         elif self.dialect == 'oracle':
             return """
             select  table_name, column_name,
-                    data_type as type_name, data_length as column_size,
+                    data_type as type_name, cast(data_length as integer) as column_size,
                     case nullable when 'Y' then 1 else 0 end as nullable,
                     data_default as column_def
             from all_tab_columns

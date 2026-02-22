@@ -60,7 +60,7 @@ def get_engine(cfg, db_name=None):
         print(ex)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication"
+            detail=str(ex)
         )
 
     if cfg.system == 'sqlite' and db_name == 'urdr':

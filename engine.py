@@ -71,5 +71,9 @@ class Engine:
             cnxn = self.driver_module.connect(**self.connect_params)
         else:
             cnxn = self.driver_module.connect(self.cnxnstr)
+        driver = Dict(drivers[self.driver_name])
+        if driver.system[self.name].query:
+            cnxn.execute(driver.system[self.name].query)
+
         return cnxn
 

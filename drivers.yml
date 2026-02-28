@@ -1,7 +1,7 @@
 pyodbc:
     system:
         sqlite:
-            string: "Database=%s"
+            string: "Database=%s;FKSupport=1;"
             params: [path]
         duckdb:
             string: "Database=%s"
@@ -28,12 +28,14 @@ sqlite3:
         sqlite:
             string: "%s"
             params: [path]
+            query: 'PRAGMA foreign_keys = ON'
     placeholder: '?'
 sqlean:
     system:
         sqlite:
             string: "%s"
             params: [path]
+            query: 'PRAGMA foreign_keys = ON'
     placeholder: '?'
 duckdb:
     system:

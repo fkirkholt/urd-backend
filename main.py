@@ -635,7 +635,7 @@ def delete_record(base: str, table: str, pkey: str):
     pkey = json.loads(pkey)
     record = Record(dbo, tbl, pkey)
 
-    return {'result', record.delete()}
+    return {'result': record.delete()}
 
 
 @app.get("/record")

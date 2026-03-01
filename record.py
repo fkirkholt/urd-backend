@@ -497,8 +497,14 @@ class Record:
 
         with self._db.engine.connect() as cnxn:
             sql, params = self._db.expr.prepare(sql, self.pkey)
-            crsr = cnxn.cursor()
-            crsr.execute(sql, params)
-            cnxn.commit()
+            try:
+                crsr = cnxn.cursor()
+                crsr.execute(sql, params)
+                cnxn.commit()
+                return 'success'
+            except Exception as e:
+                if 'FOREIGN KEY constraint failed' in str(e):
+                    return "Couldn't delete: The record is used in another table"
+                else:
+                    return "Couldn't delete: " + str(e)
 
-        return 1

@@ -36,7 +36,7 @@ class Column:
         elif type(col.type) is str and col.type == 'VARCHAR':
             # Set size of 'VARCHAR' columns in DuckDB, which doesn't
             # register any size on such columns
-            self.size = 255
+            self.size = self.get_size()
         # Get size, scale and precision for SQLAlchemy
         if hasattr(col.type, 'length'):
             self.size = col.type.length
@@ -55,7 +55,7 @@ class Column:
         with self.db.engine.connect() as cnxn:
             sql, _ = self.db.expr.prepare(sql)
             crsr = cnxn.cursor()
-            return crsr.execute(sql).fetcone()[0]
+            return crsr.execute(sql).fetchone()[0]
 
     def create_index(self, col_type):
         if col_type not in ['blob', 'clob', 'text']:

@@ -156,6 +156,8 @@ class Reflection:
                 else:
                     fkeys[tblname][name].referred_schema = schema
                 fkeys[tblname][name].referred_table = rec.pktable_name
+                fkeys[tblname][name].update_rule = rec.update_rule
+                fkeys[tblname][name].delete_rule = rec.delete_rule
             for tblname in fkeys:
                 all_fkeys[tblname] = fkeys[tblname].values() 
 

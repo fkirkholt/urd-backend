@@ -457,7 +457,9 @@ class Table:
             rec = Dict(rec)
             record = Record(self.db, self, rec.prim_key)
             if rec.method == 'delete' and rec.prim_key:
-                record.delete()
+                msg = record.delete()
+                if msg != 'success':
+                    result.msg = msg 
             elif rec.method == 'post':
                 pkey = record.insert(rec['values'])
 

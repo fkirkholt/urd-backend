@@ -26,14 +26,14 @@ pyodbc:
 sqlite3:
     system:
         sqlite:
-            string: "%s"
+            string: "database=%s;check_same_thread=False"
             params: [path]
             query: 'PRAGMA foreign_keys = ON'
     placeholder: '?'
 sqlean:
     system:
         sqlite:
-            string: "%s"
+            string: "database=%s;check_same_thread=False"
             params: [path]
             query: 'PRAGMA foreign_keys = ON'
     placeholder: '?'

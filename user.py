@@ -8,9 +8,10 @@ from expression import Expression
 
 class User:
 
-    def __init__(self, engine, name=None):
+    def __init__(self, engine, cnxn, name=None):
         self.name = name or engine.url.username
         self.engine = engine
+        self.cnxn = cnxn
         self.expr = Expression(engine) 
         self.current = name is None
         self._is_admin = {}
@@ -18,13 +19,12 @@ class User:
     def databases(self, schema=None, cat=None):
         sql = self.expr.databases()
 
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             if self.engine.name == 'sqlite':
                 params = {'uid': self.name}
             else:
                 params = {'schema_name': schema, 'cat': cat}
             sql, params = self.expr.prepare(sql, params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             recs = [to_rec(row, crsr, lowercase=True) for row in rows]
@@ -35,7 +35,7 @@ class User:
         if hasattr(self, '_tbl_names'):
             return self._tbl_names
         cfg = Settings()
-        refl = Reflection(self.engine, cat)
+        refl = Reflection(self.engine, self.cnxn)
         tbl_names = refl.tables(schema).keys()
         if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             db_path = self.engine.url.database

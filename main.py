@@ -29,18 +29,53 @@ import magic
 from user import User
 from odbc_engine import ODBC_Engine
 from starlette.background import BackgroundTask
+from contextlib import asynccontextmanager
 import typer
 
 
 cfg = Settings()
 cfg_default = Settings()
 
-app = FastAPI()
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/dist/index.js")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.cnxn_registry = {}
+    yield
+    # Cleanup: Close all active connections on shutdown
+    for cnxn in app.state.cnxn_registry.values():
+        cnxn.close()
+
+
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+def get_cnxn(app_state, engine):
+    registry = app_state.cnxn_registry
+
+    key = engine.driver_name + ':' + engine.host + '/' + str(engine.db_name or '')
+
+    # If exists, move to end (mark as most recently used)
+    if key in registry:
+        cnxn = registry.pop(key)
+        registry[key] = cnxn
+        return registry[key]
+
+    # Check capacity before adding new connection
+    if len(registry) >= cfg.max_connections:
+        # Pop the oldest item (first item)
+        first_key = next(iter(registry))
+        old_cnxn = registry.pop(first_key)
+        old_cnxn.close()
+
+    # Create and store new connection
+    new_cnxn = engine.connect()
+    registry[key] = new_cnxn
+    return new_cnxn
 
 
 def cleanup(temp_file):
@@ -53,15 +88,6 @@ def get_engine(cfg, db_name=None):
         engine = ODBC_Engine(cfg, db_name)
     else:
         engine = Engine(cfg, db_name)
-    try:
-        with engine.connect():
-            pass
-    except Exception as ex:
-        print(ex)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(ex)
-        )
 
     if cfg.system == 'sqlite' and db_name == 'urdr':
         with engine.connect() as cnxn:
@@ -284,13 +310,14 @@ def delete_file(filename: str):
 
 
 @app.get("/dblist")
-def dblist(response: Response, role: str = None, path: str = None):
+def dblist(request: Request, response: Response, role: str = None, path: str = None):
     result = []
     useradmin = False
     if cfg.system in ('sqlite', 'duckdb'):
         if cfg.database == 'urdr':
             engine = get_engine(cfg, 'urdr')
-            user = User(engine, name=cfg.uid)
+            cnxn = get_cnxn(request.app.state, engine)
+            user = User(engine, cnxn, name=cfg.uid)
             rows = user.databases()
 
             for row in rows:
@@ -549,25 +576,27 @@ def create_user(name: str, pwd: str):
 
 
 @app.get("/database")
-def db_info(base: str):
+def db_info(base: str, request: Request):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     info = dbo.get_info()
 
     return {'data': info}
 
 
 @app.get("/table")
-async def get_table(base: str, table: str, filter: str = None,
+async def get_table(base: str, table: str, request: Request, filter: str = None,
                     limit: int = 30, offset: int = 0,
                     schema: str = None, sort: str = None,
                     compressed: bool = False, prim_key: str = None):
     engine = get_engine(cfg, base)
+    cnxn = get_cnxn(request.app.state, engine)
     if cfg.system == 'postgresql' and schema:
         base_path = base + '.' + schema
     else:
         base_path = base or schema
-    dbo = Database(engine, base_path, cfg.uid)
+    dbo = Database(engine, base_path, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     privilege = dbo.user.table_privilege(dbo.schema, table)
     if privilege.select == 0:
@@ -601,9 +630,10 @@ async def get_table(base: str, table: str, filter: str = None,
 
 
 @app.post("/record")
-def create_record(base: str, table: str, pkey: str, values: str = Body(...)):
+def create_record(base: str, table: str, pkey: str, request: Request, values: str = Body(...)):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     pkey = json.loads(pkey)
     record = Record(dbo, tbl, pkey)
@@ -615,9 +645,10 @@ def create_record(base: str, table: str, pkey: str, values: str = Body(...)):
 
 
 @app.put("/record")
-def update_record(base: str, table: str, pkey: str, values: str = Body(...)):
+def update_record(base: str, table: str, pkey: str, request: Request, values: str = Body(...)):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     pkey = json.loads(pkey)
     record = Record(dbo, tbl, pkey)
@@ -628,9 +659,10 @@ def update_record(base: str, table: str, pkey: str, values: str = Body(...)):
 
 
 @app.delete("/record")
-def delete_record(base: str, table: str, pkey: str):
+def delete_record(base: str, table: str, pkey: str, request: Request):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     pkey = json.loads(pkey)
     record = Record(dbo, tbl, pkey)
@@ -639,13 +671,14 @@ def delete_record(base: str, table: str, pkey: str):
 
 
 @app.get("/record")
-def get_record(base: str, table: str, pkey: str, schema: str = None):
+def get_record(cnxn: str, base: str, table: str, pkey: str, request: Request, schema: str = None):
     engine = get_engine(cfg, base)
     if cfg.system == 'postgresql' and schema:
         base_path = base + '.' + schema
     else:
         base_path = base or schema
-    dbo = Database(engine, base_path, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base_path, cfg.uid, cnxn=cnxn)
     tbl = Table(dbo, table)
     pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
@@ -653,9 +686,10 @@ def get_record(base: str, table: str, pkey: str, schema: str = None):
 
 
 @app.get("/children")
-def get_children(base: str, table: str, pkey: str):
+def get_children(base: str, table: str, pkey: str, request: Request):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     tbl.offset = 0
     tbl.limit = 30
@@ -666,9 +700,10 @@ def get_children(base: str, table: str, pkey: str):
 
 @app.get("/relations")
 def get_relations(base: str, table: str, pkey: str, count: bool,
-                  alias: str = None):
+                  request: Request, alias: str = None):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     pk = json.loads(pkey)
     record = Record(dbo, tbl, pk)
@@ -684,7 +719,8 @@ async def save_table(request: Request):
     req = await request.json()
     base = req['base_name']
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, req['table_name'])
     return {'data': tbl.save(req['records'])}
 
@@ -694,7 +730,8 @@ async def get_options(request: Request):
     req = Dict({item[0]: item[1]
                 for item in request.query_params.multi_items()})
     engine = get_engine(cfg, req.base)
-    dbo = Database(engine, req.base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, req.base, cfg.uid, cnxn)
     tbl = Table(dbo, req.table)
     fld = Field(tbl, req.column)
     conds = req.condition.split(" and ") if req.condition else []
@@ -719,9 +756,10 @@ def dialog_cache(request: Request):
 
 
 @app.get('/urd/update_cache')
-async def update_cache(base: str, config: str):
+async def update_cache(base: str, config: str, request: Request):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     dbo.config = Dict(json.loads(config))
     dbo.config.update_cache = True
     dbo.cache = None
@@ -757,7 +795,8 @@ async def update_cache(base: str, config: str):
 def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
                no_fkeys: bool, list_recs: bool, data_recs: bool,
                select_recs: bool, view_as_table: bool, no_empty: bool, 
-               view_defs: bool, table: str = None, filter: str = None):
+               view_defs: bool, request: Request, table: str = None,
+               filter: str = None):
     """Create sql for exporting a database
 
     Parameters:
@@ -769,7 +808,8 @@ def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
     """
 
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
 
     if cfg.system in ['sqlite', 'duckdb'] and dest != 'download':
         dest = os.path.join(cfg.host, dest)
@@ -790,10 +830,11 @@ def download_file(path: str, media_type: str):
 
 @app.get('/export_tsv')
 def export_tsv(base: str, tables: str, dest: str, clobs_as_files: bool,
-               limit: int = None, columns: str = None, folder: str = None,
-               filter: str = None):
+               request: Request, limit: int = None, columns: str = None,
+               folder: str = None, filter: str = None):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     download = True if dest == 'download' else False
     tbls = json.loads(urllib.parse.unquote(tables))
     if columns:
@@ -816,17 +857,19 @@ def export_tsv(base: str, tables: str, dest: str, clobs_as_files: bool,
 
 
 @app.get('/import_tsv')
-def import_tsv(base: str, dir: str):
+def import_tsv(base: str, dir: str, request: Request):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
 
     return StreamingResponse(dbo.import_tsv(dir), media_type="text/event-stream")
 
 
 @app.get('/kdrs_xml')
-def export_kdrs_xml(base: str, version: str, descr: str):
+def export_kdrs_xml(base: str, version: str, descr: str, request: Request):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     xml = dbo.export_as_kdrs_xml(version, descr)
     response = StreamingResponse(io.StringIO(xml), media_type="application/xml")
     response.headers['Content-Disposition'] = \
@@ -836,10 +879,11 @@ def export_kdrs_xml(base: str, version: str, descr: str):
 
 
 @app.get('/db_file')
-def get_db_file(base: str, table: str, pkey: str, column: str = None):
+def get_db_file(base: str, table: str, pkey: str, request: Request, column: str = None):
     pkey = json.loads(urllib.parse.unquote(pkey))
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     rec = Record(dbo, tbl, pkey)
     path = rec.get_file_path(column)
@@ -850,10 +894,11 @@ def get_db_file(base: str, table: str, pkey: str, column: str = None):
 
 @app.post('/convert')
 def convert(base: str, table: str, from_format: str, to_format: str,
-            fields: str):
+            fields: str, request: Request):
     fields = json.loads(fields)
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     tbl = Table(dbo, table)
     for field_name in fields:
         result = tbl.convert(field_name, from_format, to_format)
@@ -862,9 +907,10 @@ def convert(base: str, table: str, from_format: str, to_format: str,
 
 
 @app.get('/query')
-def query(base: str, sql: str, limit: str):
+def query(base: str, sql: str, limit: str, request: Request):
     engine = get_engine(cfg, base)
-    dbo = Database(engine, base, cfg.uid)
+    cnxn = get_cnxn(request.app.state, engine)
+    dbo = Database(engine, base, cfg.uid, cnxn)
     limit = 0 if not limit else int(limit)
     result = dbo.query_result(sql, limit)
 

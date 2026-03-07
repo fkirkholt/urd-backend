@@ -160,9 +160,8 @@ class Field:
         where {condition}
         """
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, params1 = self._db.expr.prepare(sql, params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params1)
             count = crsr.fetchone()[0]
 
@@ -181,9 +180,8 @@ class Field:
         order by {self.view or value_field}
         """
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, params2 = self._db.expr.prepare(sql, params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params2)
             rows = crsr.fetchall()
 

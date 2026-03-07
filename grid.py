@@ -146,8 +146,7 @@ class Grid:
         """
 
         sql, params = self.db.expr.prepare(sql, self.cond.params | params)
-        with self.db.engine.connect() as cnxn:
-            crsr = cnxn.cursor()
+        with self.db.cnxn.cursor() as crsr:
             crsr.execute(sql, params)
             row = crsr.fetchone()
         idx = row[0] if row else None
@@ -364,9 +363,8 @@ class Grid:
         else:
             sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             records = [to_rec(row, crsr) for row in rows]
@@ -395,9 +393,8 @@ class Grid:
         if self.db.engine.name == 'sqlite':
             sql = f"select count(*) from (\n{sql}\nlimit 1000)"
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             count = crsr.fetchone()[0]
 
@@ -460,9 +457,8 @@ class Grid:
         else:
             sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             records = [to_rec(row, crsr) for row in rows]
@@ -500,9 +496,8 @@ class Grid:
         sql += '\n'.join(joins) + "\n"
         sql += '' if not cond else "where " + cond + "\n"
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
-            crsr = cnxn.cursor()
             row = crsr.execute(sql, params).fechone()
             rec = to_rec(row, crsr)
 

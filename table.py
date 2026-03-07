@@ -190,8 +190,7 @@ class Table:
     def rowcount(self):
         if not hasattr(self, '_rowcount'):
             sql = f'select count(*) from "{self.name}"'
-            with self.db.engine.connect() as cnxn:
-                crsr = cnxn.cursor()
+            with self.db.cnxn.cursor() as crsr:
                 crsr.execute(sql)
                 self._rowcount = crsr.fetchone()[0]
 
@@ -673,8 +672,7 @@ class Table:
                 select count(distinct({fkey_col})) from {relation.table_name}
                 """
 
-                with self.db.engine.connect() as cnxn:
-                    crsr = cnxn.cursor()
+                with self.db.cnxn.cursor() as crsr:
                     crsr.execute(sql)
                     count = crsr.fetchone()[0]
 
@@ -760,8 +758,7 @@ class Table:
         from {self.name}
         """
 
-        with self.db.engine.connect() as cnxn:
-            crsr = cnxn.cursor()
+        with self.db.cnxn.cursor() as crsr:
             crsr.execute(sql)
             rows = crsr.fetchall()
             for row in rows:
@@ -791,10 +788,9 @@ class Table:
             where {where}
             """
 
-            with self.db.engine.connect() as cnxn:
+            with self.db.cnxn.cursor() as crsr:
                 sql, params = self.db.expr.prepare(sql, params)
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
-                cnxn.commit()
+                self.db.cnxn.commit()
 
         return 'success'

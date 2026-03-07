@@ -5,6 +5,7 @@ from addict import Dict
 from fastapi import HTTPException
 from pathlib import Path
 from ruamel.yaml import YAML
+from contextlib import closing
 
 
 yaml = YAML()
@@ -13,11 +14,28 @@ with open(Path(Path(__file__).parent, "drivers.yml"), "r") as content:
     drivers = yaml.load(content)
 
 
+class Connection:
+
+    def __init__(self, cnxn):
+        self._cnxn = cnxn
+
+    def cursor(self):
+        # Make shure all cursor objects run .close() when exiting `with` statements
+        return closing(self._cnxn.cursor())
+
+    def commit(self):
+        return self._cnxn.commit()
+
+    def close(self):
+        return self._cnxn.close()
+
+
 class Engine:
 
     def __init__(self, cfg, db_name=None):
 
         self.name = cfg.system
+        self.db_name = db_name
         self.host = cfg.host
         self.driver_name = getattr(cfg, f'{cfg.system}_driver')
         if importlib.util.find_spec(self.driver_name) is None:
@@ -56,6 +74,8 @@ class Engine:
                 key = parts[0].strip()
                 value = parts[1]
                 if value:
+                    if value in ('True', 'False'):
+                        value = value == 'True'
                     self.connect_params[key] = value;
             else:
                 self.cnxnstr = key_value
@@ -75,5 +95,5 @@ class Engine:
         if driver.system[self.name].query:
             cnxn.execute(driver.system[self.name].query)
 
-        return cnxn
+        return Connection(cnxn)
 

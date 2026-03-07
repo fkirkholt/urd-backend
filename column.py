@@ -52,9 +52,8 @@ class Column:
         from {self.tbl.name}
         """
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, _ = self.db.expr.prepare(sql)
-            crsr = cnxn.cursor()
             return crsr.execute(sql).fetchone()[0]
 
     def create_index(self, col_type):
@@ -70,13 +69,12 @@ class Column:
             where {self.name} is null
             """
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, _ = self.db.expr.prepare(sql)
-            crsr = cnxn.cursor()
 
             try:
                 crsr.execute(sql)
-                cnxn.commit()
+                self.db.cnxn.commit()
             except Exception as e:
                 print(e)
 
@@ -90,9 +88,8 @@ class Column:
         where {self.name} is null or {self.name} = ''
         """
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, _ = self.db.expr.prepare(sql)
-            crsr = cnxn.cursor()
             crsr.execute(sql)
             count = crsr.fetchone()[0]
 
@@ -114,9 +111,8 @@ class Column:
         ) t2
         """
 
-        with self.db.engine.connect() as cnxn:
+        with self.db.cnxn.cursor() as crsr:
             sql, _ = self.db.expr.prepare(sql)
-            crsr = cnxn.cursor()
             crsr.execute(sql)
             max_in_group = crsr.fetchone()[0]
 

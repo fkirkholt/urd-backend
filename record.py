@@ -279,9 +279,8 @@ class Record:
         where {cond}
         """
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, params = self._db.expr.prepare(sql, params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             row = crsr.fetchone()
             self._cache.vals = to_rec(row, crsr)
@@ -309,9 +308,8 @@ class Record:
         sql += '\n'.join(self._tbl.joins.values()) + "\n"
         sql += " where " + cond
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, params = self._db.expr.prepare(sql, self.pkey)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             row = crsr.fetchone()
 
@@ -354,9 +352,8 @@ class Record:
         where {cond}
         """
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, params = self._db.expr.prepare(sql, self.pkey)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             row = crsr.fetchone()
 
@@ -388,9 +385,8 @@ class Record:
             sql += f"else max({inc_col}) +1 end from {self._tbl.name} "
             sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
-            with self._db.engine.connect() as cnxn:
+            with self._db.cnxn.cursor() as crsr:
                 sql, params = self._db.expr.prepare(sql, params)
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 values[inc_col] = crsr.fetchone()[0]
             self.pkey[inc_col] = values[inc_col]
@@ -416,11 +412,10 @@ class Record:
         values ({', '.join([f":{key}" for key in inserts])})
         """
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, inserts = self._db.expr.prepare(sql, inserts)
-            crsr = cnxn.cursor()
             crsr.execute(sql, inserts)
-            cnxn.commit()
+            self._db.cnxn.commit()
 
         return self.pkey
 
@@ -467,11 +462,10 @@ class Record:
         where {where_str}
         """
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, params = self._db.expr.prepare(sql, params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
-            cnxn.commit()
+            self._db.cnxn.commit()
 
         # Update primary key
         for key, value in values.items():
@@ -495,12 +489,11 @@ class Record:
         where {where_str}
         """
 
-        with self._db.engine.connect() as cnxn:
+        with self._db.cnxn.cursor() as crsr:
             sql, params = self._db.expr.prepare(sql, self.pkey)
             try:
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
-                cnxn.commit()
+                self._db.cnxn.commit()
                 return 'success'
             except Exception as e:
                 if 'FOREIGN KEY constraint failed' in str(e):

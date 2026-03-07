@@ -26,15 +26,16 @@ from util import to_rec, time_func, time_stream_generator, format_fkey
 class Database:
     """Contains methods for getting data and metadata from database"""
 
-    def __init__(self, engine, db_name, uid):
+    def __init__(self, engine, db_name, uid, cnxn):
         self.pkeys_loaded = False
         self.fkeys_loaded = False
         self.columns_loaded = False
         self.indexes_loaded = False
         self.engine = engine
+        self.cnxn = cnxn
         self.expr = Expression(engine)
         self.identifier = db_name
-        self.user = User(engine, name=uid)
+        self.user = User(engine, cnxn, name=uid)
         path = db_name.split('.')
         if engine.name == 'postgresql':
             self.schema = 'public' if len(path) == 1 else path[1]
@@ -48,7 +49,7 @@ class Database:
         else:
             self.schema = db_name
             self.cat = None
-        self.refl = Reflection(engine, self.cat)
+        self.refl = Reflection(engine, cnxn)
 
         if 'urdr' in self.refl.get_schema_names() or db_name == 'urdr':
             schema = 'main' if db_name == 'urdr' else 'urdr'
@@ -88,10 +89,12 @@ class Database:
             from {self.schema}.html_attributes
             """
             try:
-                with self.engine.connect() as cnxn:
+                with self.cnxn.cursor() as crsr:
                     sql, _ = self.expr.prepare(sql)
-                    crsr = cnxn.cursor()
-                    for row in crsr.execute(sql):
+                    rows = crsr.execute(sql).fetchall()
+                    for row in rows:
+                        if row is None:
+                            break
                         rec = to_rec(row, crsr)
                         attrs[rec.selector] = json.loads(rec.attrs)
             except Exception as e:
@@ -150,11 +153,10 @@ class Database:
         )
         """
 
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql, _ = self.expr.prepare(sql)
-            crsr = cnxn.cursor()
             crsr.execute(sql)
-            cnxn.commit()
+            self.cnxn.commit()
 
         self.tablenames.append('html_attributes')
         attributes = {
@@ -168,11 +170,10 @@ class Database:
             values ('[data-field="html_attributes.attributes"]', '{val}')
         """
 
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql, _ = self.expr.prepare(sql)
-            crsr = cnxn.cursor()
             crsr.execute(sql)
-            cnxn.commit()
+            self.cnxn.commit()
 
         # Refresh attributes
         self.html_attrs = self.init_html_attributes()
@@ -536,9 +537,8 @@ class Database:
             where selector = :selector
             """
 
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, {'selector': 'base'})
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 count = crsr.fetchone()[0]
 
@@ -564,14 +564,13 @@ class Database:
                 values (:attrs, :selector)
                 """
 
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, {
                     'attrs': attrs_txt,
                     'selector': 'base'
                 })
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
-                cnxn.commit()
+                self.cnxn.commit()
 
         return contents
 
@@ -706,9 +705,8 @@ class Database:
         sql = self.user.expr.functionlines()
         if sql is None:
             return functions
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql, params = self.expr.prepare(sql, {'owner': self.schema})
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             for row in rows:
@@ -726,9 +724,8 @@ class Database:
         sql = self.user.expr.procedurelines()
         if sql is None:
             return procedures
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql, params = self.expr.prepare(sql, {'owner': self.schema})
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             for row in rows:
@@ -748,8 +745,7 @@ class Database:
             return None
         t1 = time.time()
         sql, _ = self.expr.prepare(sql)
-        with self.engine.connect() as cnxn:
-            crsr = cnxn.cursor()
+        with self.cnxn.cursor() as crsr:
             if type(self.engine) is ODBC_Engine:
                 try:
                     crsr.execute(sql)
@@ -813,7 +809,7 @@ class Database:
                 query.rowcount = rowcount
                 query.result = f"Query OK, {rowcount} rows affected"
 
-            cnxn.commit()
+            self.cnxn.commit()
 
         return query
 
@@ -849,9 +845,8 @@ class Database:
             })
             yield f"data: {data}\n\n"
             total_rows = 0
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql = self.user.expr.rowcount()
-                crsr = cnxn.cursor()
                 if sql and not filter:
                     sql, params = self.expr.prepare(sql, {'schema': self.schema})
                     crsr.execute(sql, params)
@@ -991,9 +986,8 @@ class Database:
                         cond = grid.get_cond_expr()
                         params = grid.cond.params
                     sql = expr.rows(table, cond)
-                    with self.engine.connect() as cnxn:
+                    with self.cnxn.cursor() as crsr:
                         sql, params = self.expr.prepare(sql, params)
-                        crsr = cnxn.cursor()
                         crsr.execute(sql, params)
                         
                         # Insert time grows exponentially with number of inserts
@@ -1094,13 +1088,12 @@ class Database:
         total_rows = 0
         for table in tables:
             
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql = f'select count(*) from {expr.quote(table)}'
                 if filter:
                     sql += '\n' + join
                     sql += ' where ' + cond
                 sql, params = self.expr.prepare(sql, params)
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 n = crsr.fetchone()[0]
                 if limit and n > limit:
@@ -1147,9 +1140,8 @@ class Database:
             if filter:
                 sql += '\n' + join
                 sql += ' where ' + cond
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, params)
-                crsr = cnxn.cursor()
                 try:
                     crsr.execute(sql, params)
                 except Exception as e:
@@ -1260,10 +1252,9 @@ class Database:
             mandatory = [col['name'] for col in cols if not col['nullable']]
 
             with open(filepath, 'r') as file:
-                with self.engine.connect() as cnxn:
+                with self.cnxn.cursor() as crsr:
                     records = csv.DictReader(file, delimiter='\t')
                     sql = f'insert into {tbl_name} values '
-                    crsr = cnxn.cursor()
 
                     n = 0
                     for rec in records:
@@ -1277,7 +1268,7 @@ class Database:
                         if n == 10000:
                             sql, _ = self.expr.prepare(sql)
                             crsr.execute(sql)
-                            cnxn.commit()
+                            self.cnxn.commit()
                             sql = f'insert into {tbl_name} values '
                             n = 1
                         if n != 1:
@@ -1286,7 +1277,7 @@ class Database:
 
                     sql, _ = self.expr.prepare(sql)
                     crsr.execute(sql)
-                    cnxn.commit()
+                    self.cnxn.commit()
 
         data = json.dumps({'msg': 'done'})
         yield f"data: {data}\n\n"

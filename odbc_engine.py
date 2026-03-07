@@ -18,6 +18,7 @@ class ODBC_Engine:
     def __init__(self, cfg, db_name=None):
         self.name = cfg.system
         self.host = cfg.host
+        self.db_name = db_name
         self.odbc_driver_name = self.name if self.name != 'mssql' else 'sql server'
         odbc_driver = self.get_driver()
         self.driver_name = 'pyodbc'

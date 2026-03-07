@@ -7,10 +7,10 @@ from util import to_rec, log_caller
 
 class Reflection:
 
-    def __init__(self, engine, catalog):
+    def __init__(self, engine, cnxn):
+        self.cnxn = cnxn
         self.engine = engine
         self.expr = Expression(engine)
-        self.cat = catalog
         self._fkeys = None
 
     def get_schema_names(self):
@@ -21,8 +21,7 @@ class Reflection:
 
         sql = self.expr.schemata()
         if sql:
-            with self.engine.connect() as cnxn:
-                crsr = cnxn.cursor()
+            with self.cnxn.cursor() as crsr:
                 crsr.execute(sql)
                 rows = crsr.fetchall()
                 for row in rows:
@@ -35,10 +34,9 @@ class Reflection:
             return self._tbl_names
 
         self._tables = Dict()
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql = self.expr.user_tables()
             sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
 
@@ -51,10 +49,9 @@ class Reflection:
         return self._tables
 
     def pkeys(self, schema, table=None):
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql = self.expr.pkeys()
             sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
 
@@ -83,10 +80,9 @@ class Reflection:
         """ Return all columns in schema by reflection """
         # if hasattr(self, '_columns'):
         #     return self._columns
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql = self.expr.columns()
             sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
 
@@ -120,8 +116,7 @@ class Reflection:
     def fkeys(self, schema, fk_table=None, pk_table=None):
         all_fkeys = Dict()
         fkeys = Dict()
-        with self.engine.connect() as cnxn:
-            crsr = cnxn.cursor()
+        with self.cnxn.cursor() as crsr:
             params = {
                 'schema_name': schema,
                 'table_name': fk_table,
@@ -158,8 +153,8 @@ class Reflection:
                 fkeys[tblname][name].referred_table = rec.pktable_name
                 fkeys[tblname][name].update_rule = rec.update_rule
                 fkeys[tblname][name].delete_rule = rec.delete_rule
-            for tblname in fkeys:
-                all_fkeys[tblname] = fkeys[tblname].values() 
+        for tblname in fkeys:
+            all_fkeys[tblname] = fkeys[tblname].values() 
 
         self._fkeys = all_fkeys
 
@@ -224,11 +219,10 @@ class Reflection:
             return None
 
     def indexes(self, schema, table=None):
-        with self.engine.connect() as cnxn:
+        with self.cnxn.cursor() as crsr:
             sql = self.expr.indexes()
             params = {'schema_name': schema, 'table_name': table}
             sql, params = self.expr.prepare(sql, params)
-            crsr = cnxn.cursor()
             crsr.execute(sql, params)
             rows = crsr.fetchall()
 
@@ -261,9 +255,8 @@ class Reflection:
     def get_view_definition(self, tbl_name, schema):
         sql = self.expr.view_definition()
         view_def = None
-        with self.engine.connect() as cnxn:
-            crsr = cnxn.cursor()
-            if sql:
+        if sql:
+            with self.cnxn.cursor() as crsr:
                 params = {'schema_name': schema, 'table_name': tbl_name}
                 sql, params = self.expr.prepare(sql, params)
                 crsr.execute(sql, params)

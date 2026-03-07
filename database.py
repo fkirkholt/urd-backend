@@ -43,7 +43,10 @@ class Database:
         elif engine.name == 'mssql':
             self.schema = 'dbo' if len(path) == 1 else path[1]
             self.cat = path[0]
-        elif engine.name in ('duckdb', 'sqlite'):
+        elif engine.driver_name == 'duckdb':
+            self.schema = os.path.basename(path[0])
+            self.cat = None
+        elif engine.name == 'sqlite':
             self.schema = 'main'
             self.cat = None
         else:
@@ -746,6 +749,8 @@ class Database:
         t1 = time.time()
         sql, _ = self.expr.prepare(sql)
         with self.cnxn.cursor() as crsr:
+            if self.engine.driver_name == 'duckdb':
+                crsr.execute(f"SET search_path = '{self.schema}'")
             if type(self.engine) is ODBC_Engine:
                 try:
                     crsr.execute(sql)

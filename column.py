@@ -49,7 +49,7 @@ class Column:
     def get_size(self):
         sql = f"""
         select max(length({self.name}))
-        from {self.tbl.name}
+        from {self.db.schema}.{self.tbl.name}
         """
 
         with self.db.cnxn.cursor() as crsr:

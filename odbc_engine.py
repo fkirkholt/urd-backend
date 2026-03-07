@@ -51,7 +51,7 @@ class ODBC_Engine:
         for param in driver.system[self.name].params:
             params.append(config[param])
 
-        cnxn_string = driver.system[self.name].string % tuple(params)
+        cnxn_string = driver.system[self.name].string.format(**config)
         cnxn_key_value_pairs = cnxn_string.split(';')
         cnxnstr = 'Driver={' + odbc_driver + '};'
         for key_value in cnxn_key_value_pairs:

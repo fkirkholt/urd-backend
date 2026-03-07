@@ -1,73 +1,61 @@
 pyodbc:
     system:
         sqlite:
-            string: "Database=%s;FKSupport=1;"
-            params: [path]
+            string: "Database={path};FKSupport=1;"
         duckdb:
-            string: "Database=%s"
-            params: [path]
+            string: "Database={path}"
         mysql:
-            string: "Server=%s;Port=%s;Uid=%s;Pwd=%s;Database=%s"
-            params: [host, port, user, pass, dbname]
+            string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
         mariadb:
-            string: "Server=%s;Port=%s;Uid=%s;Pwd=%s;Database=%s"
-            params: [host, port, user, pass, dbname]
+            string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
         oracle:
-            string: "DBQ=%s:%s/%s;Uid=%s;Pwd=%s"
-            params: [host, port, sid, user, pass]
+            string: "DBQ={host}:{port}/{sid};Uid={user};Pwd={pass}"
         mssql:
-            string: "Server=%s\\%s;Port=%s;Uid=%s;Pwd=%s;Database=%s;Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes;"
-            params: [host, sid, port, user, pass, dbname]
+            string: "Server={host}\\{sid};Port={port};Uid={user};Pwd={pass};Database={dbname};Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes;"
         postgresql:
-            string: "Server=%s;Port=%s;Uid=%s;Pwd=%s;Database=%s;"
-            params: [host, port, user, pass, dbname]
+            string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname};"
             dbname: postgres  # default dbname
     placeholder: '?'
 sqlite3:
     system:
         sqlite:
-            string: "database=%s;check_same_thread=False"
-            params: [path]
+            string: "database={path};check_same_thread=False"
             query: 'PRAGMA foreign_keys = ON'
     placeholder: '?'
 sqlean:
     system:
         sqlite:
-            string: "database=%s;check_same_thread=False"
-            params: [path]
+            string: "database={path};check_same_thread=False"
             query: 'PRAGMA foreign_keys = ON'
     placeholder: '?'
 duckdb:
     system:
         duckdb:
-            string: "%s"
-            params: [path]
+            string: "{path}"
+        sqlite:
+            string: ''
+            query: "ATTACH '{path}' (TYPE sqlite)"
     placeholder: '?'
 mysql.connector:
     system:
         mysql:
-            string: "host=%s;port=%s;user=%s;password=%s"
-            params: [host, port, user, pass]
+            string: "host={host};port={port};user={user};password={pass}"
         mariadb:
-            string: "host=%s;port=%s;user=%s;password=%s"
-            params: [host, port, user, pass]
+            string: "host={host};port={port};user={user};password={pass}"
     placeholder: '%s'
 oracledb:
     system:
         oracle:
-            string: "host=%s;port=%s;service_name=%s;user=%s;password=%s;disable_oob=True"
-            params: [host, port, sid, user, pass]
+            string: "host={host};port={port};service_name={sid};user={user};password={pass};disable_oob=True"
     placeholder: colon-prefixed
 pymssql:
     system:
         mssql:
-            string: "host=%s\\%s;port=%s;user=%s;password=%s;database=%s"
-            params: [host, sid, port, user, pass, dbname]
+            string: "host={host}\\{sid};port={port};user={user};password={pass};database={dbname}"
     placeholder: '%s'
 psycopg2:
     system:
         postgresql:
-            string: "host=%s;port=%s;user=%s;password=%s;dbname=%s"
-            params: [host, port, user, pass, dbname]
+            string: "host={host};port={port};user={user};password={pass};dbname={dbname}"
             dbname: postgres
     placeholder: '%s'

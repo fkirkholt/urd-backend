@@ -139,7 +139,7 @@ class Grid:
         select rownum - 1
         from   (select row_number() over ({order_by}) as rownum,
                        {self.tbl.view}.*
-                from   {self.tbl.view}
+                from   {self.db.schema}.{self.tbl.view}
                 {join}
                 {cond}) tab
         {rec_cond};

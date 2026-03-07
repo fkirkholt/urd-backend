@@ -56,15 +56,13 @@ class Engine:
             'sid': None if match.group(3) is None else match.group(3)[1:],
             'user': cfg.uid,
             'pass': cfg.pwd,
-            'dbname': db_name,
+            'dbname': db_name.split('.')[0],
             'path': os.path.join(cfg.host, db_name) if db_name else None
         })
         driver = Dict(drivers[self.driver_name])
-        params = []
-        for param in driver.system[self.name].params:
-            params.append(config[param])
 
-        cnxn_string = driver.system[self.name].string % tuple(params)
+        cnxn_string = driver.system[self.name].string.format(**config)
+        self.query = driver.system[self.name].query.format(**config)
         cnxn_key_value_pairs = cnxn_string.split(';')
         self.connect_params = {}
         self.cnxnstr = None
@@ -93,7 +91,7 @@ class Engine:
             cnxn = self.driver_module.connect(self.cnxnstr)
         driver = Dict(drivers[self.driver_name])
         if driver.system[self.name].query:
-            cnxn.execute(driver.system[self.name].query)
+            cnxn.execute(self.query)
 
         return Connection(cnxn)
 

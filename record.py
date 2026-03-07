@@ -197,7 +197,7 @@ class Record:
             base_name = rel.base + '.' + rel.schema
         else:
             base_name = rel.base or rel.schema
-        db = Database(self._db.engine, base_name, self._db.user.name)
+        db = Database(self._db.engine, base_name, self._db.user.name, self._db.cnxn)
         tbl_rel = Table(db, rel.table_name)
         grid = Grid(tbl_rel)
         tbl_rel.limit = 500  # TODO: should have pagination in stead
@@ -281,8 +281,8 @@ class Record:
 
         with self._db.cnxn.cursor() as crsr:
             sql, params = self._db.expr.prepare(sql, params)
-            crsr.execute(sql, params)
-            row = crsr.fetchone()
+            row = crsr.execute(sql, params).fetchone()
+
             self._cache.vals = to_rec(row, crsr)
 
         return self._cache.vals
@@ -382,7 +382,7 @@ class Record:
                 params[col] = values[col]
 
             sql = f"select case when max({inc_col}) is null then 1 "
-            sql += f"else max({inc_col}) +1 end from {self._tbl.name} "
+            sql += f"else max({inc_col}) +1 end from {self._db.schema}.{self._tbl.name} "
             sql += "" if not len(cols) else "where " + " and ".join(conditions)
 
             with self._db.cnxn.cursor() as crsr:
@@ -408,7 +408,7 @@ class Record:
             inserts[key] = value
 
         sql = f"""
-        insert into {self._tbl.view} ({','.join(inserts.keys())})
+        insert into {self._db.schema}.{self._tbl.view} ({','.join(inserts.keys())})
         values ({', '.join([f":{key}" for key in inserts])})
         """
 
@@ -485,7 +485,7 @@ class Record:
         where_str = " and ".join(wheres)
 
         sql = f"""
-        delete from {self._tbl.view}
+        delete from {self._db.schema}.{self._tbl.view}
         where {where_str}
         """
 

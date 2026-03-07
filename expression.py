@@ -13,7 +13,10 @@ with open(Path(Path(__file__).parent, "drivers.yml"), "r") as content:
 
 class Expression:
     def __init__(self, engine):
-        self.dialect = engine.name
+        if engine.driver_name == 'duckdb':
+            self.dialect = 'duckdb'
+        else:
+            self.dialect = engine.name
         self.driver_name = engine.driver_name
 
     def concat(self, items):
@@ -232,7 +235,7 @@ class Expression:
             select index_name, table_name, expressions as column_names,
                    case when is_unique = 1 then 0 else 1 end as non_unique,
             from duckdb_indexes()
-            where schema_name = :schema_name
+            where database_name = :schema_name
                   and table_name = coalesce(:table_name, table_name)
             """
         elif self.dialect in ('mysql', 'mariadb'):
@@ -703,6 +706,15 @@ class Expression:
                    table_comment as remarks
             FROM   information_schema.tables
             WHERE  table_schema = :schema_name
+                   AND table_name =  coalesce(:table_name, table_name)
+            """
+        elif self.dialect == 'duckdb':
+            return """
+            SELECT table_name,
+                   case when table_type = 'BASE TABLE' then 'table' else table_type end as table_type,
+                   null as remarks
+            FROM   information_schema.tables
+            WHERE  table_catalog = :schema_name
                    AND table_name =  coalesce(:table_name, table_name)
             """
         else:

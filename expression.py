@@ -1,15 +1,10 @@
 import re
 from datetime import date, datetime
-from pathlib import Path
-from ruamel.yaml import YAML
-from settings import Settings
+from settings import drivers, Settings
 
 
 cfg = Settings()
-yaml = YAML()
 
-with open(Path(Path(__file__).parent, "drivers.yml"), "r") as content:
-    drivers = yaml.load(content)
 
 class Expression:
     def __init__(self, engine):
@@ -17,6 +12,7 @@ class Expression:
             self.dialect = 'duckdb'
         else:
             self.dialect = engine.name
+        self.engine_name = engine.name
         self.driver_name = engine.driver_name
 
     def concat(self, items):
@@ -802,7 +798,7 @@ class Expression:
     def prepare(self, sql, params={}):
         params_prep = params.copy()
         sql_prep = sql
-        driver = drivers[self.driver_name]
+        driver = drivers[self.engine_name][self.driver_name]
         if driver['placeholder'] in ('?', '%s'):
             if params:
                 p = re.compile(r'(?<!:)\:[a-zA-ZæøåÆØÅ_]\w*\b')

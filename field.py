@@ -220,7 +220,7 @@ class Field:
                         self.view = cols[0]
                     elif self._db.engine.name in ['oracle']:
                         self.view = " || ', ' || ".join(cols)
-                    elif self._db.engine.name == 'sqlite' and cfg.use_odbc:
+                    elif self._db.engine.name == 'sqlite' and self._db.engine.driver_name == 'pyodbc':
                         # odbc driver for sqlite doesn't support concat_ws yet
                         cols = ["coalesce(" + col + ", '')" for col in cols]
                         self.view = " || ', ' || ".join(cols)

@@ -457,7 +457,7 @@ class Record:
         params = set_values | where_vals
 
         sql = f"""
-        update {self._tbl.view}\n
+        update {self._db.schema}.{self._tbl.view}\n
         set {set_str}\n
         where {where_str}
         """

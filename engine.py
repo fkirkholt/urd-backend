@@ -3,15 +3,7 @@ import os
 import re
 from addict import Dict
 from fastapi import HTTPException
-from pathlib import Path
-from ruamel.yaml import YAML
 from contextlib import closing
-
-
-yaml = YAML()
-
-with open(Path(Path(__file__).parent, "drivers.yml"), "r") as content:
-    drivers = yaml.load(content)
 
 
 class Connection:
@@ -32,20 +24,20 @@ class Connection:
 
 class Engine:
 
-    def __init__(self, cfg, db_name=None):
+    def __init__(self, cfg, driver, db_name=None):
 
         self.name = cfg.system
         self.db_name = db_name
         self.host = cfg.host
-        self.driver_name = getattr(cfg, f'{cfg.system}_driver')
-        if importlib.util.find_spec(self.driver_name) is None:
-            msg = 'Please install driver ' + self.driver_name
+        if importlib.util.find_spec(driver.name) is None:
+            msg = 'Please install driver ' + driver.name
             raise HTTPException(
                 status_code=404,
                 detail=msg
             )
 
-        self.driver_module = importlib.import_module(self.driver_name, package=None)
+        self.driver_module = importlib.import_module(driver.name, package=None)
+        self.driver_name = driver.name
 
         pattern = r'([\w\.-]+)(:\d+)?([/\\]\w+)?'
         match = re.search(pattern, cfg.host)
@@ -59,10 +51,9 @@ class Engine:
             'dbname': db_name.split('.')[0],
             'path': os.path.join(cfg.host, db_name) if db_name else None
         })
-        driver = Dict(drivers[self.driver_name])
 
-        cnxn_string = driver.system[self.name].string.format(**config)
-        self.query = driver.system[self.name].query.format(**config)
+        cnxn_string = driver.string.format(**config)
+        self.query = driver.query.format(**config) if driver.query else None
         cnxn_key_value_pairs = cnxn_string.split(';')
         self.connect_params = {}
         self.cnxnstr = None
@@ -89,8 +80,7 @@ class Engine:
             cnxn = self.driver_module.connect(**self.connect_params)
         else:
             cnxn = self.driver_module.connect(self.cnxnstr)
-        driver = Dict(drivers[self.driver_name])
-        if driver.system[self.name].query:
+        if self.query:
             cnxn.execute(self.query)
 
         return Connection(cnxn)

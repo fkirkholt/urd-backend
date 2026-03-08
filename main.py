@@ -10,7 +10,7 @@ import urllib.parse
 import re
 import tempfile
 from subprocess import run
-from settings import Settings
+from settings import drivers, Settings
 from engine import Engine
 from database import Database
 from table import Table, Grid
@@ -35,7 +35,6 @@ import typer
 
 cfg = Settings()
 cfg_default = Settings()
-
 
 templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/dist/index.js")
@@ -83,11 +82,12 @@ def cleanup(temp_file):
 
 
 def get_engine(cfg, db_name=None):
-    driver = getattr(cfg, f'{cfg.system}_driver')
-    if cfg.use_odbc or driver == 'pyodbc':
-        engine = ODBC_Engine(cfg, db_name)
+    driver = drivers[cfg.system][cfg.driver]
+    driver.name = cfg.driver
+    if cfg.driver == 'pyodbc':
+        engine = ODBC_Engine(cfg, driver, db_name)
     else:
-        engine = Engine(cfg, db_name)
+        engine = Engine(cfg, driver, db_name)
 
     if cfg.system == 'sqlite' and db_name == 'urdr':
         with engine.connect() as cnxn:
@@ -130,6 +130,7 @@ def token():
         "uid": cfg.uid,
         "pwd": cfg.pwd,
         "database": cfg.database,
+        "driver": cfg.driver,
         "timestamp": time.time()
     }, cfg.secret_key)
 
@@ -143,15 +144,16 @@ async def check_login(request: Request, call_next):
     elif len(path_parts) > 1:
         session: str = request.cookies.get(path_parts[1])
 
-    if session:
+    if session and request.url.path != '/login':
         payload = jwt.decode(session, cfg.secret_key)
         cfg.system = payload["system"]
         cfg.host = payload["server"]
         cfg.uid = payload["uid"]
         cfg.pwd = payload["pwd"]
         cfg.database = payload["database"]
+        cfg.driver = payload["driver"]
     elif (
-        request.url.path not in ("/login", "/") and
+        request.url.path not in ("/login", "/", "/drivers") and
         not request.url.path.startswith('/static')
     ):
         return JSONResponse(content={
@@ -181,15 +183,21 @@ def home(request: Request):
     })
 
 
+@app.get("/drivers")
+def get_drivers(system: str):
+    return drivers[system]
+
+
 @app.post("/login")
-def login(response: Response, cnxn: str, system: str, server: str, username: str,
-          password: str, database: str):
+def login(response: Response, cnxn: str, system: str, server: str,
+          database: str, driver: str, username: str = None, password: str = None ):
     cfg.cnxn = cnxn 
     cfg.system = system or cfg.system
     cfg.uid = username
     cfg.pwd = password
     cfg.database = database or cfg.database
     cfg.host = server or cfg.host
+    cfg.driver = driver
 
     # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
     if cfg.system == 'sqlite' and cfg.database != 'urdr':

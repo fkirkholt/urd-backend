@@ -2,20 +2,13 @@ import os
 from addict import Dict
 import pyodbc
 import re
-from pathlib import Path
 from fastapi import HTTPException
-from ruamel.yaml import YAML
-
-yaml = YAML()
-
-with open(Path(Path(__file__).parent, "drivers.yml"), "r") as content:
-    drivers = yaml.load(content)
 
 
 class ODBC_Engine:
     """Connect to database"""
 
-    def __init__(self, cfg, db_name=None):
+    def __init__(self, cfg, driver, db_name=None):
         self.name = cfg.system
         self.host = cfg.host
         self.db_name = db_name
@@ -26,15 +19,8 @@ class ODBC_Engine:
         pattern = r'([\w\.-]+)(:\d+)?([/\\]\w+)?'
         match = re.search(pattern, cfg.host)
 
-        driver = Dict(drivers['pyodbc'])
-
-        if 'path' in driver.system[self.name].params:
-            path = os.path.join(cfg.host, db_name)
-        else:
-            path = None
-
-        if 'dbname' in driver.system[self.name].dbname: 
-            default_dbname = driver.system[self.name].dbname
+        if 'dbname' in driver.dbname: 
+            default_dbname = driver.dbname
         else:
             default_dbname = None
 
@@ -45,13 +31,10 @@ class ODBC_Engine:
             'user': cfg.uid,
             'pass': cfg.pwd,
             'dbname': db_name or default_dbname,
-            'path': path
+            'path': os.path.join(cfg.host, db_name)
         })
-        params = []
-        for param in driver.system[self.name].params:
-            params.append(config[param])
 
-        cnxn_string = driver.system[self.name].string.format(**config)
+        cnxn_string = driver.string.format(**config)
         cnxn_key_value_pairs = cnxn_string.split(';')
         cnxnstr = 'Driver={' + odbc_driver + '};'
         for key_value in cnxn_key_value_pairs:
@@ -66,7 +49,7 @@ class ODBC_Engine:
         self.user = cfg.uid
         self.url = Dict({
             'username': cfg.uid,
-            'database': (path if cfg.system == 'sqlite'
+            'database': (config.path if cfg.system == 'sqlite'
                          else db_name.split('.')[0] if db_name else None)
         })
 

@@ -1,61 +1,59 @@
-pyodbc:
-    system:
-        sqlite:
-            string: "Database={path};FKSupport=1;"
-        duckdb:
-            string: "Database={path}"
-        mysql:
-            string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
-        mariadb:
-            string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
-        oracle:
-            string: "DBQ={host}:{port}/{sid};Uid={user};Pwd={pass}"
-        mssql:
-            string: "Server={host}\\{sid};Port={port};Uid={user};Pwd={pass};Database={dbname};Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes;"
-        postgresql:
-            string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname};"
-            dbname: postgres  # default dbname
-    placeholder: '?'
-sqlite3:
-    system:
-        sqlite:
-            string: "database={path};check_same_thread=False"
-            query: 'PRAGMA foreign_keys = ON'
-    placeholder: '?'
-sqlean:
-    system:
-        sqlite:
-            string: "database={path};check_same_thread=False"
-            query: 'PRAGMA foreign_keys = ON'
-    placeholder: '?'
+sqlite:
+    sqlite3:
+        string: "database={path};check_same_thread=False"
+        query: 'PRAGMA foreign_keys = ON'
+        placeholder: '?'
+    sqlean:
+        string: "database={path};check_same_thread=False"
+        query: 'PRAGMA foreign_keys = ON'
+        placeholder: '?'
+    duckdb:
+        string: ''
+        query: "ATTACH '{path}' (TYPE sqlite)"
+        placeholder: '?'
+    pyodbc:
+        string: "Database={path};FKSupport=1;"
+        placeholder: '?'
 duckdb:
-    system:
-        duckdb:
-            string: "{path}"
-        sqlite:
-            string: ''
-            query: "ATTACH '{path}' (TYPE sqlite)"
-    placeholder: '?'
-mysql.connector:
-    system:
-        mysql:
-            string: "host={host};port={port};user={user};password={pass}"
-        mariadb:
-            string: "host={host};port={port};user={user};password={pass}"
-    placeholder: '%s'
-oracledb:
-    system:
-        oracle:
-            string: "host={host};port={port};service_name={sid};user={user};password={pass};disable_oob=True"
-    placeholder: colon-prefixed
-pymssql:
-    system:
-        mssql:
-            string: "host={host}\\{sid};port={port};user={user};password={pass};database={dbname}"
-    placeholder: '%s'
-psycopg2:
-    system:
-        postgresql:
-            string: "host={host};port={port};user={user};password={pass};dbname={dbname}"
-            dbname: postgres
-    placeholder: '%s'
+    duckdb:
+        string: "{path}"
+        placeholder: '?'
+    pyodbc:
+        string: "Database={path}"
+        placeholder: '?'
+mysql:
+    mysql.connector:
+        string: "host={host};port={port};user={user};password={pass}"
+        placeholder: '%s'
+    pyodbc:
+        string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
+        placeholder: '?'
+mariadb:
+    mysql.connector:
+        string: "host={host};port={port};user={user};password={pass}"
+    pyodbc:
+        string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
+        placeholder: '?'
+oracle:
+    oracledb:
+        string: "host={host};port={port};service_name={sid};user={user};password={pass};disable_oob=True"
+        placeholder: colon-prefixed
+    pyodbc:
+        string: "DBQ={host}:{port}/{sid};Uid={user};Pwd={pass}"
+        placeholder: '?'
+mssql:
+    pymssql:
+        string: "host={host}\\{sid};port={port};user={user};password={pass};database={dbname}"
+        placeholder: '%s'
+    pyodbc:
+        string: "Server={host}\\{sid};Port={port};Uid={user};Pwd={pass};Database={dbname};Encrypt=yes;MARS_Connection=yes;TrustServerCertificate=yes;"
+        placeholder: '?'
+postgresql:
+    psycopg2:
+        string: "host={host};port={port};user={user};password={pass};dbname={dbname}"
+        dbname: postgres
+        placeholder: '%s'
+    pyodbc:
+        string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname};"
+        dbname: postgres
+        placeholder: '?'

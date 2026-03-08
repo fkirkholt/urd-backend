@@ -1,4 +1,22 @@
 from pydantic_settings import BaseSettings
+from ruamel.yaml import YAML
+from pathlib import Path
+from addict import Dict
+
+
+yaml = YAML()
+
+with open(Path("drivers.yml"), "r") as content:
+    _drivers = yaml.load(content)
+
+_local_drivers = {}
+if Path('drivers.local.yml').exists():
+    with open(Path('drivers.local.yml'), 'r') as content:
+        _local_drivers = yaml.load(content)
+
+    _drivers.update(_local_drivers)
+
+drivers = Dict(_drivers)
 
 
 class Settings(BaseSettings):
@@ -11,14 +29,7 @@ class Settings(BaseSettings):
     database: str | None = None
     uid: str | None = None
     pwd: str | None = None
-    use_odbc: bool = False
-    mysql_driver: str = 'mysql.connector'
-    mariadb_driver: str = 'mysql.connector'
-    postgresql_driver: str = 'psycopg2'
-    sqlite_driver: str = 'sqlite3'
-    duckdb_driver: str = 'duckdb'
-    oracle_driver: str = 'oracledb'
-    mssql_driver: str = 'pymssql'
+    driver: str | None = None
     max_connections: int = 10
     norwegian_chars: bool = False
     exportdir: str | None = None

@@ -49,6 +49,10 @@ class Field:
             attrs['data-format'] = html_attrs['data-format']
         if 'data-href' in html_attrs:
             attrs['data-href'] = html_attrs['data-href']
+        if 'data-default' in html_attrs:
+            col.default = html_attrs['data-default']
+        if 'data-required' in html_attrs:
+            col.nullable = 0
 
         self.nullable = (col.nullable == 1)
         self.label = self._db.get_label(self.name)

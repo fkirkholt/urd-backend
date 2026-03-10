@@ -33,6 +33,7 @@ class Grid:
         return Dict({
             'name': self.tbl.name,
             'type': self.tbl.type,
+            'selection': self.get_selected_idx(pkey_vals),
             'records': self.get_records(),
             'count_records': self.get_rowcount(),
             'fields': self.tbl.fields,
@@ -52,7 +53,6 @@ class Grid:
             'label': self.db.get_label(self.tbl.name),
             'actions': self.actions,
             'limit': self.tbl.limit,
-            'selection': self.get_selected_idx(pkey_vals),
             'offset': self.tbl.offset,
             'conditions': self.cond.stmnts,
             'expansion_column': self.get_expansion_column(),

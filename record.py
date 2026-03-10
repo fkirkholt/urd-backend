@@ -369,7 +369,7 @@ class Record:
                 self.pkey[colname] = values[colname]
         inc_col = self._tbl.pkey.columns[-1]
         if (
-            inc_col not in values and
+            inc_col and inc_col not in values and
             self._tbl.fields[inc_col].extra == "auto_increment"
         ):
             s = slice(0, len(self._tbl.pkey.columns) - 1)

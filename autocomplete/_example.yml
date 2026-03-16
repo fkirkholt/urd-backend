@@ -1,0 +1,15 @@
+# Example file showing how to define autocomplete words in code fields
+# URÐR loads all files in this folder, but doesn't load files starting 
+# with underscore, like this example file
+# 
+# See also:
+# - https://codemirror.net/docs/ref/#autocomplete.Completion
+# - https://codemirror.net/examples/autocompletion/
+- label: antidisestablishmentarianism
+  type: keyword
+- label: urdr
+  type: text
+  apply: URÐR
+  detail: URÐR
+  info: Univeresal Relational Data Reflection
+

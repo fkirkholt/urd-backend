@@ -10,7 +10,7 @@ import urllib.parse
 import re
 import tempfile
 from subprocess import run
-from settings import drivers, Settings
+from settings import drivers, yaml, Settings
 from engine import Engine
 from database import Database
 from table import Table, Grid
@@ -420,13 +420,21 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
                 if 'all privileges' in privs or 'create user' in privs:
                     useradmin = True
 
+    autocomplete = {}
+    for filename in os.listdir("autocomplete"):
+        if filename[0] == '_':
+            continue
+        with open("autocomplete/" + filename, "r") as content:
+            autocomplete[filename] = yaml.load(content)
+
     return {'data': {
         'records': result,
         'path': path,
         'roles': [] if cfg.system in ('sqlite', 'duckdb') else user.roles,
         'role': role,
         'useradmin': useradmin,
-        'system': cfg.system
+        'system': cfg.system,
+        'autocomplete': autocomplete
     }}
 
 

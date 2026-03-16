@@ -3,5 +3,7 @@ dist/
 static/
 venv/
 __pycache__/
+autocomplete/*
+!autocomplete/_example.yml
 main.spec
 q.py

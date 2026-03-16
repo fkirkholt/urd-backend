@@ -189,8 +189,8 @@ def get_drivers(system: str):
 
 
 @app.post("/login")
-def login(response: Response, cnxn: str, system: str, server: str,
-          database: str, driver: str, username: str = None, password: str = None ):
+def login(response: Response, cnxn: str, system: str, server: str, driver: str,
+          database: str = None, username: str = None, password: str = None ):
     cfg.cnxn = cnxn 
     cfg.system = system or cfg.system
     cfg.uid = username

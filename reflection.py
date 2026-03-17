@@ -1,8 +1,11 @@
-import yaml
+from ruamel.yaml import YAML
 import simplejson as json
 from addict import Dict
 from expression import Expression
 from util import to_rec, log_caller
+
+
+yaml = YAML()
 
 
 class Reflection:
@@ -62,7 +65,7 @@ class Reflection:
                 pkeys[rec.table_name].pkey_name = rec.pk_name
                 if 'column_names' in rec:
                     if type(rec.column_names) is str:
-                        rec.column_names = yaml.safe_load(rec.column_names)
+                        rec.column_names = yaml.load(rec.column_names)
                     pkeys[rec.table_name].constrained_columns = rec.column_names
                 if 'constrained_columns' not in pkeys[rec.table_name]:
                     pkeys[rec.table_name].constrained_columns = []

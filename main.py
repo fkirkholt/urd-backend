@@ -390,8 +390,9 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
                     crsr.execute(sql)
                     cnxn.commit()
 
-        user = User(engine)
-        rows = user.databases()
+        with engine.connect() as cnxn:
+            user = User(engine, cnxn)
+            rows = user.databases()
 
         for row in rows:
             base = Dict()

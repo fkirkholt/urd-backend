@@ -470,15 +470,7 @@ def ripgrep(path: str, pattern: str):
             desc = parts[1]
             base.columns.description += '<br>' + desc
 
-    return {'data': {
-        'records': result,
-        'path': path,
-        'grep': pattern,
-        'roles': [],
-        'role': None,
-        'useradmin': None,
-        'system': cfg.system
-    }}
+    return {'data': result}
 
 
 @app.get("/userlist")

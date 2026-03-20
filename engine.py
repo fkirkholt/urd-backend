@@ -48,7 +48,7 @@ class Engine:
             'sid': None if match.group(3) is None else match.group(3)[1:],
             'user': cfg.uid,
             'pass': cfg.pwd,
-            'dbname': db_name.split('.')[0],
+            'dbname': db_name.split('.')[0] if db_name else None,
             'path': os.path.join(cfg.host, db_name) if db_name else None
         })
 

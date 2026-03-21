@@ -318,7 +318,7 @@ def delete_file(filename: str):
 
 
 @app.get("/dblist")
-def dblist(request: Request, response: Response, role: str = None, path: str = None):
+def dblist(request: Request, response: Response, role: str = None, path: str = None, pattern: str = None):
     result = []
     useradmin = False
     if cfg.system in ('sqlite', 'duckdb'):
@@ -336,7 +336,7 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
                 base.columns.type = 'database'
                 result.append(base)
 
-        else:
+        elif not pattern:
             filepath = os.path.join(cfg.host, path) if path else cfg.host
             if os.path.isfile(filepath):
                 dirpath = os.path.dirname(filepath)
@@ -369,6 +369,8 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
                             base.columns.type = 'database'
 
                 result.append(base)
+        else:
+            result = ripgrep(path, pattern) 
     else:
         engine = get_engine(cfg)
         if role:
@@ -439,16 +441,12 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
     }}
 
 
-@app.get("/ripgrep")
 def ripgrep(path: str, pattern: str):
     dir = os.path.join(cfg.host, path) if path else cfg.host
-    cwd = os.getcwd()
-    os.chdir(dir)
-    cmd = 'rg ' + pattern + ' --line-number --color=always --colors=path:none'
+    cmd = 'rg ' + pattern +  ' --line-number --color=always --colors=path:none'
     cmd += ' --max-columns=255 --max-columns-preview'
     cmd += '' if any(char.isupper() for char in pattern) else ' -i'
-    result = run(cmd, shell=True, capture_output=True, text=True)
-    os.chdir(cwd)
+    result = run(cmd, cwd=dir, shell=True, capture_output=True, text=True)
     lines = result.stdout.split('\n')
     files = []
     result = []
@@ -471,7 +469,7 @@ def ripgrep(path: str, pattern: str):
             desc = parts[1]
             base.columns.description += '<br>' + desc
 
-    return {'data': result}
+    return result
 
 
 @app.get("/userlist")

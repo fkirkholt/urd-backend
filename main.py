@@ -343,32 +343,33 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
                 dirpath = os.path.dirname(filepath)
             else:
                 dirpath = filepath
-            file_list = os.listdir(dirpath)
-            file_list.sort()
-            for filename in file_list:
-                filepath = os.path.join(dirpath, filename)
-                if os.path.islink(filepath):
+            for entry in sorted(os.scandir(dirpath), key=lambda e: e.name):
+                filename = entry.name
+                filepath = entry.path
+                if entry.is_symlink():
                     continue
-                attrs = xattr.xattr(filepath)
                 title = None
+                comment = None
                 if filename.endswith('.md'):
                     with open(filepath, 'r', encoding='utf-8') as f:
                         chunk = f.readline(50)
                         matches = title_regex.match(chunk)
                         if matches:
                             title = matches.group('h1') or matches.group('bold')
-                comment = None
-                if 'user.comment' in attrs:
-                    comment = attrs.get('user.comment')
+                else:
+                    attrs = xattr.xattr(filepath)
+                    if 'user.comment' in attrs:
+                        comment = attrs.get('user.comment')
                 base = Dict()
                 base.columns.name = os.path.join(path, filename) if path else filename
                 base.columns.label = filename
+                base.columns.title = title
                 base.columns.description = comment
                 base.columns.type = 'file'
-                base.columns.size = os.path.getsize(filepath)
-                if os.path.isdir(filepath):
+                base.columns.size = entry.stat().st_size
+                if entry.is_dir():
                     base.columns.type = 'dir'
-                else:
+                elif filename.endswith('.db'):
                     with open(filepath, 'rb') as reader:
                         string = reader.read(12)
                         if b'SQLite' in string:

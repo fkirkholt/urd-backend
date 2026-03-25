@@ -338,6 +338,7 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
 
         elif not pattern:
             filepath = os.path.join(cfg.host, path) if path else cfg.host
+            title_regex = re.compile(r'^(?:#\s+(?P<h1>.*)|__(?P<bold>.*?)__)')
             if os.path.isfile(filepath):
                 dirpath = os.path.dirname(filepath)
             else:
@@ -349,6 +350,13 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
                 if os.path.islink(filepath):
                     continue
                 attrs = xattr.xattr(filepath)
+                title = None
+                if filename.endswith('.md'):
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        chunk = f.readline(50)
+                        matches = title_regex.match(chunk)
+                        if matches:
+                            title = matches.group('h1') or matches.group('bold')
                 comment = None
                 if 'user.comment' in attrs:
                     comment = attrs.get('user.comment')

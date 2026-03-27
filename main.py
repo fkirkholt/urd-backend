@@ -270,7 +270,7 @@ def get_backlinks(path: str):
                 content = file.read()
                 if '(' + relpath + ')' in content:
                     abspath = os.path.join(path, filename)
-                    backlinks.append(os.path.relpath(abspath, cfg.host))
+                    backlinks.append(os.path.relpath(abspath, os.path.dirname(filepath)))
 
     return backlinks
 

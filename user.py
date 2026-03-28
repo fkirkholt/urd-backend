@@ -59,9 +59,8 @@ class User:
 
             params = {'uid': self.name, 'db': db_name}
 
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, params)
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 rows = crsr.fetchall()
 
@@ -92,9 +91,8 @@ class User:
                 """
                 params = {'user': self.name}
 
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, params)
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 rows = crsr.fetchall()
 
@@ -126,9 +124,8 @@ class User:
             """
 
             self._access_codes = []
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, {'uid': self.name})
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 rows = crsr.fetchall()
 
@@ -160,9 +157,8 @@ class User:
             where database_name = :db_name
             """
 
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, {'db_name': db_name})
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 row = crsr.fetchone()
 
@@ -184,9 +180,8 @@ class User:
                 privilege.delete = 1
 
         elif self.engine.name in ['mysql', 'mariadb']:
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql = 'show grants'
-                crsr = cnxn.cursor()
                 crsr.execute(sql)
                 rows = crsr.fetchall()
             for row in rows:
@@ -236,9 +231,8 @@ class User:
             select count(*) from {urdr}.table_access ta
             where database_name = :db_name and table_name = :table
             """
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, {'db_name': db_name, 'table': table})
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 count = crsr.fetchone()[0]
             if count:
@@ -263,9 +257,8 @@ class User:
                       (read_access is NULL or
                       read_access in (select code from cte_access))
                 """
-                with self.engine.connect() as cnxn:
+                with self.cnxn.cursor() as crsr:
                     sql, params = self.expr.prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
-                    crsr = cnxn.cursor()
                     crsr.execute(sql, params)
                     count_read = crsr.fetchone()[0]
 
@@ -284,9 +277,8 @@ class User:
                 where database_name = :db and table_name = :table and
                       write_access in (select code from cte_access)
                 """
-                with self.engine.connect() as cnxn:
+                with self.cnxn.cursor() as crsr:
                     sql, params = self.expr.prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
-                    crsr = cnxn.cursor()
                     crsr.execute(sql, params)
                     count_write = crsr.fetchone()[0]
 
@@ -298,9 +290,8 @@ class User:
                     privilege.delete = 1
 
         if self.engine.name in ['mysql', 'mariadb']:
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql = 'show grants'
-                crsr = cnxn.cursor()
                 crsr.execute(sql)
                 rows = crsr.fetchall()
             for row in rows:
@@ -336,8 +327,7 @@ class User:
             and table_name = :table;
             """
             sql, params = self.expr.prepare(sql, {'schema': schema, 'table': table})
-            with self.engine.connect() as cnxn:
-                crsr = cnxn.cursor()
+            with self.cnxn.cursor() as crsr:
                 crsr.execute(sql, params)
                 rows = crsr.fetchall()
                 for row in rows:
@@ -362,9 +352,8 @@ class User:
         if self.engine.name == 'sqlite' and cfg.database == 'urdr':
             return 'sysadmin' in self.access_codes
         elif self.engine.name in ['mysql', 'mariadb']:
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql = 'show grants'
-                crsr = cnxn.cursor()
                 crsr.execute(sql)
                 rows = crsr.fetchall()
             for row in rows:
@@ -377,13 +366,12 @@ class User:
                 privs = [priv.strip() for priv in re.findall(expr, privs)]
                 obj = grant.group(2).replace('"', '').strip()
                 if obj == schema + '.*' or obj == '*.*':
-                    if 'super' in privs:
+                    if 'all privileges' in privs:
                         self._is_admin[schema] = True
         elif self.engine.name == 'postgresql':
             sql = "select usesuper from pg_user where usename = current_user;"
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, _ = self.expr.prepare(sql)
-                crsr = cnxn.cursor()
                 crsr.execute(sql)
                 row = crsr.fetchone()
             super = row[0]
@@ -396,9 +384,8 @@ class User:
             from pg_catalog.pg_database d
             where d.datname = :cat
             """
-            with self.engine.connect() as cnxn:
+            with self.cnxn.cursor() as crsr:
                 sql, params = self.expr.prepare(sql, {'cat': self.engine.url.database})
-                crsr = cnxn.cursor()
                 crsr.execute(sql, params)
                 row = crsr.fetchone()
                 rec = to_rec(row, crsr)

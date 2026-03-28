@@ -94,7 +94,8 @@ class Database:
             try:
                 with self.cnxn.cursor() as crsr:
                     sql, _ = self.expr.prepare(sql)
-                    rows = crsr.execute(sql).fetchall()
+                    crsr.execute(sql)
+                    rows = crsr.fetchall()
                     for row in rows:
                         if row is None:
                             break

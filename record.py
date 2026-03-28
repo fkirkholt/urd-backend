@@ -281,7 +281,8 @@ class Record:
 
         with self._db.cnxn.cursor() as crsr:
             sql, params = self._db.expr.prepare(sql, params)
-            row = crsr.execute(sql, params).fetchone()
+            crsr.execute(sql, params)
+            row = crsr.fetchone()
 
             self._cache.vals = to_rec(row, crsr)
 

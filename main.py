@@ -382,15 +382,14 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
             result = ripgrep(path, pattern) 
     else:
         engine = get_engine(cfg)
+        cnxn = engine.connect()
         if role:
-            with engine.connect() as cnxn:
+            with cnxn.cursor() as crsr:
                 sql = 'set default role ' + role
-                crsr = cnxn.cursor()
                 crsr.execute(sql)
         elif cfg.system in ['mysql', 'mariadb']:
-            with engine.connect() as cnxn:
+            with cnxn.cursor() as crsr:
                 sql = 'select current_role()'
-                crsr = cnxn.cursor()
                 crsr.execute(sql)
                 rows = crsr.fetchall()
                 role = (None if len(rows) == 0 else rows[0][0]
@@ -401,9 +400,8 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
                     crsr.execute(sql)
                     cnxn.commit()
 
-        with engine.connect() as cnxn:
-            user = User(engine, cnxn)
-            rows = user.databases()
+        user = User(engine, cnxn)
+        rows = user.databases()
 
         for row in rows:
             base = Dict()
@@ -415,9 +413,8 @@ def dblist(request: Request, response: Response, role: str = None, path: str = N
 
         # Find if user has useradmin privileges
         if cfg.system in ['mysql', 'mariadb']:
-            with engine.connect() as cnxn:
+            with cnxn.cursor() as crsr:
                 sql = 'show grants'
-                crsr = cnxn.cursor()
                 crsr.execute(sql)
                 rows = crsr.fetchall()
             for row in rows:

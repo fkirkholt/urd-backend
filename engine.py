@@ -8,12 +8,14 @@ from contextlib import closing
 
 class Connection:
 
-    def __init__(self, cnxn):
+    def __init__(self, cnxn, driver):
         self._cnxn = cnxn
+        self.driver = driver
 
     def cursor(self):
+        options = self.driver.get('options', {})
         # Make shure all cursor objects run .close() when exiting `with` statements
-        return closing(self._cnxn.cursor())
+        return closing(self._cnxn.cursor(**options))
 
     def commit(self):
         return self._cnxn.commit()
@@ -36,6 +38,7 @@ class Engine:
                 detail=msg
             )
 
+        self.driver = driver
         self.driver_module = importlib.import_module(driver.name, package=None)
         self.driver_name = driver.name
 
@@ -62,7 +65,7 @@ class Engine:
             if len(parts) > 1:
                 key = parts[0].strip()
                 value = parts[1]
-                if value:
+                if value and value != 'None':
                     if value in ('True', 'False'):
                         value = value == 'True'
                     self.connect_params[key] = value;
@@ -83,5 +86,5 @@ class Engine:
         if self.query:
             cnxn.execute(self.query)
 
-        return Connection(cnxn)
+        return Connection(cnxn, self.driver)
 

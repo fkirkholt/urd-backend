@@ -25,12 +25,17 @@ mysql:
     mysql.connector:
         string: "host={host};port={port};user={user};password={pass}"
         placeholder: '%s'
+        options:
+          buffered: true
     pyodbc:
         string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
         placeholder: '?'
 mariadb:
     mysql.connector:
         string: "host={host};port={port};user={user};password={pass}"
+        placeholder: '%s'
+        options:
+          buffered: true
     pyodbc:
         string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
         placeholder: '?'

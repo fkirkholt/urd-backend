@@ -1,6 +1,8 @@
-# Urðr (Universal relational database reflection)
+![urdr](/static/css/img/urdr-glow-blue.png)
 
-Urðr (named after one of the [Norns](https://en.wikipedia.org/wiki/Norns)
+## Universal Relational Data Reflection
+
+URÐR (named after one of the [Norns](https://en.wikipedia.org/wiki/Norns)
 in Norse mythology) is an application that can be used to map, display and
 register information in a relational database.  It uses information only from
 the database itself (reflection) in order to display data and relations between
@@ -14,7 +16,7 @@ The application is designed for archivists, who need to map databases, find how
 the information is connected, and create access databases from the original
 database.
 
-Urðr can analyze the original database and find which tables, columns and
+URÐR can analyze the original database and find which tables, columns and
 relations have been used the most, and create an ER diagram of these
 relations.
 
@@ -29,10 +31,12 @@ Python >= 3.10
 
 ## Installation
 
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+
 ~~~ sh
 git clone https://github.com/fkirkholt/urd-backend urdr
 cd urdr
-pip install -r requirements.txt
+uv sync
 ~~~
 
 Also install the [frontend](https://github.com/fkirkholt/urd-frontend)
@@ -41,7 +45,7 @@ before starting the application.
 ## Starting web server
 
 ~~~ sh
-python3 main.py --host 0.0.0.0 --port 8000
+uv run main.py --host 0.0.0.0 --port 8000
 ~~~
 
 ## Features

@@ -1,126 +1,51 @@
 import uvicorn
-from fastapi import FastAPI, Request, Response, HTTPException, Body
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import (HTMLResponse, JSONResponse, StreamingResponse,
-                               FileResponse)
-from fastapi.staticfiles import StaticFiles
-from starlette import status
-import io
-import urllib.parse
-import re
-import tempfile
-from subprocess import run
-from settings import drivers, yaml, Settings
-from engine import Engine
-from database import Database
-from table import Table, Grid
-from record import Record
-from field import Field
-from util import to_rec
-from expression import Expression
-import json
+from litestar import Litestar, get, post, Request, Response
+from litestar.response import Template, File
+from litestar.contrib.jinja import JinjaTemplateEngine
+from litestar.template.config import TemplateConfig
+from litestar.types import Scope, Receive, Send
+from litestar.static_files import create_static_files_router
+from litestar.logging import LoggingConfig
+from litestar.datastructures import Cookie, State
+from litestar.status_codes import HTTP_401_UNAUTHORIZED
+from settings import drivers, Settings
 import os
-import hashlib
-from addict import Dict
 from jose import jwt
 import time
-import xattr
 import magic
-from user import User
-from odbc_engine import ODBC_Engine
 from starlette.background import BackgroundTask
 from contextlib import asynccontextmanager
 import typer
+from controllers.file import File_Controller
+from controllers.user import User_Controller
+from controllers.database import Database_Controller
 
 
 cfg = Settings()
 cfg_default = Settings()
 
-templates = Jinja2Templates(directory="static/html")
 mod = os.path.getmtime("static/js/dist/index.js")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def db_lifespan(app: Litestar):
     app.state.cnxn_registry = {}
-    yield
-    # Cleanup: Close all active connections on shutdown
-    for cnxn in app.state.cnxn_registry.values():
-        cnxn.close()
+    try:
+        yield
+    finally:
+        # Cleanup: Close all active connections on shutdown
+        for cnxn in app.state.cnxn_registry.values():
+            cnxn.close()
 
 
-app = FastAPI(lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-def get_cnxn(app_state, engine):
-    registry = app_state.cnxn_registry
-
-    key = engine.driver_name + ':' + engine.host + '/' + str(engine.db_name or '')
-
-    # If exists, move to end (mark as most recently used)
-    if key in registry:
-        cnxn = registry.pop(key)
-        registry[key] = cnxn
-        return registry[key]
-
-    # Check capacity before adding new connection
-    if len(registry) >= cfg.max_connections:
-        # Pop the oldest item (first item)
-        first_key = next(iter(registry))
-        old_cnxn = registry.pop(first_key)
-        old_cnxn.close()
-
-    # Create and store new connection
-    new_cnxn = engine.connect()
-    registry[key] = new_cnxn
-    return new_cnxn
+# Log errors to console
+logging_config = LoggingConfig(
+    log_exceptions="always",
+)
 
 
 def cleanup(temp_file):
     os.remove(temp_file)
-
-
-def get_engine(cfg, db_name=None):
-    driver = drivers[cfg.system][cfg.driver]
-    driver.name = cfg.driver
-    if cfg.driver == 'pyodbc':
-        engine = ODBC_Engine(cfg, driver, db_name)
-    else:
-        engine = Engine(cfg, driver, db_name)
-
-    if cfg.system == 'sqlite' and db_name == 'urdr':
-        with engine.connect() as cnxn:
-            sql = """
-            select count(*) from user
-            where id = :id and password = :pwd
-            """
-
-            hashed_pwd = hashlib.sha256(cfg.pwd.encode('utf-8')).hexdigest()
-            expr = Expression(engine)
-            sql, params = expr.prepare(sql, {'id': cfg.uid, 'pwd': hashed_pwd})
-            crsr = cnxn.cursor()
-            crsr.execute(sql, params)
-            count = crsr.fetchone()[0]
-
-            if count == 0:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
-                        'msg': "Invalid authentication",
-                        "system": cfg.system,
-                        "host": cfg.host,
-                        "database": db_name
-                    }
-                )
-    elif cfg.system == 'sqlite' and cfg_default.database == 'urdr':
-        with engine.connect() as cnxn:
-            path = os.path.join(cfg.host, cfg_default.database + '.db')
-            sql = 'ATTACH DATABASE "' + path + '" as urdr'
-            crsr = cnxn.cursor()
-            crsr.execute(sql)
-
-    return engine
 
 
 def token():
@@ -135,63 +60,70 @@ def token():
     }, cfg.secret_key)
 
 
-@app.middleware("http")
-async def check_login(request: Request, call_next):
-    session = None
-    path_parts = request.url.path.split('/')
-    if 'cnxn' in request.query_params:
-        session: str = request.cookies.get(request.query_params['cnxn'])
-    elif len(path_parts) > 1:
-        session: str = request.cookies.get(path_parts[1])
+def login_middleware(app):
 
-    if session and request.url.path != '/login':
-        payload = jwt.decode(session, cfg.secret_key)
-        cfg.system = payload["system"]
-        cfg.host = payload["server"]
-        cfg.uid = payload["uid"]
-        cfg.pwd = payload["pwd"]
-        cfg.database = payload["database"]
-        cfg.driver = payload["driver"]
-    elif (
-        request.url.path not in ("/login", "/", "/drivers") and
-        not request.url.path.startswith('/static')
-    ):
-        return JSONResponse(content={
-            "message": "login",
-            "detail": {
-                'system': cfg.system,
-                'host': cfg.host,
-                'database': cfg.database
-            }
-        }, status_code=401)
+    async def check_login(scope: Scope, receive: Receive, send: Send):
+        request = Request(scope)
+        response = Response(content={"message": "OK"})
+        session = None
+        path_parts = scope['path'].split('/')
+        print('receive', receive)
+        if 'cnxn' in request.query_params:
+            session: str = request.cookies.get(request.query_params.get('cnxn'))
+        elif len(path_parts) > 1:
+            session: str = request.cookies.get(path_parts[1])
 
-    response = await call_next(request)
-    if (
-        cfg.uid and request.url.path not in ["/logout", "/"]
-        and not request.url.path.startswith('/static')
-    ):
-        # Update cookie to renew expiration time
-        response.set_cookie(key="session", value=token(), expires=cfg.timeout)
+        if session and scope['path'] != '/login':
+            payload = jwt.decode(session, cfg.secret_key)
+            cfg.system = payload["system"]
+            cfg.host = payload["server"]
+            cfg.uid = payload["uid"]
+            cfg.pwd = payload["pwd"]
+            cfg.database = payload["database"]
+            cfg.driver = payload["driver"]
+        elif (
+            cfg.system not in ('sqlite', 'duckdb') and
+            scope['path'] not in ("/login", "/", "/drivers") and
+            not scope['path'].startswith('/static')
+        ):
+            response = Response(
+                content={
+                    "message": "login",
+                    "detail": {
+                        'system': cfg.system,
+                        'host': cfg.host,
+                        'database': cfg.database
+                    }
+                },
+                status_code=HTTP_401_UNAUTHORIZED,
+                media_type="application/json"
+            )
+            asgi_response = response.to_asgi_response(app, request)
+            await asgi_response(scope, receive, send)
+            return
 
-    return response
+        await app(scope, receive, send)
+
+    return check_login
 
 
-@app.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse("urd.html", {
+@get("/", sync_to_thread=True)
+def home(request: Request) -> Template:
+    return Template(template_name="urd.html", context={
         "request": request, "v": mod, "base": cfg.database
     })
 
 
-@app.get("/drivers")
-def get_drivers(system: str):
+@get("/drivers", sync_to_thread=True)
+def get_drivers(system: str) -> dict:
     return drivers[system]
 
 
-@app.post("/login")
-def login(response: Response, cnxn: str, system: str, server: str, driver: str,
-          database: str = None, username: str = None, password: str = None ):
-    cfg.cnxn = cnxn 
+@post("/login", sync_to_thread=True)
+def login(cnxn: str, system: str, server: str, driver: str,
+          database: str | None = None, username: str | None = None,
+          password: str | None = None) -> Response[dict]:
+    cfg.cnxn = cnxn
     cfg.system = system or cfg.system
     cfg.uid = username
     cfg.pwd = password
@@ -199,757 +131,59 @@ def login(response: Response, cnxn: str, system: str, server: str, driver: str,
     cfg.host = server or cfg.host
     cfg.driver = driver
 
-    # cfg.timeout = None if cfg.system == 'sqlite' else cfg.timeout
     if cfg.system == 'sqlite' and cfg.database != 'urdr':
         cfg.timeout = None
-    response.set_cookie(key=cnxn, value=token(), expires=cfg.timeout)
 
-    return {"success": True}
+    return Response(
+        content={"success": True, },
+        cookies=[Cookie(key=cnxn, value=token(), expires=cfg.timeout)]
+    )
 
 
-@app.get("/logout")
-def logout(response: Response):
-    response.delete_cookie("session")
-    cfg = cfg_default
+@get("/logout", sync_to_thread=True)
+def logout(send: Send) -> dict:
     cnxn = {
         'system': cfg_default.system,
         'host': cfg_default.host,
         'database': cfg_default.database
     }
-
     return {'success': True, 'cnxn': cnxn}
 
-
-@app.get("/file")
-def get_file(path: str):
-    filepath = os.path.join(cfg.host, path)
-    if cfg.system not in ['sqlite', 'duckdb']:
-        return {'path': path, 'type': 'server'}
-    if os.path.isdir(filepath):
-        return {'path': path, 'type': 'dir'}
-    if not os.path.isfile(filepath) and not os.path.isdir(filepath):
-        return {'path': path, 'type': None}
-    size = os.path.getsize(filepath)
-    content = None
-    msg = None
-    type = magic.from_file(filepath, mime=True)
-    text_types = ['application/javascript']
-    with open(filepath, 'rb') as reader:
-        string = reader.read(12)
-        if b'SQLite' in string:
-            type = 'sqlite'
-        elif b'DUCK' in string:
-            type = 'duckdb'
-    if type.startswith('text/') or type in text_types:
-        if size < 100000000:
-            with open(filepath, 'r') as file:
-                content = file.read()
-        else:
-            msg = 'File too large to open'
-    name = os.path.basename(filepath)
-    lsp = False
-    for ext in cfg.lsp_filetypes.split('|'):
-        if path.endswith(ext):
-            lsp = True
-
-    return {'path': path, 'name': name, 'content': content, 'type': type,
-            'msg': msg, 'abspath': filepath if lsp else None,
-            'websocket': cfg.websocket if lsp else None}
-
-
-@app.get('/backlinks')
-def get_backlinks(path: str):
-    backlinks = []
-    filepath = os.path.join(cfg.host, path)
-    for path, folders, files in os.walk(cfg.host):
-        for filename in files:
-            if not filename.endswith('.md'):
-                continue
-            relpath = os.path.relpath(filepath, path)
-            with open(os.path.join(path, filename), 'r') as file:
-                content = file.read()
-                if '(' + relpath + ')' in content:
-                    abspath = os.path.join(path, filename)
-                    backlinks.append(os.path.relpath(abspath, os.path.dirname(filepath)))
-
-    return backlinks
-
-
-@app.post("/file")
-def update_file(path: str, content: str = Body(...)):
-    filepath = os.path.join(cfg.host, path)
-    with open(filepath, 'w') as file:
-        file.write(content)
-
-    return {'result': 'success'}
-
-
-@app.put("/file_rename")
-def rename_file(src: str, dst: str):
-    src = os.path.join(cfg.host, src)
-    dst = os.path.join(cfg.host, dst)
-    os.rename(src, dst)
-    filepath = os.path.join(cfg.host, src)
-    for path, folders, files in os.walk(cfg.host):
-        for filename in files:
-            if not filename.endswith('.md'):
-                continue
-            relpath = os.path.relpath(filepath, path)
-            new_content = ''
-            with open(os.path.join(path, filename), 'r') as file:
-                content = file.read()
-                if '(' + relpath + ')' in content:
-                    new_path = relpath.replace(os.path.basename(relpath),
-                                               os.path.basename(dst))
-                    new_content = content.replace('(' + relpath + ')',
-                                                  '(' + new_path + ')')
-            if new_content:
-                with open(os.path.join(path, filename), 'w') as file:
-                    file.write(new_content)
-    return {'success': True}
-
-
-@app.put("/file_delete")
-def delete_file(filename: str):
-    filepath = os.path.join(cfg.host, filename)
-    os.remove(filepath)
-
-    return {'success': True}
-
-
-@app.get("/dblist")
-def dblist(request: Request, response: Response, role: str = None, path: str = None, pattern: str = None):
-    result = []
-    useradmin = False
-    if cfg.system in ('sqlite', 'duckdb'):
-        if cfg.database == 'urdr':
-            engine = get_engine(cfg, 'urdr')
-            cnxn = get_cnxn(request.app.state, engine)
-            user = User(engine, cnxn, name=cfg.uid)
-            rows = user.databases()
-
-            for row in rows:
-                base = Dict()
-                base.columns.name = row.name
-                base.columns.label = row.name.capitalize()
-                base.columns.description = row.description
-                base.columns.type = 'database'
-                result.append(base)
-
-        elif not pattern:
-            filepath = os.path.join(cfg.host, path) if path else cfg.host
-            title_regex = re.compile(r'^(?:#\s+(?P<h1>.*)|__(?P<bold>.*?)__)')
-            if os.path.isfile(filepath):
-                dirpath = os.path.dirname(filepath)
-            else:
-                dirpath = filepath
-            for entry in sorted(os.scandir(dirpath), key=lambda e: e.name):
-                filename = entry.name
-                filepath = entry.path
-                if entry.is_symlink():
-                    continue
-                title = None
-                comment = None
-                if filename.endswith('.md'):
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        chunk = f.readline(50)
-                        matches = title_regex.match(chunk)
-                        if matches:
-                            title = matches.group('h1') or matches.group('bold')
-                else:
-                    attrs = xattr.xattr(filepath)
-                    if 'user.comment' in attrs:
-                        comment = attrs.get('user.comment')
-                base = Dict()
-                base.columns.name = os.path.join(path, filename) if path else filename
-                base.columns.label = filename
-                base.columns.title = title
-                base.columns.description = comment
-                base.columns.type = 'file'
-                base.columns.size = entry.stat().st_size
-                if entry.is_dir():
-                    base.columns.type = 'dir'
-                elif filename.endswith('.db'):
-                    with open(filepath, 'rb') as reader:
-                        string = reader.read(12)
-                        if b'SQLite' in string:
-                            base.columns.type = 'database'
-                        elif b'DUCK' in string:
-                            base.columns.type = 'database'
-
-                result.append(base)
-        else:
-            result = ripgrep(path, pattern) 
-    else:
-        engine = get_engine(cfg)
-        cnxn = engine.connect()
-        if role:
-            with cnxn.cursor() as crsr:
-                sql = 'set default role ' + role
-                crsr.execute(sql)
-        elif cfg.system in ['mysql', 'mariadb']:
-            with cnxn.cursor() as crsr:
-                sql = 'select current_role()'
-                crsr.execute(sql)
-                rows = crsr.fetchall()
-                role = (None if len(rows) == 0 else rows[0][0]
-                        if len(rows) == 1 else 'ALL')
-
-                if role:
-                    sql = 'set role ' + role
-                    crsr.execute(sql)
-                    cnxn.commit()
-
-        user = User(engine, cnxn)
-        rows = user.databases()
-
-        for row in rows:
-            base = Dict()
-            base.columns.name = row.db_name
-            base.columns.label = row.db_name.capitalize()
-            base.columns.description = row.db_comment
-            base.columns.type = 'database'
-            result.append(base)
-
-        # Find if user has useradmin privileges
-        if cfg.system in ['mysql', 'mariadb']:
-            with cnxn.cursor() as crsr:
-                sql = 'show grants'
-                crsr.execute(sql)
-                rows = crsr.fetchall()
-            for row in rows:
-                stmt = row[0]
-                matched = re.search(r"^GRANT\s+(.+?)\s+ON\s+(.+?)\s+TO\s+",
-                                    stmt)
-                if not matched:
-                    continue
-                privs = matched.group(1).strip().lower() + ','
-                privs = [priv.strip() for priv in
-                         re.findall(r'([^,(]+(?:\([^)]+\))?)\s*,\s*', privs)]
-                if 'all privileges' in privs or 'create user' in privs:
-                    useradmin = True
-
-    autocomplete = {}
-    for filename in os.listdir("autocomplete"):
-        if filename[0] == '_':
-            continue
-        with open("autocomplete/" + filename, "r") as content:
-            autocomplete[filename] = yaml.load(content)
-
-    return {'data': {
-        'records': result,
-        'path': path,
-        'roles': [] if cfg.system in ('sqlite', 'duckdb') else user.roles,
-        'role': role,
-        'useradmin': useradmin,
-        'system': cfg.system,
-        'autocomplete': autocomplete
-    }}
-
-
-def ripgrep(path: str, pattern: str):
-    dir = os.path.join(cfg.host, path) if path else cfg.host
-    cmd = 'rg ' + pattern +  ' --line-number --color=always --colors=path:none'
-    cmd += ' --max-columns=255 --max-columns-preview'
-    cmd += '' if any(char.isupper() for char in pattern) else ' -i'
-    result = run(cmd, cwd=dir, shell=True, capture_output=True, text=True)
-    lines = result.stdout.split('\n')
-    files = []
-    result = []
-    for line in lines:
-        if line == '':
-            break
-        parts = line.split(':', 1)
-        file = parts[0]
-        if file not in files:
-            files.append(file)
-            base = Dict()
-            base.columns.name = os.path.join(path, file)
-            base.columns.label = file
-            if len(parts) > 1:
-                desc = parts[1]
-                base.columns.description = desc
-            base.columns.type = 'file'
-            result.append(base)
-        elif len(parts) > 1:
-            desc = parts[1]
-            base.columns.description += '<br>' + desc
-
-    return result
-
-
-@app.get("/userlist")
-def userlist():
-    users = []
-    roles = []
-    engine = get_engine(cfg)
-    with engine.connect() as cnxn:
-        if engine.name in ['mysql', 'mariadb']:
-            sql = """
-            select user as name, Host as host
-            from mysql.user
-            where host not in ('%', '')
-              and user not in ('PUBLIC', 'root', 'mariadb.sys', '')
-            order by user
-            """
-            crsr = cnxn.cursor()
-            crsr.execute(sql)
-            rows = crsr.fetchall()
-
-            for row in rows:
-                rec = to_rec(row, crsr)
-                user = Dict()
-                user.name = rec.name
-                user.host = rec.host
-                users.append(user)
-
-            sql = """
-            select user as name
-            from mysql.user
-            where host in ('%', '')
-              and not length(authentication_string)
-              and user != 'PUBLIC'
-            """
-            crsr = cnxn.cursor()
-            rows = crsr.execute(sql).fechall()
-
-            for row in rows:
-                rec = to_rec(row, crsr)
-                roles.append(rec.name)
-
-    return {'data': {'users': users, 'roles': roles}}
-
-
-@app.get("/user_roles")
-def user_roles(user: str, host: str):
-    engine = get_engine(cfg)
-    user = User(engine, user)
-
-    return {'data': user.roles}
-
-
-@app.put("/change_user_role")
-def change_role(user: str, host: str, role: str, grant: bool):
-    engine = get_engine(cfg)
-    if grant:
-        sql = f'grant {role} to {user}@{host}'
-    else:
-        sql = f'revoke {role} from {user}@{host}'
-    with engine.connect() as cnxn:
-        crsr = cnxn.cursor()
-        crsr.execute(sql)
-        cnxn.commit()
-
-
-@app.put("/change_password")
-def change_password(base: str, old_pwd: str, new_pwd: str):
-    if old_pwd != cfg.pwd:
-        return {'data': 'Feil passord'}
-    elif cfg.system in ['mysql', 'mariadb']:
-        cfg2 = Settings()
-        if None in [cfg2.system, cfg2.host, cfg2.uid, cfg2.pwd]:
-            return {'data': 'Påloggingsdata mangler. Kontakt administrator.'}
-        engine = get_engine(cfg2)
-        with engine.connect() as cnxn:
-            sql = f"alter user {cfg.uid}@{cfg.host} identified by '{new_pwd}'"
-            crsr = cnxn.cursor()
-            crsr.execute(sql)
-            cnxn.commit()
-
-        return {'data': 'Passord endret'}
-    elif cfg.system == 'sqlite' and cfg.database == 'urdr':
-        engine = get_engine(cfg, base)
-        db_path = engine.url.database
-        urdr = 'main' if db_path.endswith('/urdr.db') else 'urdr'
-        sql = f"update {urdr}.user set password = :pwd where id = :uid"
-        pwd = hashlib.sha256(new_pwd.encode('utf-8')).hexdigest()
-        with engine.connect() as cnxn:
-            expr = Expression(engine)
-            sql, params = expr.prepare(sql, {'uid': cfg.uid, 'pwd': pwd})
-            crsr = cnxn.cursor()
-            crsr.execute(sql, params)
-            cnxn.commit()
-        return {'data': 'Passord endret'}
-
-    else:
-        return {'data': 'Ikke implementert for denne databaseplattformen'}
-
-
-@app.put("/create_user")
-def create_user(name: str, pwd: str):
-    engine = get_engine(cfg)
-    if cfg.system in ['mysql', 'mariadb']:
-        sql = f"create user '{name}'@'{cfg.host}' identified by '{pwd}'"
-        with engine.connect() as cnxn:
-            crsr = cnxn.cursor()
-            crsr.execute(sql)
-            cnxn.commit()
-
-        return userlist()
-
-
-@app.get("/database")
-def db_info(base: str, request: Request):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    info = dbo.get_info()
-
-    return {'data': info}
-
-
-@app.get("/table")
-async def get_table(base: str, table: str, request: Request, filter: str = None,
-                    limit: int = 30, offset: int = 0,
-                    schema: str = None, sort: str = None,
-                    compressed: bool = False, prim_key: str = None):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    if cfg.system == 'postgresql' and schema:
-        base_path = base + '.' + schema
-    else:
-        base_path = base or schema
-    dbo = Database(engine, base_path, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    privilege = dbo.user.table_privilege(dbo.schema, table)
-    if privilege.select == 0:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No access"
-        )
-    grid = Grid(tbl)
-    tbl.limit = limit
-    tbl.offset = offset
-
-    if sort:
-        grid.sort_columns = Dict(json.loads(sort))
-
-    if filter:
-        filter = urllib.parse.unquote(filter)
-        if filter.startswith('where '):
-            where = filter[6:].split(';')[0]
-            grid.cond.prep_stmnts.append(where)
-        else:
-            grid.set_search_cond(filter)
-
-    grid.compressed = compressed
-
-    # todo: handle sort
-    pkey_vals = None
-    if prim_key:
-        pkey_vals = json.loads(prim_key)
-
-    return {'data': grid.get(pkey_vals)}
-
-
-@app.post("/record")
-def create_record(base: str, table: str, pkey: str, request: Request, values: str = Body(...)):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    pkey = json.loads(pkey)
-    record = Record(dbo, tbl, pkey)
-    vals = json.loads(values)
-    time.sleep(0.5)
-    pkey = record.insert(vals)
-
-    return {'values': pkey}
-
-
-@app.put("/record")
-def update_record(base: str, table: str, pkey: str, request: Request, values: str = Body(...)):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    pkey = json.loads(pkey)
-    record = Record(dbo, tbl, pkey)
-    vals = json.loads(values)
-    time.sleep(0.5)
-
-    return {'result': record.update(vals)}
-
-
-@app.delete("/record")
-def delete_record(base: str, table: str, pkey: str, request: Request):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    pkey = json.loads(pkey)
-    record = Record(dbo, tbl, pkey)
-
-    return {'result': record.delete()}
-
-
-@app.get("/record")
-def get_record(cnxn: str, base: str, table: str, pkey: str, request: Request, schema: str = None):
-    engine = get_engine(cfg, base)
-    if cfg.system == 'postgresql' and schema:
-        base_path = base + '.' + schema
-    else:
-        base_path = base or schema
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base_path, cfg.uid, cnxn=cnxn)
-    tbl = Table(dbo, table)
-    pk = json.loads(pkey)
-    record = Record(dbo, tbl, pk)
-    return {'data': record.get()}
-
-
-@app.get("/children")
-def get_children(base: str, table: str, pkey: str, request: Request):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    tbl.offset = 0
-    tbl.limit = 30
-    pk = json.loads(pkey)
-    record = Record(dbo, tbl, pk)
-    return {'data': record.get_children()}
-
-
-@app.get("/relations")
-def get_relations(base: str, table: str, pkey: str, count: bool,
-                  request: Request, alias: str = None):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    pk = json.loads(pkey)
-    record = Record(dbo, tbl, pk)
-    if count:
-        return {'data': record.get_relation_count()}
-    else:
-        relation = record.get_relation(alias)
-        return {'data': {alias: relation}}
-
-
-@app.put("/table")
-async def save_table(request: Request):
-    req = await request.json()
-    base = req['base_name']
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, req['table_name'])
-    return {'data': tbl.save(req['records'])}
-
-
-@app.get("/options")
-async def get_options(request: Request):
-    req = Dict({item[0]: item[1]
-                for item in request.query_params.multi_items()})
-    engine = get_engine(cfg, req.base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, req.base, cfg.uid, cnxn)
-    tbl = Table(dbo, req.table)
-    fld = Field(tbl, req.column)
-    conds = req.condition.split(" and ") if req.condition else []
-    search = None if 'q' not in req else req.q.replace("*", "%")
-    fkey = tbl.get_fkey(req.column)
-    if search:
-        search = search.lower()
-        view = None if not fkey else fld.get_view(fkey)
-        view = view if view else req.column
-        conds.append(f"lower({view}) like '%{search}%'")
-    cond = " and ".join(conds)
-    data = fld.get_options(cond, {}, get_parent=False)
-
-    return data
-
-
-@app.get('/urd/dialog_cache', response_class=HTMLResponse)
-def dialog_cache(request: Request):
-    return templates.TemplateResponse("update_cache.htm", {
+@get('/urd/dialog_cache', sync_to_thread=True)
+def dialog_cache(request: Request) -> Template:
+    return Template(template_name="update_cache.htm", context={
         "request": request
     })
 
 
-@app.get('/urd/update_cache')
-async def update_cache(base: str, config: str, request: Request):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    dbo.config = Dict(json.loads(config))
-    dbo.config.update_cache = True
-    dbo.cache = None
-    dbo.tables = Dict()
 
-    def event_stream():
-        if ('html_attributes' not in dbo.tablenames):
-            dbo.create_html_attributes()
-        tbl_count = len(dbo.tablenames)
-        i = 0
-        for tbl in dbo.refl.tables:
-            i += 1
-            progress = round(i/tbl_count * 100) 
-            data = json.dumps({'msg': tbl.name, 'progress': progress})
-            yield f"data: {data}\n\n"
-
-            if tbl.name[-5:] == '_view' and tbl.name[:-5] in dbo.tablenames:
-                continue
-            if '_fts' in tbl_name:
-                continue
-
-            table = Table(dbo, tbl.name, type=tbl.type, comment=tbl.comment)
-            dbo.tables[tbl.name] = table.get()
-
-        dbo.get_contents()
-        data = json.dumps({'msg': 'done'})
-        yield f"data: {data}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-@app.get('/export_sql')
-def export_sql(dest: str, base: str, dialect: str, table_defs: bool,
-               no_fkeys: bool, list_recs: bool, data_recs: bool,
-               select_recs: bool, view_as_table: bool, no_empty: bool, 
-               view_defs: bool, request: Request, table: str = None,
-               filter: str = None):
-    """Create sql for exporting a database
-
-    Parameters:
-    dialect: The sql dialect used (mysql, postgresql, sqlite)
-    list_recs: If records from lookup tables should be included
-    data_recs: If records from data tables should be included
-    select_recs: If included records should be selected from
-                 existing database
-    """
-
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-
-    if cfg.system in ['sqlite', 'duckdb'] and dest != 'download':
-        dest = os.path.join(cfg.host, dest)
-
-    return StreamingResponse(dbo.export_sql(dest, dialect, table_defs, no_fkeys,
-                                            list_recs, data_recs, select_recs,
-                                            view_as_table, no_empty, view_defs,
-                                            table, filter),
-                             media_type="text/event-stream")
-
-
-@app.get('/download')
-def download_file(path: str, media_type: str):
+@get('/download', sync_to_thread=True)
+def download_file(path: str, media_type: str) -> File:
     filename = os.path.basename(path)
-    return FileResponse(path, media_type=media_type, filename=filename,
-                        background=BackgroundTask(cleanup, path))
+    return File(path, media_type=media_type, filename=filename,
+                background=BackgroundTask(cleanup, path))
 
 
-@app.get('/export_tsv')
-def export_tsv(base: str, tables: str, dest: str, clobs_as_files: bool,
-               request: Request, limit: int = None, columns: str = None,
-               folder: str = None, filter: str = None):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    download = True if dest == 'download' else False
-    tbls = json.loads(urllib.parse.unquote(tables))
-    if columns:
-        cols = json.loads(urllib.parse.unquote(columns))
-    else:
-        cols = None
-
-    if download:
-        tempdir = tempfile.TemporaryDirectory()
-        dest = tempdir.name
-    else:
-        if cfg.system in ['sqlite', 'duckdb']:
-            dest = os.path.join(cfg.host, dest)
-        if not os.path.exists(dest):
-            os.makedirs(dest)
-
-    return StreamingResponse(dbo.export_tsv(tbls, dest, limit, clobs_as_files,
-                                            cols, download, filter),
-                             media_type="text/event-stream")
-
-
-@app.get('/import_tsv')
-def import_tsv(base: str, dir: str, request: Request):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-
-    return StreamingResponse(dbo.import_tsv(dir), media_type="text/event-stream")
-
-
-@app.get('/kdrs_xml')
-def export_kdrs_xml(base: str, version: str, descr: str, request: Request):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    xml = dbo.export_as_kdrs_xml(version, descr)
-    response = StreamingResponse(io.StringIO(xml), media_type="application/xml")
-    response.headers['Content-Disposition'] = \
-        f'attachment; filename={dbo.identifier}.xml'
-
-    return response
-
-
-@app.get('/db_file')
-def get_db_file(base: str, table: str, pkey: str, request: Request, column: str = None):
-    pkey = json.loads(urllib.parse.unquote(pkey))
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    rec = Record(dbo, tbl, pkey)
-    path = rec.get_file_path(column)
-    path = os.path.join(cfg.host, os.path.dirname(base), path)
-
-    return FileResponse(path)
-
-
-@app.post('/convert')
-def convert(base: str, table: str, from_format: str, to_format: str,
-            fields: str, request: Request):
-    fields = json.loads(fields)
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    tbl = Table(dbo, table)
-    for field_name in fields:
-        result = tbl.convert(field_name, from_format, to_format)
-
-    return {'result': result}
-
-
-@app.get('/query')
-def query(base: str, sql: str, limit: str, request: Request):
-    engine = get_engine(cfg, base)
-    cnxn = get_cnxn(request.app.state, engine)
-    dbo = Database(engine, base, cfg.uid, cnxn)
-    limit = 0 if not limit else int(limit)
-    result = dbo.query_result(sql, limit)
-
-    return {'result': result}
-
-
-@app.get("/{full_path:path}")
-async def capture_routes(request: Request, full_path: str):
+@get("/{full_path:path}")
+async def capture_routes(request: Request, full_path: str) -> Template:
+    cfg = request.app.state.cfg
     path_parts = full_path.split('/')
     filepath = os.path.join(cfg.host, '/'.join(path_parts[1:]))
     type = ''
+
     if os.path.isfile(filepath):
-        type = magic.from_file(filepath, mime=True)
+        if '.wasm' in filepath:
+            type = 'application/wasm'
+        else:
+            type = magic.from_file(filepath, mime=True)
     name = os.path.basename(filepath)
     if type.startswith('image/') or type == 'application/pdf':
-        headers = {
-            "Content-Type": type,
-            "Content-Disposition": "inline"
-        }
-        return FileResponse(filepath, media_type=type, filename=name,
-                            headers=headers)
+        return File(path=filepath, media_type=type, filename=name,
+                    content_disposition_type="inline")
 
-    return templates.TemplateResponse("urd.html", {
+    return Template(template_name="urd.html", context={
         "request": request, "v": mod, "base": cfg.database
     })
-
 
 def main(host: str = 'localhost', port: int = 8000):
     uvicorn.run(
@@ -957,6 +191,22 @@ def main(host: str = 'localhost', port: int = 8000):
         host=host,
         port=port,
     )
+
+app = Litestar(
+    route_handlers=[
+        home, get_drivers, login, logout, dialog_cache, download_file, capture_routes,
+        File_Controller, Database_Controller, User_Controller,
+        create_static_files_router(path="/static", directories=["static"]),
+    ],
+    template_config=TemplateConfig(
+        directory="static/html",
+        engine=JinjaTemplateEngine,
+    ),
+    logging_config=logging_config,
+    state=State({'cfg': cfg, 'drivers': drivers, 'cnxn_registry': {}}),
+    middleware=[login_middleware],
+    lifespan=[db_lifespan]
+)
 
 
 if __name__ == "__main__":

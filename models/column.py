@@ -1,6 +1,6 @@
 from addict import Dict
-from datatype import Datatype
-from expression import Expression
+from models.datatype import Datatype
+from models.expression import Expression
 
 
 class Column:

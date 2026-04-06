@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from addict import Dict
-from util import to_rec, log_caller
+import util
 from settings import Settings
 
 cfg = Settings()
@@ -84,7 +84,8 @@ class Field:
             def_vals = col.default.split('::')
             default = def_vals[0]
             self.default = self.replace_vars(default)
-            self.default = self.default.replace("'", "")
+            if self.default:
+                self.default = self.default.replace("'", "")
         else:
             self.default = col.default
 
@@ -122,7 +123,7 @@ class Field:
         return attributes
 
     def get_options(self, condition, params, get_parent=True):
-        from table import Table
+        from models.table import Table
 
         q = self._db.expr.quote
         fkey = self._tbl.get_fkey(self.name)
@@ -191,14 +192,14 @@ class Field:
 
             # Return list of regular python dicts so that it can be
             # json serialized and put in cache
-            return [to_rec(row, crsr) for row in rows]
+            return [util.to_rec(row, crsr) for row in rows]
 
     def get_view(self, fkey):
         """ Decide what should be shown in options """
         q = self._db.expr.quote
         if hasattr(self, 'view'):
             return self.view
-        from table import Table
+        from models.table import Table
 
         self.view = None
 
@@ -243,6 +244,7 @@ class Field:
         elif "current_timestamp" in expr.lower():
             expr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         elif "current_user" in expr.lower():
+            print('self._db.user', self._db.user)
             expr = self._db.user.name
 
         return expr

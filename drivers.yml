@@ -23,7 +23,7 @@ duckdb:
         placeholder: '?'
 mysql:
     mysql.connector:
-        string: "host={host};port={port};user={user};password={pass}"
+        string: "host={host};port={port};user={user};password={pass};database={dbname}"
         placeholder: '%s'
         options:
           buffered: true
@@ -32,7 +32,7 @@ mysql:
         placeholder: '?'
 mariadb:
     mysql.connector:
-        string: "host={host};port={port};user={user};password={pass}"
+        string: "host={host};port={port};user={user};password={pass};database={dbname}"
         placeholder: '%s'
         options:
           buffered: true

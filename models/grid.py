@@ -1,10 +1,9 @@
 import re
 import math
-import time
 from addict import Dict
-from util import to_rec, time_func, log_caller
+import util
 from settings import Settings
-from expression import Expression
+from models.expression import Expression
 
 cfg = Settings()
 
@@ -214,7 +213,7 @@ class Grid:
             return self._columns
         elif self.db.cache:
             return self.db.cache.tables[self.tbl.name].grid.columns
-        from table import Table
+        from models.table import Table
         self._columns = []
         if self.tbl.name != self.tbl.grid_view:
             view = Table(self.db, self.tbl.grid_view)
@@ -367,7 +366,7 @@ class Grid:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
             crsr.execute(sql, params)
             rows = crsr.fetchall()
-            records = [to_rec(row, crsr) for row in rows]
+            records = [util.to_rec(row, crsr) for row in rows]
 
         return records
 
@@ -403,7 +402,7 @@ class Grid:
     def get_display_values(self, selects):
         """Return display values for columns in grid"""
 
-        from table import Table
+        from models.table import Table
 
         q = Expression(self.db.engine).quote
 
@@ -461,7 +460,7 @@ class Grid:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
             crsr.execute(sql, params)
             rows = crsr.fetchall()
-            records = [to_rec(row, crsr) for row in rows]
+            records = [util.to_rec(row, crsr) for row in rows]
 
         return records
 
@@ -499,7 +498,7 @@ class Grid:
         with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
             row = crsr.execute(sql, params).fechone()
-            rec = to_rec(row, crsr)
+            rec = util.to_rec(row, crsr)
 
             if row:
                 for col in rec:
@@ -539,7 +538,7 @@ class Grid:
 
     def set_search_cond(self, query):
         """Set search conditions for grid queries"""
-        from table import Table
+        from models.table import Table
         q = Expression(self.db.engine).quote
         filters = query.split(";")
         for fltr in filters:
@@ -801,7 +800,7 @@ class Grid:
 
     def relations_form(self, form):
         """Add relations to form"""
-        from table import Table
+        from models.table import Table
 
         relations = Dict()
         for alias, rel in self.tbl.relations.items():

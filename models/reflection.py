@@ -1,8 +1,7 @@
 from ruamel.yaml import YAML
-import simplejson as json
 from addict import Dict
-from expression import Expression
-from util import to_rec, log_caller
+import util
+from models.expression import Expression
 
 
 yaml = YAML()
@@ -44,7 +43,7 @@ class Reflection:
             rows = crsr.fetchall()
 
             for row in rows:
-                rec = to_rec(row, crsr, lowercase=True)
+                rec = util.to_rec(row, crsr, lowercase=True)
                 self._tables[rec.table_name].name = rec.table_name
                 self._tables[rec.table_name].type = rec.table_type.lower()
                 self._tables[rec.table_name].comment = rec.remarks
@@ -60,7 +59,7 @@ class Reflection:
 
             pkeys = Dict()
             for row in rows:
-                rec = to_rec(row, crsr, lowercase=True)
+                rec = util.to_rec(row, crsr, lowercase=True)
                 pkeys[rec.table_name].table_name = rec.table_name
                 pkeys[rec.table_name].pkey_name = rec.pk_name
                 if 'column_names' in rec:
@@ -91,7 +90,7 @@ class Reflection:
 
             self._columns = Dict()
             for row in rows:
-                rec = to_rec(row, crsr, lowercase=True)
+                rec = util.to_rec(row, crsr, lowercase=True)
                 if (type(rec.column_def) is bytes):
                     # default value CURRENT_TIMESTAMP is returned as bytes in mysql
                     rec.column_def = rec.column_def.decode('utf8')
@@ -128,7 +127,7 @@ class Reflection:
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             for row in rows:
-                rec = to_rec(row, crsr, lowercase=True)
+                rec = util.to_rec(row, crsr, lowercase=True)
                 name = rec.fk_name
                 tblname = rec.fktable_name
                 if 'fkcolumn_names' in rec:
@@ -231,7 +230,7 @@ class Reflection:
 
             indexes = Dict()
             for row in rows:
-                rec = to_rec(row, crsr, lowercase=True)
+                rec = util.to_rec(row, crsr, lowercase=True)
                 name = rec.index_name
                 indexes[rec.table_name][name].name = name
                 indexes[rec.table_name][name].unique = not rec.non_unique

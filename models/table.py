@@ -1,14 +1,14 @@
 """Module for handling tables"""
 import pypandoc
 from addict import Dict
-from record import Record
-from column import Column
-from field import Field
-from grid import Grid
-from util import to_rec, format_fkey, time_func, log_caller
+import util
 from sqlglot import parse_one, exp
 from settings import Settings
-from expression import Expression
+from models.record import Record
+from models.column import Column
+from models.field import Field
+from models.grid import Grid
+from models.expression import Expression
 
 cfg = Settings()
 
@@ -189,7 +189,8 @@ class Table:
     @property
     def rowcount(self):
         if not hasattr(self, '_rowcount'):
-            sql = f'select count(*) from "{self.name}"'
+            sql = f'select count(*) from {self.db.schema}.{self.name}'
+            print('sql', sql)
             with self.db.cnxn.cursor() as crsr:
                 crsr.execute(sql)
                 self._rowcount = crsr.fetchone()[0]
@@ -450,7 +451,7 @@ class Table:
 
     def save(self, records: list):
         """Save new and updated records in table"""
-        from database import Database
+        from models.database import Database
         result = Dict()
         for rec in records:
             rec = Dict(rec)
@@ -511,7 +512,7 @@ class Table:
 
             self._fkeys = Dict()
             for fkey in fkeys:
-                fkey, alias = format_fkey(fkey, self.pkey)
+                fkey, alias = util.format_fkey(fkey, self.pkey)
                 fkey.ref_table_alias = alias
                 self._fkeys[fkey.name] = fkey
 
@@ -762,7 +763,7 @@ class Table:
             crsr.execute(sql)
             rows = crsr.fetchall()
             for row in rows:
-                rec = to_rec(row, crsr)
+                rec = util.to_rec(row, crsr)
                 if rec[colname] is None:
                     continue
                 wheres = []

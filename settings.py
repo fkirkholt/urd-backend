@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic import BaseSettings
 from ruamel.yaml import YAML
 from pathlib import Path
 from addict import Dict

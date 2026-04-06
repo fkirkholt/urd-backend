@@ -1,18 +1,20 @@
 import re
 from addict import Dict
 from settings import Settings
-from reflection import Reflection
-from util import to_rec
-from expression import Expression
+import util
+from models.reflection import Reflection
+from models.expression import Expression
 
 
 class User:
 
     def __init__(self, engine, cnxn, name=None):
+        print('name', name)
+        print('engine.url.username', engine.url.username)
         self.name = name or engine.url.username
         self.engine = engine
         self.cnxn = cnxn
-        self.expr = Expression(engine) 
+        self.expr = Expression(engine)
         self.current = name is None
         self._is_admin = {}
 
@@ -27,7 +29,7 @@ class User:
             sql, params = self.expr.prepare(sql, params)
             crsr.execute(sql, params)
             rows = crsr.fetchall()
-            recs = [to_rec(row, crsr, lowercase=True) for row in rows]
+            recs = [util.to_rec(row, crsr, lowercase=True) for row in rows]
 
         return recs
 
@@ -65,7 +67,7 @@ class User:
                 rows = crsr.fetchall()
 
                 for row in rows:
-                    rec = to_rec(row, crsr)
+                    rec = util.to_rec(row, crsr)
                     tbl_names.remove(rec.table_name)
 
         self._tbl_names = tbl_names
@@ -163,7 +165,7 @@ class User:
                 row = crsr.fetchone()
 
                 if row:
-                    rec = to_rec(row, crsr)
+                    rec = util.to_rec(row, crsr)
                     read_access = rec.read_access
                     write_access = rec.write_access
                 else:
@@ -331,7 +333,7 @@ class User:
                 crsr.execute(sql, params)
                 rows = crsr.fetchall()
                 for row in rows:
-                    rec = to_rec(row, crsr)
+                    rec = util.to_rec(row, crsr)
                     if rec.privilege_type == 'SELECT':
                         privilege.select = 1
                     elif rec.privilege_type == 'INSERT':
@@ -388,7 +390,7 @@ class User:
                 sql, params = self.expr.prepare(sql, {'cat': self.engine.url.database})
                 crsr.execute(sql, params)
                 row = crsr.fetchone()
-                rec = to_rec(row, crsr)
+                rec = util.to_rec(row, crsr)
                 if rec.db_owner == self.name:
                     self._is_admin[schema] = True
 

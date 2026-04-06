@@ -13,19 +13,20 @@ import simplejson as json
 import pyodbc
 from addict import Dict
 from settings import Settings
-from table import Table
-from grid import Grid
-from user import User
-from datatype import Datatype
-from odbc_engine import ODBC_Engine
-from reflection import Reflection
-from expression import Expression
-from util import to_rec, time_func, time_stream_generator, format_fkey
+from models.table import Table
+from models.grid import Grid
+from models.user import User
+from models.datatype import Datatype
+from models.odbc_engine import ODBC_Engine
+from models.reflection import Reflection
+from models.expression import Expression
+import util
 
 
 class Database:
     """Contains methods for getting data and metadata from database"""
 
+    @util.log_caller
     def __init__(self, engine, db_name, uid, cnxn):
         self.pkeys_loaded = False
         self.fkeys_loaded = False
@@ -35,6 +36,7 @@ class Database:
         self.cnxn = cnxn
         self.expr = Expression(engine)
         self.identifier = db_name
+        print('uid', uid)
         self.user = User(engine, cnxn, name=uid)
         path = db_name.split('.')
         if engine.name == 'postgresql':
@@ -99,14 +101,14 @@ class Database:
                     for row in rows:
                         if row is None:
                             break
-                        rec = to_rec(row, crsr)
+                        rec = util.to_rec(row, crsr)
                         attrs[rec.selector] = json.loads(rec.attrs)
             except Exception as e:
                 print(e)
 
         return attrs
 
-    @time_func
+    @util.time_func
     def get_info(self):
         """Get info about database"""
 
@@ -536,8 +538,8 @@ class Database:
                         self.get_content_node(tbl_name)
 
         if self.config.update_cache:
-            sql = """
-            select count(*) from html_attributes
+            sql = f"""
+            select count(*) from {self.schema}.html_attributes
             where selector = :selector
             """
 
@@ -557,14 +559,14 @@ class Database:
             attrs_txt = json.dumps(attrs)
 
             if count:
-                sql = """
-                update html_attributes
+                sql = f"""
+                update {self.schema}.html_attributes
                 set attributes = :attrs
                 where selector = :selector
                 """
             else:
-                sql = """
-                insert into html_attributes(attributes, selector)
+                sql = f"""
+                insert into {self.schema}.html_attributes(attributes, selector)
                 values (:attrs, :selector)
                 """
 
@@ -637,7 +639,7 @@ class Database:
 
         for tbl_name, fkeys in schema_fkeys.items():
             for fkey in fkeys:
-                fkey, alias = format_fkey(fkey, self.pkeys[fkey.table_name])
+                fkey, alias = util.format_fkey(fkey, self.pkeys[fkey.table_name])
                 fkey.ref_table_alias = alias
                 self._fkeys[fkey.table_name][fkey.name] = fkey
                 self._relations[fkey.referred_table][fkey.name] = fkey
@@ -714,7 +716,7 @@ class Database:
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             for row in rows:
-                rec = to_rec(row, crsr)
+                rec = util.to_rec(row, crsr)
                 if rec.name not in functions:
                     functions[rec.name] = rec.text
                 else:
@@ -733,7 +735,7 @@ class Database:
             crsr.execute(sql, params)
             rows = crsr.fetchall()
             for row in rows:
-                rec = to_rec(row, crsr)
+                rec = util.to_rec(row, crsr)
                 if rec.name not in procedures:
                     procedures[rec.name] = rec.text
                 else:
@@ -796,7 +798,7 @@ class Database:
                 else:
                     rows = crsr.fetchall()
 
-                query.data = [to_rec(row, crsr) for row in rows]
+                query.data = [util.to_rec(row, crsr) for row in rows]
                 # Find the table selected from
                 query.table = str(sqlglot.parse_one(query.string)
                                   .find(sqlglot.exp.Table))
@@ -819,7 +821,7 @@ class Database:
 
         return query
 
-    @time_stream_generator
+    @util.time_stream_generator
     async def export_sql(self, dest, dialect, table_defs, no_fkeys, list_recs,
                          data_recs, select_recs, view_as_table, no_empty,
                          view_defs, table, filter):
@@ -858,7 +860,7 @@ class Database:
                     crsr.execute(sql, params)
                     rows = crsr.fetchall()
                     for row in rows:
-                        rec = to_rec(row, crsr)
+                        rec = util.to_rec(row, crsr)
                         count_recs[rec.table_name] = rec.count_rows
                         total_rows += rec.count_rows
                         if rec.count_rows or not no_empty:
@@ -1024,7 +1026,7 @@ class Database:
                                 insert = ''
                                 if dialect == 'oracle' and i > 1:
                                     insert += ' union all\n'
-                                rec = to_rec(row, crsr)
+                                rec = util.to_rec(row, crsr)
                                 if i != 1 and dialect != 'oracle':
                                     insert += ','
                                 insert += expr.insert_rec(table, rec) 
@@ -1043,14 +1045,14 @@ class Database:
                     view_def = self.refl.get_view_definition(view_name, self.schema)
                     view_def = view_def.replace('\r\n', '\n').rstrip('\n;')
                 except Exception as e:
-                    view_def = f"-- ERROR: Couldn't get definition for view {view_name} "
+                    view_def = f"– ERROR: Couldn't get definition for view {view_name} "
                     print(e)
                 if view_def:
                     if not view_def.lower().startswith('create view'):
                         ddl += f'create view {view_name} as '
                     ddl += f'{view_def}; \n\n'
                 else:
-                    ddl += f"-- View definition not supported for {self.engine.name} yet\n"
+                    ddl += f"– View definition not supported for {self.engine.name} yet\n"
             for definition in self.functions.values():
                 if dialect == 'oracle':
                     ddl += 'CREATE OR REPLACE '
@@ -1074,7 +1076,7 @@ class Database:
             data = json.dumps({'msg': 'done'})
             yield f"data: {data}\n\n"
 
-    @time_stream_generator
+    @util.time_stream_generator
     async def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download, filter):
         # Loads metadata so we don't have to load for each table
         self.pkeys
@@ -1165,7 +1167,7 @@ class Database:
                         break
                     n += 1
                     count += 1
-                    rec = to_rec(row, crsr)
+                    rec = util.to_rec(row, crsr)
                     if n == 1:
                         file.write('\t'.join(rec.keys()) + '\n')
                     values = []
@@ -1221,7 +1223,7 @@ class Database:
             data = json.dumps({'msg': 'done', 'progress': 100})
             yield f"data: {data}\n\n"
 
-    @time_stream_generator
+    @util.time_stream_generator
     async def import_tsv(self, dir: str):
 
         # Increase CSV field size limit to maximim possible
@@ -1244,6 +1246,9 @@ class Database:
             filepath = os.path.join(dir, filename)
             with open(filepath) as f:
                 total_rows += sum(1 for _ in f) - 1
+
+        with self.cnxn.cursor() as crsr:
+            crsr.execute('PRAGMA foreign_keys = OFF;')
 
         i = 0
         count = 0
@@ -1285,6 +1290,8 @@ class Database:
                     crsr.execute(sql)
                     self.cnxn.commit()
 
+        with self.cnxn.cursor() as crsr:
+            crsr.execute('PRAGMA foreign_keys = ON;')
         data = json.dumps({'msg': 'done'})
         yield f"data: {data}\n\n"
 

@@ -2,7 +2,6 @@ import re
 import time
 import inspect
 from functools import wraps
-from sqlalchemy import text
 from settings import Settings
 from addict import Dict
 
@@ -73,7 +72,7 @@ def log_caller(func):
         caller_file = caller_frame_record[1].split('/')[-1]
         caller_lnr = caller_frame_record[2]
         caller_ref = caller_file + ':' + str(caller_lnr)
-        
+
         print(f"{'>' * indent} Function '{func.__name__}' was called by '{caller_name}' in '{caller_ref}' ---")
         start = time.perf_counter()
         indent += 2

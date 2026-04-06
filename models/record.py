@@ -1,11 +1,11 @@
 import os
 import hashlib
-from field import Field
 from addict import Dict
 from datetime import datetime
-from column import Column
-from expression import Expression
-from util import to_rec, log_caller
+from models.field import Field
+from models.column import Column
+from models.expression import Expression
+import util
 
 
 class Record:
@@ -82,8 +82,9 @@ class Record:
         return self._fields
 
     def get_relation_count(self):
-        from database import Database
-        from table import Table, Grid
+        from models.database import Database
+        from models.table import Table
+        from models.grid import Grid
 
         # Cache metadata
         self._db.indexes
@@ -189,8 +190,10 @@ class Record:
         return rel_idx
 
     def get_relation(self, alias: str):
-        from database import Database
-        from table import Table, Grid
+        from models.database import Database
+        from models.table import Table
+        from models.grid import Grid
+
         self._db.indexes
         rel = self._tbl.get_relation(alias)
         if self._db.engine.name == 'postgresql':
@@ -200,6 +203,7 @@ class Record:
         db = Database(self._db.engine, base_name, self._db.user.name, self._db.cnxn)
         tbl_rel = Table(db, rel.table_name)
         grid = Grid(tbl_rel)
+        print('grid', grid)
         tbl_rel.limit = 500  # TODO: should have pagination in stead
         tbl_rel.offset = 0
 
@@ -284,7 +288,7 @@ class Record:
             crsr.execute(sql, params)
             row = crsr.fetchone()
 
-            self._cache.vals = to_rec(row, crsr)
+            self._cache.vals = util.to_rec(row, crsr)
 
         return self._cache.vals
 
@@ -314,10 +318,10 @@ class Record:
             crsr.execute(sql, params)
             row = crsr.fetchone()
 
-            return to_rec(row, crsr)
+            return util.to_rec(row, crsr)
 
     def get_children(self):
-        from table import Grid
+        from models.grid import Grid
         grid = Grid(self._tbl)
 
         rel = [rel for rel in self._tbl.relations.values()

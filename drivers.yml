@@ -22,20 +22,26 @@ duckdb:
         string: "Database={path}"
         placeholder: '?'
 mysql:
-    mysql.connector:
+    # mysql.connector:
+    #     string: "host={host};port={port};user={user};password={pass};database={dbname}"
+    #     placeholder: '%s'
+    #     options:
+    #       buffered: true
+    pymysql:
         string: "host={host};port={port};user={user};password={pass};database={dbname}"
         placeholder: '%s'
-        options:
-          buffered: true
     pyodbc:
         string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
         placeholder: '?'
 mariadb:
-    mysql.connector:
+    pymysql:
         string: "host={host};port={port};user={user};password={pass};database={dbname}"
         placeholder: '%s'
-        options:
-          buffered: true
+    # mysql.connector:
+    #     string: "host={host};port={port};user={user};password={pass};database={dbname}"
+    #     placeholder: '%s'
+    #     options:
+    #       buffered: true
     pyodbc:
         string: "Server={host};Port={port};Uid={user};Pwd={pass};Database={dbname}"
         placeholder: '?'

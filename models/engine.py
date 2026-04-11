@@ -2,6 +2,7 @@ import importlib
 import os
 import re
 import hashlib
+import queue
 from addict import Dict
 from litestar.status_codes import HTTP_401_UNAUTHORIZED
 from fastapi import HTTPException
@@ -53,30 +54,63 @@ def get_engine(cfg, db_name=None):
     return engine
 
 
-def get_cnxn(app_state, engine):
-    registry = app_state.cnxn_registry
-    cfg = app_state.cfg
+class DatabaseManager:
+    def __init__(self):
+        self.pools = {}
 
-    key = engine.driver_name + ':' + engine.host + '/' + str(engine.db_name or '')
-    print('key', key)
+    def get_pool(self, engine):
+        """Get pool based on engine"""
+        key = engine.driver_name + ':' + engine.host + '/' + str(engine.db_name or '')
+        if key not in self.pools:
+            self.pools[key] = ConnectionPool(engine.connect, pool_size=5)
+        return self.pools[key]
 
-    # If exists, move to end (mark as most recently used)
-    if key in registry:
-        cnxn = registry.pop(key)
-        registry[key] = cnxn
-        return registry[key]
 
-    # Check capacity before adding new connection
-    if len(registry) >= cfg.max_connections:
-        # Pop the oldest item (first item)
-        first_key = next(iter(registry))
-        old_cnxn = registry.pop(first_key)
-        old_cnxn.close()
+class ConnectionPool:
+    def __init__(self, create_connection_fn, pool_size=5):
+        self._pool = queue.Queue(maxsize=pool_size)
 
-    # Create and store new connection
-    new_cnxn = engine.connect()
-    registry[key] = new_cnxn
-    return new_cnxn
+        # Fill pool with initial connections
+        for _ in range(pool_size):
+            conn = create_connection_fn()
+            self._pool.put(conn)
+
+    def get_connection(self, timeout=None):
+        """Get en available connection from the queue"""
+        try:
+            return self._pool.get(block=True, timeout=timeout)
+        except queue.Empty:
+            raise Exception("Ingen ledige tilkoblinger i poolen.")
+
+    def release_connection(self, conn):
+        """Return connection to queue"""
+        self._pool.put(conn)
+
+    def close_all(self):
+        """Closes all connections in the pool"""
+        while not self._pool.empty():
+            conn = self._pool.get()
+            try:
+                conn.close()
+            except Exception:
+                pass # Ignorer feil under stenging
+
+    def connection(self):
+        """Context manager for using 'with'"""
+        return ConnectionContextManager(self)
+
+class ConnectionContextManager:
+    def __init__(self, pool):
+        self.pool = pool
+        self.conn = None
+
+    def __enter__(self):
+        self.conn = self.pool.get_connection()
+        return self.conn
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            self.pool.release_connection(self.conn)
 
 
 class Connection:

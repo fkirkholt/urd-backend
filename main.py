@@ -7,6 +7,7 @@ from litestar.types import Scope, Receive, Send
 from litestar.static_files import create_static_files_router
 from litestar.logging import LoggingConfig
 from litestar.datastructures import Cookie, State
+from litestar.di import Provide
 from litestar.status_codes import HTTP_401_UNAUTHORIZED
 from settings import drivers, Settings
 import os
@@ -19,29 +20,31 @@ import typer
 from controllers.file import File_Controller
 from controllers.user import User_Controller
 from controllers.database import Database_Controller
+from models.engine import DatabaseManager, get_engine
 
 
 cfg = Settings()
 cfg_default = Settings()
 
 mod = os.path.getmtime("static/js/dist/index.js")
-
-
-@asynccontextmanager
-async def db_lifespan(app: Litestar):
-    app.state.cnxn_registry = {}
-    try:
-        yield
-    finally:
-        # Cleanup: Close all active connections on shutdown
-        for cnxn in app.state.cnxn_registry.values():
-            cnxn.close()
-
+db_manager = DatabaseManager()
 
 # Log errors to console
 logging_config = LoggingConfig(
     log_exceptions="always",
 )
+
+
+def get_db_connection(base: str | None = None):
+    engine = get_engine(cfg, base)
+    with db_manager.get_pool(engine).connection() as conn:
+        yield conn  # Returns connection to pool after use
+
+
+def shutdown_handler():
+    for pool_name, pool in db_manager.pools.items():
+        print(f"Close {pool_name}...")
+        pool.close_all()
 
 
 def cleanup(temp_file):
@@ -203,9 +206,10 @@ app = Litestar(
         engine=JinjaTemplateEngine,
     ),
     logging_config=logging_config,
-    state=State({'cfg': cfg, 'drivers': drivers, 'cnxn_registry': {}}),
+    state=State({'cfg': cfg, 'drivers': drivers}),
     middleware=[login_middleware],
-    lifespan=[db_lifespan]
+    on_shutdown=[shutdown_handler],
+    dependencies={"db_cnxn": Provide(get_db_connection)}
 )
 
 

@@ -81,9 +81,7 @@ class Expression:
         """Get select expression for column in grid"""
         col.ref = f'{self.quote(col.tbl)}.{self.quote(col.name)}'
 
-        if 'view' in col:
-            select = col.view
-        elif col.element == 'textarea':
+        if col.element == 'textarea':
             if self.dialect == 'mssql':
                 select = "substring(" + col.ref + ', 1, 255)'
             else:

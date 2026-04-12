@@ -125,7 +125,6 @@ class Record:
 
             # Add condition to fetch only rows that link to record
             conds = Dict()
-            count_null_conds = 0
             show_if = None
 
             for i, colname in enumerate(rel.constrained_columns):
@@ -203,7 +202,6 @@ class Record:
         db = Database(self._db.engine, base_name, self._db.user.name, self._db.cnxn)
         tbl_rel = Table(db, rel.table_name)
         grid = Grid(tbl_rel)
-        print('grid', grid)
         tbl_rel.limit = 500  # TODO: should have pagination in stead
         tbl_rel.offset = 0
 
@@ -258,18 +256,23 @@ class Record:
         q = Expression(self._db.engine).quote
         if self._cache.get('vals', None):
             return self._cache.vals
-        conds = [f"{q(key)} = :{key}" for key in self.pkey if self.pkey[key] is not None]
-        conds = conds + [f"{q(key)} is null" for key in self.pkey if self.pkey[key] is None]
+        conds = [f"{q(key)} = :{key}" for key in self.pkey
+                 if self.pkey[key] is not None]
+        conds = conds + [f"{q(key)} is null" for key in self.pkey
+                         if self.pkey[key] is None]
         cond = " and ".join(conds)
-        params = {key: val for key, val in self.pkey.items() if self.pkey[key] is not None}
+        params = {key: val for key, val in self.pkey.items()
+                  if self.pkey[key] is not None}
 
         selects = []
         for key, field in self._tbl.fields.items():
             if field.datatype == 'bytes' and self._db.engine.name == 'mssql':
-                selects.append(f"cast(datalength({q(field.name)}) as varchar) + ' bytes' as {q(field.name)}")
+                selects.append(f"cast(datalength({q(field.name)}) as varchar)"
+                               f" + ' bytes' as {q(field.name)}")
                 continue
             elif field.datatype == 'bytes':
-                selects.append(f"length({q(field.name)}) || ' bytes' as {q(field.name)}")
+                selects.append(f"length({q(field.name)})"
+                               f" || ' bytes' as {q(field.name)}")
                 continue
             elif field.datatype == 'geometry':
                 selects.append(f"{q(field.name)}.ToString() as {q(field.name)}")
@@ -329,7 +332,6 @@ class Record:
 
         for idx, colname in enumerate(rel.referred_columns):
             foreign = rel.constrained_columns[idx]
-            primary = rel.referred_columns[idx]
             value = self.fields[colname].value
             mark = rel.table_name.rstrip('_') + '_' + foreign.lstrip('_')
             expr = f'"{rel.table_name}"."{foreign}" = :{mark}'
@@ -387,8 +389,8 @@ class Record:
                 params[col] = values[col]
 
             sql = f"select case when max({inc_col}) is null then 1 "
-            sql += f"else max({inc_col}) +1 end from {self._db.schema}.{self._tbl.name} "
-            sql += "" if not len(cols) else "where " + " and ".join(conditions)
+            sql += f"else max({inc_col}) +1 end from {self._db.schema}.{self._tbl.name}"
+            sql += "" if not len(cols) else " where " + " and ".join(conditions)
 
             with self._db.cnxn.cursor() as crsr:
                 sql, params = self._db.expr.prepare(sql, params)
@@ -455,7 +457,8 @@ class Record:
 
         wheres = [f"{key} = :pk{i}" for i, key in enumerate(self.pkey)
                   if self.pkey[key] is not None]
-        wheres = wheres + [f"{key} is null" for key in self.pkey if self.pkey[key] is None]
+        wheres = wheres + [f"{key} is null" for key in self.pkey
+                           if self.pkey[key] is None]
         where_str = " and ".join(wheres)
         where_vals = {f"pk{i}": val for i, val in enumerate(self.pkey.values())
                       if val is not None}

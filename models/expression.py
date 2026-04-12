@@ -188,7 +188,7 @@ class Expression:
             from sqlite_master m
             join pragma_index_list(m.name) c
             join pragma_index_xinfo(c.name) i
-            where c.origin = 'c' and i.name is not null 
+            where c.origin = 'c' and i.name is not null
             order by c.name, i.seqno;
             """
         elif self.dialect == 'postgresql':
@@ -220,7 +220,7 @@ class Expression:
             from all_indexes i
             join all_ind_columns col on col.index_name = i.index_name
             where i.table_owner = :schema_name
-                  and i.table_name = nvl(:table_name, i.table_name) 
+                  and i.table_name = nvl(:table_name, i.table_name)
                   and column_name not like '%$'
             order by column_position
             """
@@ -242,23 +242,23 @@ class Expression:
             """
         elif self.dialect == 'mssql':
             return """
-            SELECT 
+            SELECT
                 OBJECT_NAME(ic.object_id) AS table_name,
                 i.name AS index_name,
                 case when i.is_unique = 1 then 0 else 1 end as non_unique,
                 c.name AS column_name,
                 ic.key_ordinal,
                 ic.is_included_column
-            FROM 
+            FROM
                 sys.index_columns ic
-            JOIN 
+            JOIN
                 sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-            JOIN 
+            JOIN
                 sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-            WHERE 
+            WHERE
                 OBJECT_SCHEMA_NAME(i.object_id) = :schema_name
                 and OBJECT_NAME(ic.object_id) = coalesce(:table_name, OBJECT_NAME(ic.object_id))
-            ORDER BY 
+            ORDER BY
                 table_name, index_name, ic.key_ordinal;
             """
         else:
@@ -268,7 +268,7 @@ class Expression:
         if self.dialect == 'sqlite':
             return """
             select m.name || '_pkey' as pk_name, m.name as table_name,
-                   c.name as column_name 
+                   c.name as column_name
             from sqlite_master m
             join pragma_table_info(m.name) c
             where m.type = 'table'
@@ -321,14 +321,14 @@ class Expression:
             """
         elif self.dialect == 'mssql':
             return """
-            select 
+            select
                 pk.[name] as pk_name,
                 ic.index_column_id as column_id,
-                col.[name] as column_name, 
+                col.[name] as column_name,
                 tab.[name] as table_name
             from sys.tables tab
                 inner join sys.indexes pk
-                    on tab.object_id = pk.object_id 
+                    on tab.object_id = pk.object_id
                     and pk.is_primary_key = 1
                 inner join sys.index_columns ic
                     on ic.object_id = pk.object_id
@@ -404,7 +404,7 @@ class Expression:
             SELECT  a.column_name as fkcolumn_name, a.position,
                     a.constraint_name as fk_name, a.table_name as fktable_name,
                     c.owner, c.delete_rule,
-                    -- referenced pk
+                    – referenced pk
                     c.r_owner as pktable_schem,
                     c_pk.table_name as pktable_name,
                     c_pk.constraint_name r_pk,
@@ -510,7 +510,7 @@ class Expression:
                         AND KCU.ORDINAL_POSITION = KCU2.ORDINAL_POSITION
             WHERE  C.CONSTRAINT_TYPE = 'FOREIGN KEY'
                    AND C.TABLE_SCHEMA = :schema_name
-                   AND C.TABLE_NAME = coalesce(:table_name, C.TABLE_NAME) 
+                   AND C.TABLE_NAME = coalesce(:table_name, C.TABLE_NAME)
             """
         else:
             return None
@@ -559,7 +559,8 @@ class Expression:
                    numeric_scale as decimal_digits,
                    column_default as column_def
             from   information_schema.columns
-            where  table_schema = :schema_name and table_name = coalesce(:table_name, table_name) 
+            where  table_schema = :schema_name and
+                   table_name = coalesce(:table_name, table_name)
             """
         elif tbl_name and self.dialect == 'sqlite':
             return f"""
@@ -605,7 +606,7 @@ class Expression:
             fkey_rc = fkey['referred_columns'][0]
             join = '\n'.join(tbl.joins.values())
             cond = cond or '1 = 1'
-              
+
             sql = f"""
             with recursive tbl_data as (
                 select {tbl.name}.*, 1 as level
@@ -654,7 +655,7 @@ class Expression:
                     val = 1
             elif val is None:
                 val = 'null'
-            if self.dialect == 'oracle': 
+            if self.dialect == 'oracle':
                 insert += str(val).replace('\n', "' || CHR(10) || '") + ','
             else:
                 insert += str(val) + ','

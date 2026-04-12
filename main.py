@@ -15,7 +15,6 @@ from jose import jwt
 import time
 import magic
 from starlette.background import BackgroundTask
-from contextlib import asynccontextmanager
 import typer
 from controllers.file import File_Controller
 from controllers.user import User_Controller
@@ -70,7 +69,6 @@ def login_middleware(app):
         response = Response(content={"message": "OK"})
         session = None
         path_parts = scope['path'].split('/')
-        print('receive', receive)
         if 'cnxn' in request.query_params:
             session: str = request.cookies.get(request.query_params.get('cnxn'))
         elif len(path_parts) > 1:

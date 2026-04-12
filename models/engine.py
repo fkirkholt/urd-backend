@@ -188,10 +188,8 @@ class Engine:
     def connect(self):
         try:
             if len(self.connect_params):
-                print('connect_params', self.connect_params)
                 cnxn = self.driver_module.connect(**self.connect_params)
             else:
-                print('cnxnstr', self.cnxnstr)
                 cnxn = self.driver_module.connect(self.cnxnstr)
         except Exception as ex:
             print(ex)

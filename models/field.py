@@ -21,7 +21,7 @@ class Field:
 
     def set_attrs_from_col(self, col):
         if type(col.type) is str:  # odbc engine
-            self.datatype = self._db.expr.to_urd_type(col.type) 
+            self.datatype = self._db.expr.to_urd_type(col.type)
         else:
             try:
                 self.datatype = col.type.python_type.__name__
@@ -202,6 +202,7 @@ class Field:
         from models.table import Table
 
         self.view = None
+        engine = self._db.engine
 
         if fkey.referred_table in self._db.tablenames:
 
@@ -225,7 +226,7 @@ class Field:
                         self.view = cols[0]
                     elif self._db.engine.name in ['oracle']:
                         self.view = " || ', ' || ".join(cols)
-                    elif self._db.engine.name == 'sqlite' and self._db.engine.driver_name == 'pyodbc':
+                    elif engine.name == 'sqlite' and engine.driver_name == 'pyodbc':
                         # odbc driver for sqlite doesn't support concat_ws yet
                         cols = ["coalesce(" + col + ", '')" for col in cols]
                         self.view = " || ', ' || ".join(cols)
@@ -244,7 +245,6 @@ class Field:
         elif "current_timestamp" in expr.lower():
             expr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         elif "current_user" in expr.lower():
-            print('self._db.user', self._db.user)
             expr = self._db.user.name
 
         return expr

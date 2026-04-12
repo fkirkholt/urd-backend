@@ -152,6 +152,7 @@ class File_Controller(Controller):
         cfg = request.app.state.cfg
         backlinks = []
         filepath = os.path.join(cfg.host, path)
+        parentpath = os.path.dirname(filepath)
         for path, folders, files in os.walk(cfg.host):
             for filename in files:
                 if not filename.endswith('.md'):
@@ -161,7 +162,7 @@ class File_Controller(Controller):
                     content = file.read()
                     if '(' + relpath + ')' in content:
                         abspath = os.path.join(path, filename)
-                        backlinks.append(os.path.relpath(abspath, os.path.dirname(filepath)))
+                        backlinks.append(os.path.relpath(abspath, parentpath))
 
         return backlinks
 
@@ -207,6 +208,3 @@ class File_Controller(Controller):
         with open(filepath, 'w') as file:
             file.write(data)
         return {'result': 'success'}
-
-
-

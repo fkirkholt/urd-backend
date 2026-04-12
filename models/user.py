@@ -9,8 +9,6 @@ from models.expression import Expression
 class User:
 
     def __init__(self, engine, cnxn, name=None):
-        print('name', name)
-        print('engine.url.username', engine.url.username)
         self.name = name or engine.url.username
         self.engine = engine
         self.cnxn = cnxn
@@ -234,7 +232,8 @@ class User:
             where database_name = :db_name and table_name = :table
             """
             with self.cnxn.cursor() as crsr:
-                sql, params = self.expr.prepare(sql, {'db_name': db_name, 'table': table})
+                sql, params = self.expr.prepare(sql, {'db_name': db_name,
+                                                      'table': table})
                 crsr.execute(sql, params)
                 count = crsr.fetchone()[0]
             if count:
@@ -260,7 +259,9 @@ class User:
                       read_access in (select code from cte_access))
                 """
                 with self.cnxn.cursor() as crsr:
-                    sql, params = self.expr.prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
+                    sql, params = self.expr.prepare(sql, {'uid': self.name,
+                                                          'db': db_name,
+                                                          'table': table})
                     crsr.execute(sql, params)
                     count_read = crsr.fetchone()[0]
 
@@ -280,7 +281,9 @@ class User:
                       write_access in (select code from cte_access)
                 """
                 with self.cnxn.cursor() as crsr:
-                    sql, params = self.expr.prepare(sql, {'uid': self.name, 'db': db_name, 'table': table})
+                    sql, params = self.expr.prepare(sql, {'uid': self.name,
+                                                          'db': db_name,
+                                                          'table': table})
                     crsr.execute(sql, params)
                     count_write = crsr.fetchone()[0]
 

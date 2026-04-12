@@ -29,6 +29,8 @@ class Grid:
         # Cahe metadata
         self.db.indexes
 
+        schema_names = self.db.refl.get_schema_names()
+
         return Dict({
             'name': self.tbl.name,
             'type': self.tbl.type,
@@ -57,7 +59,7 @@ class Grid:
             'expansion_column': self.get_expansion_column(),
             'relations': self.tbl.relations,
             'fts': self.tbl.name + '_fts' in self.db.tablenames or
-                f'{self.db.cat}.fts_{self.db.schema}_{self.tbl.name}' in self.db.refl.get_schema_names(),
+                f'{self.db.cat}.fts_{self.db.schema}_{self.tbl.name}' in schema_names,
             'saved_filters': []  # Needed in frontend
         })
 
@@ -82,7 +84,7 @@ class Grid:
         # Uses grid_columns from view if exists
         for colname in self.columns:
             col = self.tbl.fields[colname]
-            col.tbl = self.tbl.grid_view 
+            col.tbl = self.tbl.grid_view
             selects[colname] = self.db.expr.column(col)
 
         display_values = self.get_display_values(selects)
@@ -289,7 +291,7 @@ class Grid:
                 and hidden is False
             ):
                 continue
-            if not (hasattr(field, 'virtual') or (not grid_idx and not len(self._columns) > 4)):
+            if not hasattr(field, 'virtual') and (grid_idx or len(self._columns) <= 4):
                 continue
             if 'use' in field and (field.use < 0.9 or field.frequency > 0.4):
                 continue
@@ -539,8 +541,10 @@ class Grid:
     def set_search_cond(self, query):
         """Set search conditions for grid queries"""
         from models.table import Table
-        q = Expression(self.db.engine).quote
+        engine = self.db.engine
+        q = Expression(engine).quote
         filters = query.split(";")
+        schema_names = self.db.refl.get_schema_names()
         for fltr in filters:
             parts = re.split(r"\s*([=<>]|!=| IN| LIKE|NOT LIKE|"
                              r"IS NULL|IS NOT NULL)\s*", fltr, 2)
@@ -555,14 +559,19 @@ class Grid:
                     self.tbl.fts = True
                     conds.append(sql)
                     if len(self.sort_columns) == 0:
-                        self.sort_columns['rank'] = Dict({'col': 'rank', 'dir': 'asc', 'idx': 0})
-                elif f'{self.db.cat}.{duck_fts_table}' in self.db.refl.get_schema_names():
-                    sql = f"{duck_fts_table}.match_bm25({self.tbl.pkey.columns[0]}, '{fltr}') IS NOT NULL"
+                        self.sort_columns['rank'] = Dict({
+                            'col': 'rank',
+                            'dir': 'asc',
+                            'idx': 0
+                        })
+                elif f'{self.db.cat}.{duck_fts_table}' in schema_names:
+                    col = self.tbl.pkey.columns[0]
+                    sql = f"{duck_fts_table}.match_bm25({col}, '{fltr}') IS NOT NULL"
                     conds.append(sql)
                     self.tbl.fts = True
                     if len(self.sort_columns) == 0:
                         self.sort_columns['rank'] = Dict({
-                            'col': f"{duck_fts_table}.match_bm25({self.tbl.pkey.columns[0]}, '{fltr}')",
+                            'col': f"{duck_fts_table}.match_bm25({col}, '{fltr}')",
                             'dir': 'asc',
                             'idx': 0
                         })
@@ -572,7 +581,7 @@ class Grid:
                     i = 0
                     for value in values:
                         i += 1
-                        mark = 'val_' + str(i) 
+                        mark = 'val_' + str(i)
                         case_sensitive = value.lower() != value
                         if value.startswith('!'):
                             value = value[1:]
@@ -595,17 +604,18 @@ class Grid:
                                 else:
                                     concats.append(f"lower({q(self.tbl.view)}.{q(field.name)})")
 
-                        if self.db.engine.name == 'oracle':
+                        if engine.name == 'oracle':
                             row = '||'.join(concats)
-                        elif self.db.engine.name == 'sqlite' and self.db.engine.driver_name == 'pyodbc':
+                        elif engine.name == 'sqlite' and engine.driver_name == 'pyodbc':
                             # odbc driver for sqlite doesn't support concat_ws yet
-                            concats = ["coalesce(" + concat + ", '')" for concat in concats]
+                            concats = ["coalesce(" + concat + ", '')"
+                                       for concat in concats]
                             row = '||'.join(concats)
                         else:
                             row = "concat_ws('|'," + ','.join(concats) + ")"
                         conds.append(f"{row} {op} :{mark}")
                         params[mark] = value
-                                
+
                 conds_expr = "(" + " AND ".join(conds) + ")"
                 self.cond.prep_stmnts.append(conds_expr)
                 self.cond.params.update(params)

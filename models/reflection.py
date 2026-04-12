@@ -38,7 +38,8 @@ class Reflection:
         self._tables = Dict()
         with self.cnxn.cursor() as crsr:
             sql = self.expr.user_tables()
-            sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
+            sql, params = self.expr.prepare(sql, {'schema_name': schema,
+                                                  'table_name': table})
             crsr.execute(sql, params)
             rows = crsr.fetchall()
 
@@ -53,7 +54,8 @@ class Reflection:
     def pkeys(self, schema, table=None):
         with self.cnxn.cursor() as crsr:
             sql = self.expr.pkeys()
-            sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
+            sql, params = self.expr.prepare(sql, {'schema_name': schema,
+                                                  'table_name': table})
             crsr.execute(sql, params)
             rows = crsr.fetchall()
 
@@ -84,7 +86,8 @@ class Reflection:
         #     return self._columns
         with self.cnxn.cursor() as crsr:
             sql = self.expr.columns()
-            sql, params = self.expr.prepare(sql, {'schema_name': schema, 'table_name': table})
+            sql, params = self.expr.prepare(sql, {'schema_name': schema,
+                                                  'table_name': table})
             crsr.execute(sql, params)
             rows = crsr.fetchall()
 
@@ -156,7 +159,7 @@ class Reflection:
                 fkeys[tblname][name].update_rule = rec.update_rule
                 fkeys[tblname][name].delete_rule = rec.delete_rule
         for tblname in fkeys:
-            all_fkeys[tblname] = fkeys[tblname].values() 
+            all_fkeys[tblname] = fkeys[tblname].values()
 
         self._fkeys = all_fkeys
 
@@ -166,25 +169,26 @@ class Reflection:
         columns = self.columns(schema)
         if fk_table or pk_table is None:
             table_names = [fk_table] if fk_table else self.tables(schema).keys()
-            for fk_tbl_name in table_names:
-                for fk_col in columns[fk_tbl_name]:
-                    for pk_tbl_name in table_names:
-                        if (pk_tbl_name.rstrip('_') + '_') not in fk_col.name:
+            for fk_tblname in table_names:
+                for fk_col in columns[fk_tblname]:
+                    for pk_tblname in table_names:
+                        if (pk_tblname.rstrip('_') + '_') not in fk_col.name:
                             continue
-                        for pk_col in columns[pk_tbl_name]:
-                            if fk_col.name == pk_col.name and fk_tbl_name == pk_tbl_name:
+                        for pk_col in columns[pk_tblname]:
+                            if fk_col.name == pk_col.name and fk_tblname == pk_tblname:
                                 continue
-                            fkey = self.fkey_from_colname(fk_col, pk_col, fkeys[fk_tbl_name])
+                            fkey = self.fkey_from_colname(fk_col, pk_col,
+                                                          fkeys[fk_tblname])
                             if fkey:
-                                fkeys[fk_tbl_name][fkey.name] = fkey
+                                fkeys[fk_tblname][fkey.name] = fkey
         else:
             for pk_col in columns[pk_table]:
                 for fk_tbl_name in columns:
                     for fk_col in columns[fk_tbl_name]:
-                        if fk_col.name == pk_col.name and fk_tbl_name == pk_tbl_name:
+                        if fk_col.name == pk_col.name and fk_tbl_name == pk_table:
                             continue
-                        fkey = self.fkey_from_colname(fk_col, pk_col, fkeys[pk_tbl_name])
-                        fkeys[pk_tbl_name][fkey.name] = fkey
+                        fkey = self.fkey_from_colname(fk_col, pk_col, fkeys[pk_table])
+                        fkeys[pk_table][fkey.name] = fkey
 
         for tblname in fkeys:
             all_fkeys[tblname] = fkeys[tblname].values()
@@ -202,7 +206,7 @@ class Reflection:
             prefix = '_' + prefix if prefix else ''
             # Genererer navn til fremmednøkkelen
             fk_name = fk_col.table_name + '_' + pk_col.table_name + prefix + '_fkey'
-            
+
             if fk_name not in fkeys:
                 fkey.constrained_columns = []
                 fkey.referred_columns = []
@@ -252,7 +256,7 @@ class Reflection:
             for key, idx in indexes[tbl_name].items():
                 all_indexes[tbl_name].append(idx)
 
-        return all_indexes if not table else all_indexes[table] 
+        return all_indexes if not table else all_indexes[table]
 
     def get_view_definition(self, tbl_name, schema):
         sql = self.expr.view_definition()

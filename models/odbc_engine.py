@@ -19,7 +19,7 @@ class ODBC_Engine:
         pattern = r'([\w\.-]+)(:\d+)?([/\\]\w+)?'
         match = re.search(pattern, cfg.host)
 
-        if 'dbname' in driver.dbname: 
+        if 'dbname' in driver.dbname:
             default_dbname = driver.dbname
         else:
             default_dbname = None
@@ -31,7 +31,8 @@ class ODBC_Engine:
             'user': cfg.uid,
             'pass': cfg.pwd,
             'dbname': db_name or default_dbname,
-            'path': os.path.join(cfg.host, db_name) if cfg.system in ('sqlite', 'duckdb') else None
+            'path': (os.path.join(cfg.host, db_name)
+                     if cfg.system in ('sqlite', 'duckdb') else None)
         })
 
         cnxn_string = driver.string.format(**config)

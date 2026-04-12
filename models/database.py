@@ -1,7 +1,6 @@
 """Module for handling databases and connections"""
 import os
 import time
-import re
 import csv
 import sys
 import shutil
@@ -36,7 +35,6 @@ class Database:
         self.cnxn = cnxn
         self.expr = Expression(engine)
         self.identifier = db_name
-        print('uid', uid)
         self.user = User(engine, cnxn, name=uid)
         path = db_name.split('.')
         if engine.name == 'postgresql':
@@ -435,7 +433,6 @@ class Database:
 
         sub_tables = Dict()
         for tbl_name, table in self.tables.items():
-            name_parts = tbl_name.rstrip('_').split("_")
             tbl = Table(self, tbl_name)
 
             if tbl.type == 'xref':
@@ -643,56 +640,6 @@ class Database:
                 fkey.ref_table_alias = alias
                 self._fkeys[fkey.table_name][fkey.name] = fkey
                 self._relations[fkey.referred_table][fkey.name] = fkey
-
-        if len(self._fkeys) == 0:
-            fkeys = Dict()
-            relations = Dict()
-            for tbl_name_1 in self.columns:
-                tbl_fkey_columns = []
-                for col_1 in self.columns[tbl_name_1]:
-                    col_1 = Dict(col_1)
-                    for tbl_name_2 in self.tablenames:
-                        if (tbl_name_2.rstrip('_') + '_') in col_1.name:
-                            constrained_cols = []
-                            for col_2 in self.columns[tbl_name_2]:
-                                col_2 = Dict(col_2)
-                                if col_1.name == col_2.name and tbl_name_1 == tbl_name_2:
-                                    continue
-                                # reference to column in referred table
-                                ref = (tbl_name_2 + '_' + col_2.name).replace('__', '_').rstrip('_')
-                                if col_1.name.endswith(ref) or col_1.name == col_2.name:
-                                    tbl_fkey_columns.append(col_1.name)
-                                    # possible prefix that describes what relation this is
-                                    # e.g. in `updated_by_user_name` the prefix is `upated_by`
-                                    prefix = col_1.name.replace(ref, '').rstrip('_')
-                                    prefix = '_' + prefix if prefix else ''
-                                    name = tbl_name_1 + '_' + tbl_name_2 + prefix + '_fkey'
-                                    fkeys[tbl_name_1][name].name = name
-                                    fkeys[tbl_name_1][name].table_name = tbl_name_1
-                                    fkeys[tbl_name_1][name].schema = self.schema
-                                    referred_cols = constrained_cols.copy()
-                                    referred_cols.append(col_2.name)
-                                    constrained_cols.append(col_1.name) 
-                                    fkeys[tbl_name_1][name].constrained_columns = constrained_cols
-                                    fkeys[tbl_name_1][name].referred_columns = referred_cols
-                                    fkeys[tbl_name_1][name].referred_schema = self.schema
-                                    fkeys[tbl_name_1][name].referred_table = tbl_name_2
-                                    fkeys[tbl_name_1][name].ref_table_alias = prefix or tbl_name_2
-                                    relations[tbl_name_2][name] = fkeys[tbl_name_1][name]
-                                elif col_2.name in tbl_fkey_columns:
-                                    constrained_cols.append(col_2.name)
-            for tbl_name in fkeys:
-                for fkey in fkeys[tbl_name].values():
-                    if (
-                        self.pkeys[fkey.table_name].columns and
-                        set(self.pkeys[fkey.table_name].columns) <= set(fkey.constrained_columns)
-                    ):
-                        fkey.relationship = '1:1'
-                    else:
-                        fkey.relationship = '1:M'
-
-            self._fkeys = fkeys
-            self._relations = relations
 
         return self._fkeys
 
@@ -942,7 +889,6 @@ class Database:
         if dialect == 'oracle':
             file.write('WHENEVER SQLERROR EXIT 1;\n')
 
-        count = 0
         last_progress = 0
         i = 0
         expr = Expression(Dict({'name': dialect, 'driver_name': None}))
@@ -959,20 +905,20 @@ class Database:
                     continue
                 if '_fts' in tbl_name:
                     continue
-                table = Table(self, tbl_name)
+                tbl = Table(self, tbl_name)
                 if table_defs:
-                    file.write(table.export_ddl(dialect, no_fkeys, no_empty, count_recs))
-                    file.write(table.get_indexes_ddl())
+                    file.write(tbl.export_ddl(dialect, no_fkeys, no_empty, count_recs))
+                    file.write(tbl.get_indexes_ddl())
 
                 if (
-                    (table.type == 'list' and not list_recs) or
-                    (table.type != 'list' and not data_recs)
+                    (tbl.type == 'list' and not list_recs) or
+                    (tbl.type != 'list' and not data_recs)
                 ):
                     progress = '{:.1f}'.format(round(i/len(ordered_tables) * 100, 1))
                     if progress != last_progress:
                         data = json.dumps({
-                            'msg': (table.name[:17] + "..." if len(table.name) > 17
-                                    else table.name),
+                            'msg': (tbl.name[:17] + "..." if len(tbl.name) > 17
+                                    else tbl.name),
                             'progress': progress
                         })
                         yield f"data: {data}\n\n"
@@ -980,10 +926,10 @@ class Database:
                     continue
 
                 if dialect == 'oracle':
-                    file.write(f'prompt inserts into {table.name}\n')
+                    file.write(f'prompt inserts into {tbl.name}\n')
                 if select_recs:
-                    file.write(f'insert into {table.name}\n')
-                    file.write(f'select * from {self.schema}.{table.name};\n')
+                    file.write(f'insert into {tbl.name}\n')
+                    file.write(f'select * from {self.schema}.{tbl.name};\n')
                 else:
                     params = []
                     join = ''
@@ -993,15 +939,15 @@ class Database:
                         grid.set_search_cond(filter)
                         cond = grid.get_cond_expr()
                         params = grid.cond.params
-                    sql = expr.rows(table, cond)
+                    sql = expr.rows(tbl, cond)
                     with self.cnxn.cursor() as crsr:
                         sql, params = self.expr.prepare(sql, params)
                         crsr.execute(sql, params)
-                        
+
                         # Insert time grows exponentially with number of inserts
                         # per `insert all` in Oracle after a certain value.
                         # This value is around 50 for version 19c
-                        max = 50 if dialect == 'oracle' else 1000;
+                        max = 50 if dialect == 'oracle' else 1000
 
                         while True:
                             rows = crsr.fetchmany(max)
@@ -1011,25 +957,27 @@ class Database:
                             # rowcount = len(rows)
                             i = 0
                             if dialect == 'oracle':
-                                insert = f'insert into {table.name}\n'
+                                insert = f'insert into {tbl.name}\n'
                             else:
-                                insert = f'insert into {table.name} values '
+                                insert = f'insert into {tbl.name} values '
                             file.write(insert)
                             for row in rows:
-                                progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
+                                progress = '{:.1f}'.format(round(i/total_rows * 100, 1))
                                 if progress != last_progress:
-                                    data = json.dumps({'msg': table.name, 'progress': progress})
+                                    data = json.dumps({
+                                        'msg': tbl.name,
+                                        'progress': progress
+                                    })
                                     yield f"data: {data}\n\n"
                                     last_progress = progress
                                 i += 1
-                                count += 1
                                 insert = ''
                                 if dialect == 'oracle' and i > 1:
                                     insert += ' union all\n'
                                 rec = util.to_rec(row, crsr)
                                 if i != 1 and dialect != 'oracle':
                                     insert += ','
-                                insert += expr.insert_rec(table, rec) 
+                                insert += expr.insert_rec(tbl, rec)
                                 file.write(insert)
 
                             file.write(';\n\n')
@@ -1077,7 +1025,8 @@ class Database:
             yield f"data: {data}\n\n"
 
     @util.time_stream_generator
-    async def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download, filter):
+    async def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download,
+                         filter):
         # Loads metadata so we don't have to load for each table
         self.pkeys
         self.columns
@@ -1095,7 +1044,6 @@ class Database:
         # Count rows
         total_rows = 0
         for table in tables:
-            
             with self.cnxn.cursor() as crsr:
                 sql = f'select count(*) from {expr.quote(table)}'
                 if filter:
@@ -1114,14 +1062,15 @@ class Database:
             table = Table(self, table, dest)
             table.offset = 0
             table.limit = limit
-            filepath = os.path.join(dest, self.schema.lower() + '-data', table.name + '.tsv')
+            filepath = os.path.join(dest, self.schema.lower() + '-data',
+                                    table.name + '.tsv')
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             blobcolumns = []
             selects = {}
             for idx, col in enumerate(table.columns):
                 col = Dict(col)
                 if type(col.type) is str:  # odbc engine
-                    col.datatype = expr.to_urd_type(col.type) 
+                    col.datatype = expr.to_urd_type(col.type)
                 else:
                     try:
                         col.datatype = col.type.python_type.__name__
@@ -1133,7 +1082,8 @@ class Database:
                     clobs_as_files and col.datatype == 'str' and not col.size
                  ):
                     foldername = table.name + '.' + col.name
-                    path = os.path.join(os.path.dirname(filepath), '../documents', foldername)
+                    path = os.path.join(os.path.dirname(filepath), '../documents',
+                                        foldername)
                     os.makedirs(path, exist_ok=True)
                     blobcolumns.append(col.name)
                 if not cols or col.name in cols:
@@ -1184,7 +1134,8 @@ class Database:
                                 filename = str(num_files) + '.data'
 
                             foldername = table.name + '.' + colname
-                            path = os.path.join(dir, '../documents', foldername, filename)
+                            path = os.path.join(dir, '../documents', foldername,
+                                                filename)
                             if val is not None:
                                 for tbl_col in table.columns:
                                     if tbl_col.name == colname:
@@ -1259,9 +1210,6 @@ class Database:
             i += 1
             filepath = os.path.join(dir, filename)
 
-            cols = self.refl.columns(self.schema, tbl_name)
-            mandatory = [col['name'] for col in cols if not col['nullable']]
-
             with open(filepath, 'r') as file:
                 with self.cnxn.cursor() as crsr:
                     records = csv.DictReader(file, delimiter='\t')
@@ -1283,8 +1231,8 @@ class Database:
                             sql = f'insert into {tbl_name} values '
                             n = 1
                         if n != 1:
-                            sql += ',' 
-                        sql += expr.insert_rec(table, rec) 
+                            sql += ','
+                        sql += expr.insert_rec(table, rec)
 
                     sql, _ = self.expr.prepare(sql)
                     crsr.execute(sql)
@@ -1318,7 +1266,8 @@ class Database:
                             print(e)
                             if not hasattr(self, 'circular'):
                                 self.circular = []
-                            self.circular.append(str(e) + '. Removed fkey: ' + json.dumps(fkey))
+                            self.circular.append(str(e) + '. Removed fkey: ' +
+                                                 json.dumps(fkey))
                             graph[tbl_name].pop()
 
         sorter = TopologicalSorter(graph)
@@ -1330,7 +1279,7 @@ class Database:
         xml = "<views>\n"
         xml += "  <version>" + version + "</version>\n"
         xml += "  <description>" + descr + "</description>\n"
-        
+
         self.get_tables()
         contents = self.get_contents()
 
@@ -1347,15 +1296,17 @@ class Database:
                 table = Table(self, tbl_name)
                 tbl.fields = table.fields
 
-            xml += "  <view>\n"
-            xml += "    <name>" + tbl.label + "</name>\n"
-            xml += "    <table>\n"
-            xml += "      <name>" + tbl.name + "</name>\n"
-            xml += "      <heading>Finn " + tbl.label + "</heading>\n"
-            xml += "      <fields>" + ', '.join(tbl.fields.keys()) + "</fields>\n"
-            xml += "      <primarykey>" + ', '.join(tbl.pkey.columns) + "</primarykey>\n"
-            xml += "      <preview>false</preview>\n"  # TODO: how to choose value?
-            xml += "    </table>\n"
+            xml += (
+                "  <view>\n"
+                "    <name>" + tbl.label + "</name>\n"
+                "    <table>\n"
+                "      <name>" + tbl.name + "</name>\n"
+                "      <heading>Finn " + tbl.label + "</heading>\n"
+                "      <fields>" + ', '.join(tbl.fields.keys()) + "</fields>\n"
+                "      <primarykey>" + ', '.join(tbl.pkey.columns) + "</primarykey>\n"
+                "      <preview>false</preview>\n"  # TODO: how to choose value?
+                "    </table>\n"
+            )
 
             if 'subitems' in obj:
                 for subitem, subobj in obj.subitems.items():
@@ -1376,27 +1327,36 @@ class Database:
                         if fkey.referred_table == tbl.name:
                             fkey_str = ', '.join(fkey.constrained_columns)
 
-                    xml += "    <table>\n"
-                    xml += "      <name>" + subtbl.name + "</name>\n"
-                    xml += "      <heading>" + subtbl.label + "</heading>\n"
-                    xml += "      <parent>" + tbl.name + "</parent>\n"
-                    xml += "      <fields>" + ', '.join(subtbl.fields.keys()) + "</fields>\n"
-                    xml += "      <primarykey>" + ', '.join(subtbl.pkey.columns) + "</primarykey>\n"
-                    xml += "      <foreignkey>" + fkey_str + "</foreignkey>\n"
-                    xml += "      <search>true</search>\n"  # TODO: how to choose value?
+                    fields_str = ', '.join(subtbl.fields.keys())
+                    pkey_str = ', '.join(subtbl.pkey.columns)
+                    xml += (
+                        "    <table>\n"
+                        "      <name>" + subtbl.name + "</name>\n"
+                        "      <heading>" + subtbl.label + "</heading>\n"
+                        "      <parent>" + tbl.name + "</parent>\n"
+                        "      <fields>" + fields_str + "</fields>\n"
+                        "      <primarykey>" + pkey_str + "</primarykey>\n"
+                        "      <foreignkey>" + fkey_str + "</foreignkey>\n"
+                        "      <search>true</search>\n"  # TODO: how to choose value?
+                    )
+                    sort_str = ', '.join(subtbl.grid.sort_columns)
                     if subtbl.grid and 'sort_columns' in subtbl.grid:
-                        xml += "      <sort>" + ', '.join(subtbl.grid.sort_columns) + "</sort>\n"
+                        xml += "      <sort>" + sort_str + "</sort>\n"
 
                     for key, fkey in subtbl.fkeys.items():
-                        last_col = fkey.constrained_columns[-1]
-                        view = subtbl.fields[last_col].view
-                        view = view.replace(last_col + '.', '')
-                        xml += "      <lookup>\n"
-                        xml += "        <foreignkey>" + ', '.join(fkey.constrained_columns) + "</foreignkey>\n"
-                        xml += "        <table>" + fkey.referred_table + "</table>\n"
-                        xml += "        <primarykey>" + ', '.join(fkey.referred_columns) + "</primarykey>\n"
-                        xml += "        <fields>" + view + ' as ' + last_col + "</fields>\n"
-                        xml += "      </lookup>\n"
+                        lastcol = fkey.constrained_columns[-1]
+                        view = subtbl.fields[lastcol].view
+                        view = view.replace(lastcol + '.', '')
+                        fkey_str = ', '.join(fkey.constrained_columns)
+                        ref_str = ', '.join(fkey.referred_columns)
+                        xml += (
+                            "      <lookup>\n"
+                            "        <foreignkey>" +  + "</foreignkey>\n"
+                            "        <table>" + fkey.referred_table + "</table>\n"
+                            "        <primarykey>" + ref_str + "</primarykey>\n"
+                            "        <fields>" + view + ' as ' + lastcol + "</fields>\n"
+                            "      </lookup>\n"
+                        )
 
                     xml += "    </table>\n"
 

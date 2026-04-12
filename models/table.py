@@ -115,7 +115,7 @@ class Table:
         list_idx = self.indexes.get(self.name.rstrip('_') + "_list_idx", None)
         if list_idx:
             return 'list'
-        elif self.db.config.update_cache: 
+        elif self.db.config.update_cache:
             self._type = 'list'
             for colname in self.pkey.columns:
                 # Data type of primary key column
@@ -160,7 +160,7 @@ class Table:
                              str(pkey_col.type).lower() not in smallints) or
                             ('numeric' in str(pkey_col.type).lower() and
                              pkey_col.precision - pkey_col.scale >= 8) or
-                            'date' in str(pkey_col.type).lower() 
+                            'date' in str(pkey_col.type).lower()
                         )
                     )
                 ):
@@ -190,7 +190,6 @@ class Table:
     def rowcount(self):
         if not hasattr(self, '_rowcount'):
             sql = f'select count(*) from {self.db.schema}.{self.name}'
-            print('sql', sql)
             with self.db.cnxn.cursor() as crsr:
                 crsr.execute(sql)
                 self._rowcount = crsr.fetchone()[0]
@@ -329,7 +328,7 @@ class Table:
 
             # Don't get joins for foreign keys defining 1:1-relations
             # when the table itself is a foreign key join. These have an alias
-            # that is made from the referencing table and column 
+            # that is made from the referencing table and column
             if (
                 self.alias != self.view and
                 set(fkey.constrained_columns) < set(self.pkey.columns)
@@ -356,9 +355,10 @@ class Table:
                         ons = [f"{fkey.table_name}.{fkey.constrained_columns[idx]} = "
                                f"{fkey.ref_table_alias}.{col}"
                                for idx, col in enumerate(fkey.referred_columns)]
-                        on_list = ' AND '.join(ons)
-                        joins[fkey.name] = (f"left join {self.db.schema}.{fkey.table_name} "
-                                            f"on {on_list}")
+                        on = ' AND '.join(ons)
+                        joins[fkey.name] = (
+                            f"left join {self.db.schema}.{fkey.table_name} on {on}"
+                        )
 
         for key, fkey in self.relations.items():
             if fkey.relationship == '1:1':
@@ -367,15 +367,19 @@ class Table:
                 ons = [f"{alias}.{q(fkey.constrained_columns[idx])} = "
                        f"{q(self.view)}.{q(col)}"
                        for idx, col in enumerate(fkey.referred_columns)]
-                on_list = ' AND '.join(ons)
-                joins[fkey.name] = (f"left join {self.db.schema}.{q(fkey.table_name)} {alias} "
-                                    f"on {on_list}")
+                on = ' AND '.join(ons)
+                joins[fkey.name] = (
+                    f"left join {self.db.schema}.{q(fkey.table_name)} {alias} on {on}"
+                )
 
                 rel_tbl = Table(self.db, fkey.table_name, alias=alias)
                 for fkey_name in rel_tbl.joins:
                     # Don't add the join defining the 1:1 relation
                     fkey = rel_tbl.fkeys[fkey_name]
-                    if fkey and fkey.referred_table != self.name and fkey.name not in joins:
+                    if (
+                        fkey and fkey.referred_table != self.name
+                        and fkey.name not in joins
+                    ):
                         joins[fkey.name] = rel_tbl.joins[fkey.name]
 
         if self.grid_view != self.name and self.grid_view in self.db.tablenames:
@@ -389,7 +393,7 @@ class Table:
         if self.fts and self.name + '_fts' in self.db.tablenames:
             join = f"join {self.name}_fts fts on fts.rowid = {self.name}.rowid\n"
             joins[self.name + '_fts'] = join
-        
+
         self._joins = joins
 
         return self._joins
@@ -459,7 +463,7 @@ class Table:
             if rec.method == 'delete' and rec.prim_key:
                 msg = record.delete()
                 if msg != 'success':
-                    result.msg = msg 
+                    result.msg = msg
             elif rec.method == 'post':
                 pkey = record.insert(rec['values'])
 

@@ -1,4 +1,3 @@
-import re
 import time
 import inspect
 from functools import wraps
@@ -73,12 +72,14 @@ def log_caller(func):
         caller_lnr = caller_frame_record[2]
         caller_ref = caller_file + ':' + str(caller_lnr)
 
-        print(f"{'>' * indent} Function '{func.__name__}' was called by '{caller_name}' in '{caller_ref}' ---")
+        print(f"{'>' * indent} Function '{func.__name__}' was called by "
+              f"'{caller_name}' in '{caller_ref}' ---")
         start = time.perf_counter()
         indent += 2
         result = func(*args, **kwargs)
         indent -= 2
         end = time.perf_counter()
-        print(f"{'<' * indent} Function '{func.__name__}' finished executing in {end - start:.6f} seconds ---")
+        print(f"{'<' * indent} Function '{func.__name__}' finished executing "
+              f"in {end - start:.6f} seconds ---")
         return result
     return wrapper

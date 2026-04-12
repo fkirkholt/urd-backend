@@ -193,7 +193,7 @@ class File_Controller(Controller):
         return {'success': True}
 
 
-    @put("/file_delete", sync_to_thread=True)
+    @delete("/file_delete", sync_to_thread=True, status_code=200)
     def delete_file(self, filename: str, request: Request) -> dict:
         cfg = request.app.state.cfg
         filepath = os.path.join(cfg.host, filename)

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from packaging.version import parse
 from addict import Dict
 import util
 from settings import Settings
@@ -216,24 +217,26 @@ class Field:
                 return self.view
 
             for index in ref_tbl.indexes.values():
-                if index.columns != ref_tbl.pkey.columns and index.unique:
-                    # Only last pk column is used in display value,
-                    # other pk columns are usually foreign keys
-                    cols = [f'{q(fkey.ref_table_alias)}.{q(col)}'
-                            for col in index.columns
-                            if col not in ref_tbl.pkey.columns[0:-1]]
-                    if len(cols) == 1:
-                        self.view = cols[0]
-                    elif self._db.engine.name in ['oracle']:
-                        self.view = " || ', ' || ".join(cols)
-                    elif engine.name == 'sqlite' and engine.driver_name == 'pyodbc':
-                        # odbc driver for sqlite doesn't support concat_ws yet
-                        cols = ["coalesce(" + col + ", '')" for col in cols]
-                        self.view = " || ', ' || ".join(cols)
-                    else:
-                        self.view = "concat_ws(', ', " + ', '.join(cols) + ")"
-                    if index.name.endswith("_sort_idx"):
-                        break
+                if not (index.columns != ref_tbl.pkey.columns and index.unique):
+                    continue
+
+                # Only last pk column is used in display value,
+                # other pk columns are usually foreign keys
+                cols = [f'{q(fkey.ref_table_alias)}.{q(col)}'
+                        for col in index.columns
+                        if col not in ref_tbl.pkey.columns[0:-1]]
+                if len(cols) == 1:
+                    self.view = cols[0]
+                elif engine.name in ['oracle']:
+                    self.view = " || ', ' || ".join(cols)
+                elif engine.name == 'sqlite' and parse(engine.version) < parse('3.44'):
+                    # concat_ws was added in version 3.44.0
+                    cols = ["coalesce(" + col + ", '')" for col in cols]
+                    self.view = " || ', ' || ".join(cols)
+                else:
+                    self.view = "concat_ws(', ', " + ', '.join(cols) + ")"
+                if index.name.endswith("_sort_idx"):
+                    break
 
         return self.view
 

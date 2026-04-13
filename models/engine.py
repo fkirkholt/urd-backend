@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from contextlib import closing
 from models.odbc_engine import ODBC_Engine
 from models.expression import Expression
+from models.reflection import Reflection
 from settings import drivers
 
 
@@ -184,6 +185,16 @@ class Engine:
             'database': (config.path if cfg.system in ('sqlite', 'duckdb')
                          else db_name.split('.')[0] if db_name else None)
         })
+
+    @property
+    def version(self):
+        if hasattr(self, '_version'):
+            return self._version
+        cnxn = self.connect()
+        refl = Reflection(self, cnxn)
+        self._version = refl.get_version()
+        cnxn.close()
+        return self._version
 
     def connect(self):
         try:

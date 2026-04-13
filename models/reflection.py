@@ -15,6 +15,15 @@ class Reflection:
         self.expr = Expression(engine)
         self._fkeys = None
 
+    def get_version(self):
+        sql = self.expr.version()
+        if not sql:
+            return None
+        with self.cnxn.cursor() as crsr:
+            crsr.execute(sql)
+            version = crsr.fetchone()[0]
+            return version
+
     def get_schema_names(self):
         """Get all schemata in database"""
         if hasattr(self, '_schema_names'):

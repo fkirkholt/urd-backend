@@ -15,6 +15,12 @@ class Expression:
         self.engine_name = engine.name
         self.driver_name = engine.driver_name
 
+    def version(self):
+        if self.dialect == 'sqlite':
+            return "select sqlite_version()"
+        else:
+            return None
+
     def concat(self, items):
         # Concat expressions and treat null as ''
         if self.dialect in ('mysql', 'mariadb'):

@@ -16,7 +16,7 @@ from models.table import Table
 from models.grid import Grid
 from models.user import User
 from models.datatype import Datatype
-from models.odbc_engine import ODBC_Engine
+from models.engine import ODBC_Engine
 from models.reflection import Reflection
 from models.expression import Expression
 import util

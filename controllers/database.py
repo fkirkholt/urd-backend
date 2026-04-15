@@ -240,14 +240,14 @@ class Database_Controller(Controller):
 
 
     @put("/table")
-    async def save_table(self, request: Request, db_cnxn: Connection) -> dict:
+    async def save_table(self, request: Request, base: str, table: str,
+                         db_cnxn: Connection) -> dict:
         cfg = request.app.state.cfg
-        req = await request.json()
-        base = req['base_name']
         engine = get_engine(cfg, base)
         dbo = Database(engine, base, cfg.uid, db_cnxn)
-        tbl = Table(dbo, req['table_name'])
-        return {'data': tbl.save(req['records'])}
+        tbl = Table(dbo, table)
+        records = await request.json()
+        return {'data': tbl.save(records)}
 
 
     @get("/options")

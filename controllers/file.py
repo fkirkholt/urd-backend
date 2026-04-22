@@ -2,6 +2,7 @@ import os
 import magic
 import re
 import xattr
+import subprocess
 from addict import Dict
 from settings import yaml
 from subprocess import run
@@ -39,21 +40,60 @@ class File_Controller(Controller):
 
         return result
 
+    def is_git_repo(self, path):
+        try:
+            run(
+                ['git', '-C', path, 'rev-parse', '--is-inside-work-tree'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
+    def get_git_files(self, path):
+        result = subprocess.run(
+            ['rg', '--files'],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        lines = result.stdout.splitlines()
+        result = []
+        title_regex = re.compile(r'^(?:#\s+(?P<h1>.*)|__(?P<bold>.*?)__)')
+        for file in lines:
+            title = None
+            if file.endswith('.md'):
+                with open(os.path.join(path, file), 'r', encoding='utf-8') as f:
+                    chunk = f.readline(50)
+                    matches = title_regex.match(chunk)
+                    if matches:
+                        title = matches.group('h1') or matches.group('bold')
+            base = Dict()
+            base.columns.name = file
+            base.columns.label = file
+            base.columns.title = title
+            base.columns.type = 'file'
+            result.append(base)
+        return result
 
 
     @get("/file_list", sync_to_thread=True)
     def file_list(self, request: Request, path: str = '', pattern: str = '') -> dict:
-        print('----henter filliste----')
         cfg = request.app.state.cfg
         result = []
         useradmin = False
-        if not pattern:
-            filepath = os.path.join(cfg.host, path) if path else cfg.host
+        filepath = os.path.join(cfg.host, path) if path else cfg.host
+        if os.path.isfile(filepath):
+            dirpath = os.path.dirname(filepath)
+        else:
+            dirpath = filepath
+        if self.is_git_repo(dirpath) and not pattern:
+            result = self.get_git_files(dirpath)
+        elif not pattern:
             title_regex = re.compile(r'^(?:#\s+(?P<h1>.*)|__(?P<bold>.*?)__)')
-            if os.path.isfile(filepath):
-                dirpath = os.path.dirname(filepath)
-            else:
-                dirpath = filepath
             for entry in sorted(os.scandir(dirpath), key=lambda e: e.name):
                 filename = entry.name
                 filepath = entry.path

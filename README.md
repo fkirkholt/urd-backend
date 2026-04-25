@@ -25,9 +25,8 @@ based on the rules that Urðr uses to present the data.
 
 ##  Requirements
 
-Linux or MacOS
-
-Python >= 3.10
+- Linux or MacOS
+- ripgrep
 
 ## Installation
 

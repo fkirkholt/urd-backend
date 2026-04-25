@@ -162,15 +162,12 @@ class File_Controller(Controller):
         size = os.path.getsize(filepath)
         content = None
         msg = None
-        type = magic.from_file(filepath, mime=True)
+        type = magic.from_file(filepath)
+        mime_type = magic.from_file(filepath, mime=True)
+        if "DuckDB database file" in type:
+            mime_type = 'application/vnd.duckdb'
         text_types = ['application/javascript']
-        with open(filepath, 'rb') as reader:
-            string = reader.read(12)
-            if b'SQLite' in string:
-                type = 'sqlite'
-            elif b'DUCK' in string:
-                type = 'duckdb'
-        if type.startswith('text/') or type in text_types:
+        if mime_type.startswith('text/') or mime_type in text_types:
             if size < 100000000:
                 with open(filepath, 'r') as file:
                     content = file.read()
@@ -182,7 +179,7 @@ class File_Controller(Controller):
             if path.endswith(ext):
                 lsp = True
 
-        return {'path': path, 'name': name, 'content': content, 'type': type,
+        return {'path': path, 'name': name, 'content': content, 'type': mime_type,
                 'msg': msg, 'abspath': filepath if lsp else None,
                 'websocket': cfg.websocket if lsp else None}
 

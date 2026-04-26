@@ -144,8 +144,8 @@ class Reflection:
                 tblname = rec.fktable_name
                 if 'fkcolumn_names' in rec:
                     if type(rec.fkcolumn_names) is str:
-                        rec.fkcolumn_names = yaml.safe_load(rec.fkcolumn_names)
-                        rec.pkcolumn_names = yaml.safe_load(rec.pkcolumn_names)
+                        rec.fkcolumn_names = yaml.load(rec.fkcolumn_names)
+                        rec.pkcolumn_names = yaml.load(rec.pkcolumn_names)
                     fkeys[tblname][name].constrained_columns = rec.fkcolumn_names
                     fkeys[tblname][name].referred_columns = rec.pkcolumn_names
                 if 'constrained_columns' not in fkeys[tblname][name]:
@@ -249,7 +249,7 @@ class Reflection:
                 indexes[rec.table_name][name].unique = not rec.non_unique
                 if 'column_names' in rec:
                     if type(rec.column_names) is str:
-                        rec.column_names = yaml.safe_load(rec.column_names)
+                        rec.column_names = yaml.load(rec.column_names)
                     indexes[rec.table_name][name].column_names = rec.column_names
                 if 'column_names' not in indexes[rec.table_name][name]:
                     indexes[rec.table_name][name].column_names = []

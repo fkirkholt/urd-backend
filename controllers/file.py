@@ -53,8 +53,10 @@ class File_Controller(Controller):
             return False
 
     def get_git_files(self, path):
+        command = 'rg --files | sort -V'
         result = subprocess.run(
-            ['rg', '--files'],
+            command,
+            shell=True,
             cwd=path,
             capture_output=True,
             text=True,

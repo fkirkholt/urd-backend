@@ -26,7 +26,15 @@ based on the rules that Urðr uses to present the data.
 ##  Requirements
 
 - Linux or MacOS
-- ripgrep
+- ripgrep: Required for searching files
+- unixODBC: Required for database connectivity
+- libmagic: Required for file type identification
+
+For Debian/Ubuntu these can be installed with:
+
+~~~ shell
+sudo apt-get update && sudo apt-get install -y ripgrep unixodbc-dev libmagic-dev
+~~~
 
 ## Installation
 

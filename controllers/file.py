@@ -192,16 +192,33 @@ class File_Controller(Controller):
         backlinks = []
         filepath = os.path.join(cfg.host, path)
         parentpath = os.path.dirname(filepath)
-        for path, folders, files in os.walk(cfg.host):
-            for filename in files:
-                if not filename.endswith('.md'):
-                    continue
-                relpath = os.path.relpath(filepath, path)
-                with open(os.path.join(path, filename), 'r') as file:
-                    content = file.read()
-                    if '(' + relpath + ')' in content:
-                        abspath = os.path.join(path, filename)
-                        backlinks.append(os.path.relpath(abspath, parentpath))
+
+        filename = os.path.basename(filepath)
+        cmd = ["rg", "-t", "md", f"\\({filename}\\)|\\(.*?/{filename}\\)",
+               "--with-filename", "--no-heading"]
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   cwd=cfg.host, text=True)
+
+        for line in process.stdout:
+            # rg output format is 'filepath:content'
+            parts = line.split(':', 1)
+            if len(parts) < 2:
+                continue
+
+            source_file = parts[0]
+            source_path = os.path.join(cfg.host, source_file)
+            content = parts[1]
+            links = re.findall(r'\]\((.*?)\)', content)
+            for link_path in links:
+                clean_link = link_path.split('#')[0]  # Clean link for anchors
+
+                if filename in clean_link:
+                    source_dir = os.path.dirname(source_file)
+                    abspath = os.path.join(cfg.host, source_dir, clean_link)
+
+                    if abspath == filepath:
+                        backlinks.append(os.path.relpath(source_path, parentpath))
 
         return backlinks
 

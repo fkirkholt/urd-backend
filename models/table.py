@@ -114,6 +114,7 @@ class Table:
 
         list_idx = self.indexes.get(self.name.rstrip('_') + "_list_idx", None)
         if list_idx:
+            self._type = 'list'
             return 'list'
         elif self.db.config.update_cache:
             self._type = 'list'

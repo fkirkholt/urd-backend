@@ -112,6 +112,7 @@ class Database:
 
         branch = os.system('git rev-parse --abbrev-ref HEAD')
         branch = branch if branch else ''
+        is_admin = self.user.is_admin(self.schema)
 
         info = {
             "branch": branch,
@@ -119,6 +120,8 @@ class Database:
                 "name": self.identifier,
                 "cat": self.cat,
                 "system": self.engine.name,
+                "host": self.engine.host if is_admin else None,
+                "driver": self.engine.driver.name if is_admin else None,
                 "schema": self.schema,
                 "schemata": [s for s in self.schemas if s != 'urdr'],
                 "label": self.get_label(self.identifier),
@@ -130,7 +133,7 @@ class Database:
             },
             "user": {
                 "name": self.user.name,
-                "admin": self.user.is_admin(self.schema)
+                "admin": is_admin
             },
             "config": self.config
         }

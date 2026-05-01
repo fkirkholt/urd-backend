@@ -207,13 +207,13 @@ class Reflection:
     def fkey_from_colname(self, fk_col, pk_col, fkeys):
         fkey = Dict()
         if fk_col.name == pk_col.name and fk_col.table_name == pk_col.table_name:
-            # Hvis dette er samme kolonnen
+            # If this is the same column
             return None
         ref = (pk_col.table_name + '_' + pk_col.name).replace('__', '_').rstrip('_')
         if fk_col.name.endswith(ref) or fk_col.name == pk_col.name:
             prefix = fk_col.name.replace(ref, '').rstrip('_')
             prefix = '_' + prefix if prefix else ''
-            # Genererer navn til fremmednøkkelen
+            # Generate name for the fkey
             fk_name = fk_col.table_name + '_' + pk_col.table_name + prefix + '_fkey'
 
             if fk_name not in fkeys:

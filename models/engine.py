@@ -81,7 +81,7 @@ class ConnectionPool:
         try:
             return self._pool.get(block=True, timeout=timeout)
         except queue.Empty:
-            raise Exception("Ingen ledige tilkoblinger i poolen.")
+            raise Exception("No available connections in the pool.")
 
     def release_connection(self, conn):
         """Return connection to queue"""

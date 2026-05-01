@@ -21,7 +21,6 @@ from models.user import User
 class Database_Controller(Controller):
     @get("/dblist", sync_to_thread=True)
     def dblist(self, request: Request, role: str = '') -> dict:
-        print('----henter dblist----')
         cfg = request.app.state.cfg
         result = []
         useradmin = False

@@ -104,7 +104,8 @@ class Record:
             if rel.schema == self._db.schema:
                 db = self._db
             else:
-                db = Database(self._db.engine, base_name, self._db.user.name)
+                db = Database(self._db.engine, base_name, self._db.user.name,
+                              self._db.cnxn)
                 db.indexes
 
             tbl_rel = Table(db, rel.table_name)

@@ -766,7 +766,7 @@ class Grid:
         form = Dict({'items': {}})
         field_groups = self.get_field_groups(self.tbl.fields)
 
-        attrs = self.db.html_attrs
+        attrs = self.db.state.html_attrs
         if attrs.table[self.tbl.name]['data-form']:
             return attrs.table[self.tbl.name]['data-form']
 
@@ -868,7 +868,7 @@ class Grid:
                 # Add name of foreign key column if other than name
                 # of reference table (and primary key column)
                 if (
-                    rel.constrained_columns[-1] not in self.tbl.name and 
+                    rel.constrained_columns[-1] not in self.tbl.name and
                     (rel_tbl.type != 'xref' or not fkey_col_has_special_name)
                 ):
                     col = rel.constrained_columns[-1]

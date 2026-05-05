@@ -13,13 +13,14 @@ from models.reflection import Reflection
 from settings import drivers
 
 
-def get_engine(cfg, db_name=None):
+def get_engine(state, db_name=None):
+    cfg = state.cfg
     driver = drivers[cfg.system][cfg.driver]
     driver.name = cfg.driver
     if cfg.driver == 'pyodbc':
-        engine = ODBC_Engine(cfg, driver, db_name)
+        engine = ODBC_Engine(state, driver, db_name)
     else:
-        engine = Engine(cfg, driver, db_name)
+        engine = Engine(state, driver, db_name)
 
     if cfg.system == 'sqlite' and db_name == 'urdr':
         with engine.connect() as cnxn:
@@ -134,8 +135,10 @@ class Connection:
 
 class Engine:
 
-    def __init__(self, cfg, driver, db_name=None):
+    def __init__(self, state, driver, db_name=None):
 
+        cfg = state.cfg
+        self.state = state.meta[cfg.host]
         self.name = cfg.system
         self.db_name = db_name
         self.host = cfg.host
@@ -217,7 +220,9 @@ class Engine:
 class ODBC_Engine:
     """Connect to database"""
 
-    def __init__(self, cfg, driver, db_name=None):
+    def __init__(self, state, driver, db_name=None):
+        cfg = state.cfg
+        self.state = state.meta[cfg.host]
         self.name = cfg.system
         self.host = cfg.host
         self.db_name = db_name

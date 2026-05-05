@@ -25,12 +25,8 @@ import util
 class Database:
     """Contains methods for getting data and metadata from database"""
 
-    @util.log_caller
     def __init__(self, engine, db_name, uid, cnxn):
-        self.pkeys_loaded = False
-        self.fkeys_loaded = False
-        self.columns_loaded = False
-        self.indexes_loaded = False
+        self.state = engine.state[db_name]
         self.engine = engine
         self.cnxn = cnxn
         self.expr = Expression(engine)
@@ -71,8 +67,9 @@ class Database:
         else:
             self.cte_access = None
 
-        self.html_attrs = self.init_html_attributes()
-        attrs = Dict(self.html_attrs.pop('base', None))
+        if not self.state.html_attrs:
+            self.state.html_attrs = self.get_html_attributes()
+        attrs = Dict(self.state.html_attrs.pop('base', None))
         self.cache = attrs.pop('data-cache', None)
         if attrs.get('cache.config', None):
             self.config = self.cache.config
@@ -83,7 +80,7 @@ class Database:
                 'exportdir': config.exportdir
             })
 
-    def init_html_attributes(self):
+    def get_html_attributes(self):
         """Get data from table html_attributes"""
         attrs = Dict()
         if 'html_attributes' in self.tablenames:
@@ -110,33 +107,23 @@ class Database:
     def get_info(self):
         """Get info about database"""
 
-        branch = os.system('git rev-parse --abbrev-ref HEAD')
-        branch = branch if branch else ''
         is_admin = self.user.is_admin(self.schema)
 
-        info = {
-            "branch": branch,
-            "base": {
-                "name": self.identifier,
-                "cat": self.cat,
-                "system": self.engine.name,
-                "host": self.engine.host if is_admin else None,
-                "driver": self.engine.driver.name if is_admin else None,
-                "schema": self.schema,
-                "schemata": [s for s in self.schemas if s != 'urdr'],
-                "label": self.get_label(self.identifier),
-                "tables": self.get_tables(),
-                "contents": self.get_contents(),
-                "description": self.get_comment(),
-                "html_attrs": self.html_attrs,
-                "privilege": self.user.schema_privilege(self.schema)
-            },
-            "user": {
-                "name": self.user.name,
-                "admin": is_admin
-            },
-            "config": self.config
-        }
+        info = Dict({
+            "name": self.identifier,
+            "cat": self.cat,
+            "system": self.engine.name,
+            "host": self.engine.host if is_admin else None,
+            "driver": self.engine.driver.name if is_admin else None,
+            "schema": self.schema,
+            "schemata": [s for s in self.schemas if s != 'urdr'],
+            "label": self.get_label(self.identifier),
+            "tables": self.get_tables(),
+            "contents": self.get_contents(),
+            "description": self.get_comment(),
+            "html_attrs": self.state.html_attrs,
+            "privilege": self.user.schema_privilege(self.schema)
+        })
 
         return info
 
@@ -183,8 +170,8 @@ class Database:
             self.cnxn.commit()
 
         # Refresh attributes
-        self.html_attrs = self.init_html_attributes()
-        attrs = Dict(self.html_attrs.pop('base', None))
+        self.state.html_attrs = self.get_html_attributes()
+        attrs = Dict(self.state.html_attrs.pop('base', None))
         self.cache = attrs.pop('data-cache', None)
 
     def get_tables(self):
@@ -197,12 +184,8 @@ class Database:
 
         self.tables = Dict()
 
-        # Loads metadata so we don't have to load for each table
-        self.fkeys
-        self.indexes
-        self.pkeys
-
         for tbl in self.refl.tables(self.schema).values():
+            self.state.tables[tbl.name] = Dict()
             if tbl.name[-5:] == '_view' and tbl.name[:-5] in self.tablenames:
                 continue
             if '_fts' in tbl.name:
@@ -211,9 +194,8 @@ class Database:
             table = Table(self, tbl.name, type=tbl.type, comment=tbl.comment)
 
             self.tables[tbl.name] = table.get()
-            self.tables[tbl.name].fkeys = self.fkeys[tbl.name]
-            self.tables[tbl.name].relations = self.relations[tbl.name]
 
+        self.state.tables = self.tables
         return self.tables
 
     @property
@@ -227,13 +209,15 @@ class Database:
 
     @property
     def tablenames(self):
-        if hasattr(self, '_tablenames'):
-            return self._tablenames
+        if self.state.tablenames:
+            return self.state.tablenames
 
-        self._tablenames = [t.name for t in self.refl.tables(self.schema).values()
-                            if t.type == 'table']
+        print('utleder tablenames')
+        tablenames = [t.name for t in self.refl.tables(self.schema).values()
+                      if t.type == 'table']
+        self.state.tablenames = tablenames
 
-        return self._tablenames
+        return tablenames
 
     @property
     def viewnames(self):
@@ -248,12 +232,11 @@ class Database:
     @property
     def columns(self):
         """ Return all columns in database grouped by table name """
-        self.columns_loaded = True
 
-        if not hasattr(self, '_columns'):
-            self._columns = self.refl.columns(self.schema)
+        if not self.state.columns:
+            self.state.columns = self.refl.columns(self.schema)
 
-        return self._columns
+        return self.state.columns
 
     def is_top_level(self, table):
         """Check if table is top level, i.e. not subordinate to other tables"""
@@ -436,19 +419,20 @@ class Database:
 
         sub_tables = Dict()
         for tbl_name, table in self.tables.items():
-            tbl = Table(self, tbl_name)
 
-            if tbl.type == 'xref':
+            if table.type == 'xref':
                 continue
 
             for colname in table.pkey.columns:
-                fkey = tbl.get_fkey(colname)
+                fkeys = [fkey for fkey in table.fkeys.values()
+                         if fkey.constrained_columns[-1] == colname]
+                fkey = fkeys[0] if fkeys else None
                 if fkey:
-                    if tbl.type == 'ext' and fkey.relationship == '1:M':
+                    if table.type == 'ext' and fkey.relationship == '1:M':
                         continue
 
-                    ref_tbl = Table(self, fkey.referred_table)
-                    if ref_tbl.type == 'list' and tbl.type != 'list':
+                    ref_tbl = self.tables[fkey.referred_table]
+                    if ref_tbl.type == 'list' and table.type != 'list':
                         continue
 
                     if fkey.referred_table not in sub_tables:
@@ -584,29 +568,25 @@ class Database:
     def pkeys(self):
         """Get primary key of table"""
 
-        if hasattr(self, '_pkeys'):
-            return self._pkeys
+        if self.state.pkeys:
+            return self.state.pkeys
 
-        self.pkeys_loaded = True
-        self._pkeys = Dict()
         pkey_constraints = self.refl.pkeys(self.schema)
         for table, pkey in pkey_constraints.items():
-            self._pkeys[table] = Dict({
+            self.state.pkeys[table] = Dict({
                 'table_name': table,
                 'name': pkey['name'] or 'PRIMARY',
                 'unique': True,
                 'columns': pkey['constrained_columns']
             })
 
-        return self._pkeys
+        return self.state.pkeys
 
     @property
     def indexes(self):
-        self.indexes_loaded = True
-        if hasattr(self, '_indexes'):
-            return self._indexes
+        if self.state.indexes:
+            return self.state.indexes
 
-        self._indexes = Dict()
         schema_indexes = self.refl.indexes(self.schema)
 
         for table, indexes in schema_indexes.items():
@@ -617,23 +597,22 @@ class Database:
                 idx.pop('dialect_options', None)
 
                 if idx.name and idx.columns != [None]:
-                    self._indexes[table][idx.name] = idx
+                    self.state.indexes[table][idx.name] = idx
 
         for table in self.pkeys:
             pkey = self.pkeys[table]
-            self._indexes[table][pkey.name] = pkey
+            self.state.indexes[table][pkey.name] = pkey
 
-        return self._indexes
+        return self.state.indexes
 
     @property
     def fkeys(self):
         """Get all foreign keys of table"""
-        if hasattr(self, '_fkeys'):
-            return self._fkeys
-        self.fkeys_loaded = True
+        if self.state.fkeys:
+            return self.state.fkeys
 
-        self._fkeys = Dict()
-        self._relations = Dict()
+        self.state.fkeys = Dict()
+        self.state.relations = Dict()
 
         schema_fkeys = self.refl.fkeys(self.schema)
 
@@ -641,18 +620,35 @@ class Database:
             for fkey in fkeys:
                 fkey, alias = util.format_fkey(fkey, self.pkeys[fkey.table_name])
                 fkey.ref_table_alias = alias
-                self._fkeys[fkey.table_name][fkey.name] = fkey
-                self._relations[fkey.referred_table][fkey.name] = fkey
+                self.state.fkeys[fkey.table_name][fkey.name] = fkey
+                self.state.relations[fkey.referred_table][fkey.name] = fkey
 
-        return self._fkeys
+        return self.state.fkeys
 
     @property
     def relations(self):
         """Get all has-many relations of table"""
-        if not hasattr(self, '_relations'):
+        if not self.state.relations:
             self.fkeys
 
-        return self._relations
+        # find how much the relation is used
+        if self.config.column_use:
+            for tbl_name, relations in self.state.relations.items():
+                for name, rel in relations.items():
+                    fkey_col = rel.constrained_columns[-1]
+                    sql = f"""
+                    select count(distinct({fkey_col})) from {rel.table_name}
+                    """
+
+                    with self.db.cnxn.cursor() as crsr:
+                        crsr.execute(sql)
+                        count = crsr.fetchone()[0]
+
+                    tbl = Table(self, tbl_name)
+
+                    relations[name].use = count/tbl.rowcount if tbl.rowcount > 0 else 0
+
+        return self.state.relations
 
     @property
     def functions(self):

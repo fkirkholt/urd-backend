@@ -15,6 +15,7 @@ from jose import jwt
 import time
 import magic
 from starlette.background import BackgroundTask
+from addict import Dict
 import typer
 from controllers.file import File_Controller
 from controllers.user import User_Controller
@@ -35,7 +36,7 @@ logging_config = LoggingConfig(
 
 
 def get_db_connection(base: str | None = None):
-    engine = get_engine(cfg, base)
+    engine = get_engine(app.state, base)
     with db_manager.get_pool(engine).connection() as conn:
         yield conn  # Returns connection to pool after use
 
@@ -204,7 +205,7 @@ app = Litestar(
         engine=JinjaTemplateEngine,
     ),
     logging_config=logging_config,
-    state=State({'cfg': cfg, 'drivers': drivers}),
+    state=State({'cfg': cfg, 'drivers': drivers, 'meta': Dict()}),
     middleware=[login_middleware],
     on_shutdown=[shutdown_handler],
     dependencies={"db_cnxn": Provide(get_db_connection)}

@@ -112,7 +112,7 @@ class Field:
 
     def get_attributes(self, table_name, colname):
         """Get description based on term"""
-        attrs = self._db.html_attrs
+        attrs = self._db.state.html_attrs
         selector_1 = f'[data-field="{table_name}.{colname}"]'
         selector_2 = f'label[data-field="{table_name}.{colname}"]'
         attributes = {}

@@ -2,7 +2,6 @@
 import pypandoc
 from addict import Dict
 import util
-from sqlglot import parse_one, exp
 from settings import Settings
 from models.record import Record
 from models.column import Column
@@ -17,6 +16,7 @@ class Table:
     """Contains methods for getting metadata for table"""
 
     def __init__(self, db, tbl_name, type=None, comment=None, alias=None):
+        self.state = db.state.tables[tbl_name]
         self.db = db
         self.name = tbl_name
         self.label = db.get_label(tbl_name)
@@ -92,100 +92,42 @@ class Table:
 
     @property
     def type(self):
-        """Return type of table"""
-        if not hasattr(self, '_type'):
-            self.init_type()
+        """Return type of table. One of 'table', 'list', 'xref', 'ext', 'view' """
+        if not self.state.type:
 
-        return self._type
+            if self.main_type is None:
+                tbl_names = self.db.tablenames
+                self.main_type = 'table' if self.name in tbl_names else 'view'
 
-    def init_type(self):
-        """Find type. One of 'table', 'list', 'xref', 'ext', 'view' """
-        if (self.db.cache and not self.db.config.update_cache):
-            self._type = self.db.cache.tables[self.name].type
-            return self._type
+            if self.main_type == 'view':
+                self.state.type = 'view'
+                return 'view'
 
-        if self.main_type is None:
-            tbl_names = self.db.tablenames
-            self.main_type = 'table' if self.name in tbl_names else 'view'
+            list_idx = self.indexes.get(self.name.rstrip('_') + "_list_idx", None)
+            if list_idx:
+                self.state.type = 'list'
+                return 'list'
 
-        if self.main_type == 'view':
-            self._type = 'view'
-            return 'view'
+            else:
+                self.state.type = 'data'
 
-        list_idx = self.indexes.get(self.name.rstrip('_') + "_list_idx", None)
-        if list_idx:
-            self._type = 'list'
-            return 'list'
-        elif self.db.config.update_cache:
-            self._type = 'list'
-            for colname in self.pkey.columns:
-                # Data type of primary key column
-                pkey_col = None
-                pkey_col_type = None
-                pkey_col_length = None
-                # Find data type for last pkey column
-                if (
-                    self.pkey and len(self.pkey.columns) and
-                    self.pkey.columns != ['rowid']
-                ):
-                    # colname = self.pkey.columns[-1]
-                    cols = self.db.columns[self.name]
-                    for col in cols:
-                        if col['name'] == colname:
-                            pkey_col = Column(self, col)
-                            break
-                    if type(pkey_col.type) is str:
-                        expr = Expression(self.db.engine)
-                        pkey_col_type = expr.to_urd_type(pkey_col.type)
-                    else:
-                        pkey_col_type = pkey_col.type.python_type.__name__
-                    if hasattr(pkey_col, 'size'):
-                        pkey_col_length = pkey_col.size
+            all_fkey_columns = set()
+            for fkey in self.fkeys.values():
+                # An fkey with same columns as primary key designates an
+                # extension table. But the fkey can also have invisible columns
+                # used to control if the table should be displayed as relation
+                cols = [col for col in fkey.constrained_columns
+                        if not (col.startswith('_') or col.startswith('const_'))]
+                if cols == self.pkey.columns:
+                    self.state.type = "ext"
+                    break
+                elif set(cols) < set(self.pkey.columns):
+                    all_fkey_columns.update(set(cols))
 
-                # self._type = self.main_type
+            if self.pkey and set(self.pkey.columns) <= all_fkey_columns:
+                self.state.type = "xref"
 
-                # if (self.name[-5:] == "_list" or self.name[-6:] == "_liste"):
-                #     self._type = "list"
-                smallints = ['tinyint', 'smallint', 'mediumint']
-                if self.name[-5:] in ("_xref", "_link"):
-                    self._type = "xref"
-                elif self.name[-4:] == "_ext":
-                    self._type = "ext"
-                elif (
-                    pkey_col_type is None or
-                    (pkey_col_type == 'str' and not pkey_col_length or
-                     pkey_col_type == 'str' and pkey_col_length >= 10) or (
-                        pkey_col and (
-                            ('int' in str(pkey_col_type).lower() and
-                             (not pkey_col_length or pkey_col_length > 8) and
-                             str(pkey_col.type).lower() not in smallints) or
-                            ('numeric' in str(pkey_col.type).lower() and
-                             pkey_col.precision - pkey_col.scale >= 8) or
-                            'date' in str(pkey_col.type).lower()
-                        )
-                    )
-                ):
-                    self._type = "data"
-        else:
-            self._type = 'data'
-
-        all_fkey_columns = set()
-        for fkey in self.fkeys.values():
-            # An fkey with same columns as primary key designates an
-            # extension table. But the fkey can also have invisible columns
-            # used to control if the table should be displayed as relation
-            cols = [col for col in fkey.constrained_columns
-                    if not (col.startswith('_') or col.startswith('const_'))]
-            if cols == self.pkey.columns:
-                self._type = "ext"
-                break
-            elif set(cols) < set(self.pkey.columns):
-                all_fkey_columns.update(set(cols))
-
-        if self.pkey and set(self.pkey.columns) <= all_fkey_columns:
-            self._type = "xref"
-
-        return self._type
+        return self.state.type
 
     @property
     def rowcount(self):
@@ -212,28 +154,28 @@ class Table:
     @property
     def indexes(self):
         """Return all table indexes"""
-        if not hasattr(self, '_indexes'):
-            self.init_indexes()
-
-        return self._indexes
+        if not self.state.indexes:
+            self.db.indexes
+            self.state.indexes = self.db.indexes[self.name]
+        return self.state.indexes
 
     @property
     def fkeys(self):
-        if not hasattr(self, '_fkeys'):
-            self.init_fkeys()
-
-        return self._fkeys
+        if not self.state.fkeys:
+            self.db.fkeys
+            self.state.fkeys = self.db.fkeys[self.name]
+        return self.state.fkeys
 
     def get_fkey(self, name):
         """Return single foreign key based on key name or last column"""
-        if not hasattr(self, '_fkeys'):
-            self.init_fkeys()
+        if not self.state.fkeys:
+            self.state.fkeys = self.db.fkeys[self.name]
 
-        if name in self._fkeys:
-            return self._fkeys[name]
+        if name in self.state.fkeys:
+            return self.state.fkeys[name]
         else:
             col_fkey = None
-            for fkey in self._fkeys.values():
+            for fkey in self.state.fkeys.values():
                 if (fkey.constrained_columns[-1] == name):
                     if (
                         not col_fkey or
@@ -249,28 +191,87 @@ class Table:
     @property
     def fields(self):
         """Return all fields of table"""
-        if not hasattr(self, '_fields'):
-            if (self.db.cache and not self.db.config.update_cache):
-                self._fields = self.db.cache.tables[self.name].fields
-            else:
-                self.init_fields()
+        if not self.state.fields:
+            fields = Dict()
+            indexed_cols = []
 
-        return self._fields
+            if self.db.state.columns:
+                cols = self.db.state.columns[self.name]
+            else:
+                cols = self.db.refl.columns(self.db.schema, self.name)
+
+            for col in cols:
+                col = Dict(col)
+
+                column = Column(self, col)
+                field = Field(self, col.name)
+                field.set_attrs_from_col(column)
+                if hasattr(field, 'fkey'):
+                    field.options = field.get_options('', {})
+
+                if (
+                    field.name in indexed_cols and
+                    not getattr(field, 'options', False) and
+                    field.datatype == 'str' and
+                    field.attrs.get('data-format', None) != 'ISO 8601'
+                ):
+                    # Make the field show up as autocomplete
+                    field.attrs['type'] = 'search'
+                    field.element = 'input'
+
+                # Get info about column use if user has chosen this option
+                if (
+                    self.db.config and self.db.config.column_use and
+                    col.name not in self.pkey.columns and
+                    not self.name.startswith('meta_') and
+                    self.type != 'view'
+                ):
+                    if col.name not in indexed_cols:
+                        column.create_index(col.type_name)
+
+                    # Find if column is (largely) empty
+                    field.use = column.check_use()
+
+                    if col.type_name not in ['blob', 'clob', 'text']:
+                        field.frequency = column.check_frequency()
+
+                fields[col.name] = field.get()
+
+            updated_idx = self.indexes.get(self.name + "_updated_idx", None)
+            if updated_idx:
+                for col in updated_idx.columns:
+                    fields[col].extra = "auto_update"
+                    fields[col].editable = False
+                if len(updated_idx.columns) == 2:
+                    col = updated_idx.columns[1]
+                    fields[col].default = self.db.user.name
+            created_idx = self.indexes.get(self.name + "_created_idx", None)
+            if created_idx:
+                for col in created_idx.columns:
+                    fields[col].extra = "auto"
+                    fields[col].editable = False
+                if len(created_idx.columns) == 2:
+                    col = created_idx.columns[1]
+                    fields[col].default = self.db.user.name
+
+            self.state.fields = fields
+
+        return self.state.fields
 
     @property
     def pkey(self):
         """Return primary key of table"""
-        if hasattr(self, '_pkey'):
-            return self._pkey
+        if self.state.pkey:
+            return self.state.pkey
         if (self.db.cache and not self.db.config.update_cache):
             self._pkey = self.db.cache.tables[self.name].pkey
             return self._pkey
 
-        if self.db.pkeys_loaded:
-            self._pkey = self.db.pkeys[self.name]
+        if self.db.pkeys:
+            self.state.pkey = self.db.pkeys[self.name]
         else:
             pkey = self.db.refl.pkeys(self.db.schema, self.name)
-            self._pkey = Dict({
+            self.state.pkey = Dict({
                 'table_name': self.name,
                 'name': pkey['name'] or 'PRIMARY',
                 'unique': True,
@@ -278,32 +279,32 @@ class Table:
             })
 
         if (
-            not self._pkey.columns and
+            not self.state.pkey.columns and
             self.db.engine.name == 'sqlite' and
             self.type != 'view'
         ):
-            self._pkey.columns = ['rowid']
-            self._pkey.name = self.name + '_rowid'
+            self.state.pkey.columns = ['rowid']
+            self.state.pkey.name = self.name + '_rowid'
 
-        if (not self._pkey.columns):
-            attrs = self.db.html_attrs
+        if (not self.state.pkey.columns):
+            attrs = self.db.state.html_attrs
             selector = f'table[data-name="{self.name}"]'
             if attrs[selector]['data-pkey']:
                 self._pkey.name = self.name + '_pkey'
                 self._pkey.columns = attrs[selector]['data-pkey']
 
-        return self._pkey
+        return self.state.pkey
 
     @property
     def columns(self):
-        if hasattr(self, '_columns'):
-            return self._columns
-        if self.db.columns_loaded:
-            self._columns = self.db.columns[self.name]
+        if self.state.columns:
+            return self.state.columns
+        if self.db.state.columns:
+            self.state.columns = self.db.state.columns[self.name]
         else:
-            self._columns = self.db.refl.columns(self.db.schema, self.name)
+            self.state.columns = self.db.refl.columns(self.db.schema, self.name)
 
-        return self._columns
+        return self.state.columns
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""
@@ -401,18 +402,18 @@ class Table:
 
     def get_relation(self, alias):
         """Return single relation"""
-        if not hasattr(self, '_relations'):
-            self.init_relations()
-
-        return self._relations[alias]
+        if not self.state.relations:
+            self.db.relations
+            self.state.relations = self.db.relations[self.name]
+        return self.state.relations[alias]
 
     @property
     def relations(self):
         """Return all 'has many' relations of table"""
-        if not hasattr(self, '_relations'):
-            self.init_relations()
-
-        return self._relations
+        if not self.state.relations:
+            self.db.relations
+            self.state.relations = self.db.relations[self.name]
+        return self.state.relations
 
     def get_access_code_idx(self):
         idx_name = self.name.rstrip('_') + '_access_code_idx'
@@ -504,187 +505,6 @@ class Table:
                 rel_table.save(rel.records)
 
         return result
-
-    def init_fkeys(self):
-        """Store foreign keys in table object"""
-        if (self.db.cache and not self.db.config.update_cache):
-            self._fkeys = self.db.cache.tables[self.name].fkeys
-            return
-        if self.db.fkeys_loaded:
-            self._fkeys = self.db.fkeys[self.name]
-        else:
-            fkeys = self.db.refl.fkeys(self.db.schema, fk_table=self.name)
-
-            self._fkeys = Dict()
-            for fkey in fkeys:
-                fkey, alias = util.format_fkey(fkey, self.pkey)
-                fkey.ref_table_alias = alias
-                self._fkeys[fkey.name] = fkey
-
-    def init_fields(self):
-        """Store Dict of fields in table object"""
-        fields = Dict()
-        indexed_cols = []
-        for key, index in self.indexes.items():
-            # Bug in SQLAlchemy's get_multi_indexes so that an index
-            # without columns can be returned
-            if len(index.columns):
-                indexed_cols.append(index.columns[0])
-
-        # contents = None if not self.db.cache \
-        #     else self.db.cache.contents
-
-        if self.db.columns_loaded:
-            cols = self.db.columns[self.name]
-        else:
-            cols = self.db.refl.columns(self.db.schema, self.name)
-
-        for col in cols:
-            col = Dict(col)
-
-            column = Column(self, col)
-            field = Field(self, col.name)
-            field.set_attrs_from_col(column)
-            if hasattr(field, 'fkey'):
-                field.options = field.get_options('', {})
-
-            if (
-                field.name in indexed_cols and
-                not getattr(field, 'options', False) and
-                field.datatype == 'str' and
-                field.attrs.get('data-format', None) != 'ISO 8601'
-            ):
-                # Make the field show up as autocomplete
-                field.attrs['type'] = 'search'
-                field.element = 'input'
-
-            # Get info about column use if user has chosen this option
-            if (
-                self.db.config and self.db.config.column_use and
-                col.name not in self.pkey.columns and
-                not self.name.startswith('meta_') and
-                self.type != 'view'
-                # table not in group named '...'
-                # and (
-                #     not contents['...'] or ('tables.' + self.name) not in \
-                #     contents['...'].subitems.values()
-                # )
-            ):
-                if col.name not in indexed_cols:
-                    column.create_index(col.type_name)
-
-                # Find if column is (largely) empty
-                field.use = column.check_use()
-
-                # if (field.use and field.datatype == "str"):
-                #     field.size = column.get_size()
-                #     if field.size < 256:
-                #         field.element = "input[type=text]"
-
-                if col.type_name not in ['blob', 'clob', 'text']:
-                    field.frequency = column.check_frequency()
-
-            fields[col.name] = field.get()
-
-        updated_idx = self.indexes.get(self.name + "_updated_idx", None)
-        if updated_idx:
-            for col in updated_idx.columns:
-                fields[col].extra = "auto_update"
-                fields[col].editable = False
-            if len(updated_idx.columns) == 2:
-                col = updated_idx.columns[1]
-                fields[col].default = self.db.user.name
-        created_idx = self.indexes.get(self.name + "_created_idx", None)
-        if created_idx:
-            for col in created_idx.columns:
-                fields[col].extra = "auto"
-                fields[col].editable = False
-            if len(created_idx.columns) == 2:
-                col = created_idx.columns[1]
-                fields[col].default = self.db.user.name
-
-        self._fields = fields
-
-    def init_indexes(self):
-        """Store Dict of indexes as attribute of table object"""
-        if self.db.cache and not self.db.config.update_cache:
-            self._indexes = self.db.cache.tables[self.name].indexes
-            return
-        if self.db.indexes_loaded:
-            self._indexes = self.db.indexes[self.name]
-        else:
-            indexes = self.db.refl.indexes(self.db.schema, self.name)
-            self._indexes = Dict()
-            for idx in indexes:
-                idx = Dict(idx)
-                idx.columns = idx.pop('column_names')
-                idx.pop('dialect_options', None)
-
-                if idx.name and idx.columns != [None]:
-                    self._indexes[idx.name] = idx
-
-    def init_relations(self):
-        """Store Dict of 'has many' relations as attribute of table object"""
-        table_name = self.name
-        # TODO: Disabled for now
-        if self.name in self.db.viewnames and False:
-            try:
-                view_def = (self.db.refl
-                            .get_view_definition(self.name, self.db.schema))
-            except Exception as e:
-                view_def = None
-                print('Error getting view definition. Check permission')
-                print(e)
-
-            if view_def:
-                # get dialect for SQLGlot
-                dialect = self.db.engine.name
-                if dialect == 'mssql':
-                    dialect = 'tsql'
-                elif dialect == 'postgresql':
-                    dialect = 'postgres'
-                elif dialect == 'mariadb':
-                    dialect = 'mysql'
-
-                try:
-                    table = (parse_one(view_def, read=dialect)
-                             .find(exp.From)
-                             .find(exp.Table))
-                    if table:
-                        table.pkey = self.db.pkeys[table.name]
-                        if (
-                            table.pkey and self.pkey and
-                            table.pkey.columns == self.pkey.columns
-                        ):
-                            table_name = table.name
-                except Exception as e:
-                    print(e)
-
-        if hasattr(self.db, 'relations') and not self.db.config.update_cache:
-            self._relations = self.db.relations[table_name]
-            return
-        if self.db.cache and not self.db.config.update_cache:
-            self._relations = self.db.cache.tables[table_name].relations
-            return
-
-        relations = self.db.relations[table_name]
-
-        # find how much the relation is used
-        if self.db.config.column_use:
-            for name, relation in relations.items():
-                fkey_col = relation.constrained_columns[-1]
-
-                sql = f"""
-                select count(distinct({fkey_col})) from {relation.table_name}
-                """
-
-                with self.db.cnxn.cursor() as crsr:
-                    crsr.execute(sql)
-                    count = crsr.fetchone()[0]
-
-                relations[name].use = count/self.rowcount if self.rowcount > 0 else 0
-
-        self._relations = relations
 
     def export_ddl(self, dialect, no_fkeys, no_empty, count_recs):
         """Return ddl for table"""

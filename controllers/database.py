@@ -8,7 +8,9 @@ import tempfile
 from litestar import Controller, get, post, put, delete, Request
 from litestar.response import File, Stream
 from litestar.exceptions import HTTPException
+from litestar.datastructures import State
 from starlette import status
+from typing import Any
 from addict import Dict
 from models.field import Field
 from models.record import Record
@@ -20,16 +22,14 @@ from models.user import User
 
 class Database_Controller(Controller):
     @get("/dblist", sync_to_thread=True)
-    def dblist(self, request: Request, role: str = '') -> dict:
-        cfg = request.app.state.cfg
+    def dblist(self, state: State, role: str = '') -> dict:
         result = []
         useradmin = False
-        if cfg.database == 'urdr':
-            engine = get_engine(cfg, 'urdr')
-            db_manager = request.app.state.db_manager
-            pool = db_manager.get_pool(engine)
+        if state.cfg.database == 'urdr':
+            engine = get_engine(state, 'urdr')
+            pool = state.db_manager.get_pool(engine)
             with pool.connection() as db_cnxn:
-                user = User(engine, db_cnxn, name=cfg.uid)
+                user = User(engine, db_cnxn, name=state.cfg.uid)
                 rows = user.databases()
 
                 for row in rows:
@@ -40,13 +40,13 @@ class Database_Controller(Controller):
                     base.columns.type = 'database'
                     result.append(base)
         else:
-            engine = get_engine(cfg)
+            engine = get_engine(state)
             db_cnxn = engine.connect()
             if role:
                 with db_cnxn.cursor() as crsr:
                     sql = 'set default role ' + role
                     crsr.execute(sql)
-            elif cfg.system in ['mysql', 'mariadb']:
+            elif state.cfg.system in ['mysql', 'mariadb']:
                 with db_cnxn.cursor() as crsr:
                     sql = 'select current_role()'
                     crsr.execute(sql)
@@ -71,7 +71,7 @@ class Database_Controller(Controller):
                 result.append(base)
 
             # Find if user has useradmin privileges
-            if cfg.system in ['mysql', 'mariadb']:
+            if state.cfg.system in ['mysql', 'mariadb']:
                 with db_cnxn.cursor() as crsr:
                     sql = 'show grants'
                     crsr.execute(sql)
@@ -90,35 +90,59 @@ class Database_Controller(Controller):
 
         return {'data': {
             'records': result,
-            'roles': [] if cfg.system in ('sqlite', 'duckdb') else user.roles,
+            'roles': [] if state.cfg.system in ('sqlite', 'duckdb') else user.roles,
             'role': role,
             'useradmin': useradmin,
-            'system': cfg.system,
+            'system': state.cfg.system,
         }}
 
 
     @get("/database", sync_to_thread=True)
-    def db_info(self, base: str, request: Request, db_cnxn: Connection) -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
-        info = dbo.get_info()
-        return {'data': info}
+    def db_info(self, base: str, state: State, db_cnxn: Connection) -> dict:
+        # time.sleep(10)
+        host = state.cfg.host
+        engine = get_engine(state, base)
+        if 'branch' in state:
+            branch = state.branch
+        else:
+            branch = os.system('git rev-parse --abbrev-ref HEAD')
+            branch = branch if branch else ''
+            state.branch = branch
+
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
+        if state.meta[host][base].contents:
+            info = state.meta[host][base]
+        else:
+            info = dbo.get_info()
+            state.meta[host][base].update(info)
+        user = User(engine, db_cnxn, name=state.cfg.uid)
+        schema = state.meta[host][base].schema
+        is_admin = user.is_admin(schema)
+        return {'data': {
+            'branch': branch,
+            'base': info,
+            'config': dbo.config,
+            'user': {
+                'name': state.cfg.uid,
+                'admin': is_admin
+            }
+        }}
 
 
     @get("/table")
     async def get_table(
-        self, base: str, table: str, request: Request, db_cnxn: Connection,
+        self, base: str, table: str, state: State, db_cnxn: Connection,
         limit: int = 30, offset: int = 0, schema: str = '', sort: str = '',
         compressed: bool = False, prim_key: str = '', filter: str = ''
     ) -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        if cfg.system == 'postgresql' and schema:
+        engine = get_engine(state, base)
+        if state.cfg.system == 'postgresql' and schema:
             base_path = base + '.' + schema
         else:
             base_path = base or schema
-        dbo = Database(engine, base_path, cfg.uid, db_cnxn)
+        dbo = Database(engine, base_path, state.cfg.uid, db_cnxn)
+        host = state.cfg.host
+        dbo.state = state.meta[host][base]
         tbl = Table(dbo, table)
         privilege = dbo.user.table_privilege(dbo.schema, table)
         if privilege.select == 0:
@@ -152,11 +176,10 @@ class Database_Controller(Controller):
 
 
     @post("/record", sync_to_thread=True)
-    def create_record(self, base: str, table: str, pkey: str, request: Request,
+    def create_record(self, base: str, table: str, pkey: str, state: State,
                       data: str, db_cnxn: Connection) -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         pkey = json.loads(pkey)
         record = Record(dbo, tbl, pkey)
@@ -167,11 +190,10 @@ class Database_Controller(Controller):
 
 
     @put("/record", sync_to_thread=True)
-    def update_record(self, base: str, table: str, pkey: str, request: Request,
+    def update_record(self, base: str, table: str, pkey: str, state: State,
                       data: str, db_cnxn: Connection) -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         pkey = json.loads(pkey)
         record = Record(dbo, tbl, pkey)
@@ -181,11 +203,10 @@ class Database_Controller(Controller):
 
 
     @delete("/record", sync_to_thread=True, status_code=200)
-    def delete_record(self, base: str, table: str, pkey: str, request: Request,
+    def delete_record(self, base: str, table: str, pkey: str, state: State,
                       db_cnxn: Connection) -> None:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         pkey = json.loads(pkey)
         record = Record(dbo, tbl, pkey)
@@ -194,14 +215,13 @@ class Database_Controller(Controller):
 
     @get("/record", sync_to_thread=True)
     def get_record(self, base: str, table: str, pkey: str,
-                   request: Request, db_cnxn: Connection, schema: str = '') -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        if cfg.system == 'postgresql' and schema:
+                   state: State, db_cnxn: Connection, schema: str = '') -> dict:
+        engine = get_engine(state, base)
+        if state.cfg.system == 'postgresql' and schema:
             base_path = base + '.' + schema
         else:
             base_path = base or schema
-        dbo = Database(engine, base_path, cfg.uid, db_cnxn)
+        dbo = Database(engine, base_path, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         pk = json.loads(pkey)
         record = Record(dbo, tbl, pk)
@@ -209,11 +229,10 @@ class Database_Controller(Controller):
 
 
     @get("/children", sync_to_thread=True)
-    def get_children(self, base: str, table: str, pkey: str, request: Request,
+    def get_children(self, base: str, table: str, pkey: str, state: State,
                      db_cnxn: Connection) -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         tbl.offset = 0
         tbl.limit = 30
@@ -224,10 +243,9 @@ class Database_Controller(Controller):
 
     @get("/relations", sync_to_thread=True)
     def get_relations(self, base: str, table: str, pkey: str, count: bool,
-                      request: Request, db_cnxn: Connection, alias: str = '') -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+                      state: State, db_cnxn: Connection, alias: str = '') -> dict:
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         pk = json.loads(pkey)
         record = Record(dbo, tbl, pk)
@@ -239,14 +257,12 @@ class Database_Controller(Controller):
 
 
     @put("/table")
-    async def save_table(self, request: Request, base: str, table: str,
-                         db_cnxn: Connection) -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+    async def save_table(self, data: list[dict[str, Any]], state: State, base: str,
+                         table: str, db_cnxn: Connection) -> dict:
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
-        records = await request.json()
-        return {'data': tbl.save(records)}
+        return {'data': tbl.save(data)}
 
 
     @get("/options")
@@ -254,7 +270,7 @@ class Database_Controller(Controller):
         cfg = request.app.state.cfg
         req = Dict({item[0]: item[1]
                     for item in request.query_params.multi_items()})
-        engine = get_engine(cfg, req.base)
+        engine = get_engine(request.app.state, req.base)
         dbo = Database(engine, req.base, cfg.uid, db_cnxn)
         tbl = Table(dbo, req.table)
         fld = Field(tbl, req.column)
@@ -273,26 +289,24 @@ class Database_Controller(Controller):
 
     @get('/db_file', sync_to_thread=True)
     def get_db_file(self, base: str, table: str, pkey: str,
-                    request: Request, db_cnxn: Connection, column: str = None) -> File:
+                    state: State, db_cnxn: Connection, column: str = None) -> File:
         """Download file from file reference in database"""
-        cfg = request.app.state.cfg
         pkey = json.loads(urllib.parse.unquote(pkey))
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         rec = Record(dbo, tbl, pkey)
         path = rec.get_file_path(column)
-        path = os.path.join(cfg.host, os.path.dirname(base), path)
+        path = os.path.join(state.cfg.host, os.path.dirname(base), path)
         return File(path)
 
 
     @post('/convert', sync_to_thread=True)
     def convert(self, base: str, table: str, from_format: str, to_format: str,
-                fields: str, request: Request, db_cnxn: Connection) -> dict:
-        cfg = request.app.state.cfg
+                fields: str, state: State, db_cnxn: Connection) -> dict:
         fields = json.loads(fields)
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         for field_name in fields:
             result = tbl.convert(field_name, from_format, to_format)
@@ -303,7 +317,7 @@ class Database_Controller(Controller):
     def export_sql(self, dest: str, base: str, dialect: str, table_defs: bool,
                    no_fkeys: bool, list_recs: bool, data_recs: bool,
                    select_recs: bool, view_as_table: bool, no_empty: bool,
-                   view_defs: bool, request: Request, db_cnxn: Connection,
+                   view_defs: bool, state: State, db_cnxn: Connection,
                    table: str | None = None, filter: str | None = None) -> Stream:
         """Create sql for exporting a database
 
@@ -315,12 +329,11 @@ class Database_Controller(Controller):
                      existing database
         """
 
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
 
-        if cfg.system in ['sqlite', 'duckdb'] and dest != 'download':
-            dest = os.path.join(cfg.host, dest)
+        if state.cfg.system in ['sqlite', 'duckdb'] and dest != 'download':
+            dest = os.path.join(state.cfg.host, dest)
 
         return Stream(dbo.export_sql(dest, dialect, table_defs, no_fkeys,
                                      list_recs, data_recs, select_recs,
@@ -330,13 +343,12 @@ class Database_Controller(Controller):
 
 
     @get('/export_tsv', sync_to_thread=True)
-    def export_tsv(self, request: Request, db_cnxn: Connection, base: str, tables: str,
+    def export_tsv(self, state: State, db_cnxn: Connection, base: str, tables: str,
                    clobs_as_files: bool, dest: str, limit: int | None = None,
                    columns: str | None = None, folder: str | None = None,
                    filter: str | None = None) -> Stream:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         download = True if dest == 'download' else False
         tbls = json.loads(urllib.parse.unquote(tables))
         if columns:
@@ -348,8 +360,8 @@ class Database_Controller(Controller):
             tempdir = tempfile.TemporaryDirectory()
             dest = tempdir.name
         else:
-            if cfg.system in ['sqlite', 'duckdb']:
-                dest = os.path.join(cfg.host, dest)
+            if state.cfg.system in ['sqlite', 'duckdb']:
+                dest = os.path.join(state.cfg.host, dest)
             if not os.path.exists(dest):
                 os.makedirs(dest)
 
@@ -359,20 +371,18 @@ class Database_Controller(Controller):
 
 
     @get('/import_tsv', sync_to_thread=True)
-    def import_tsv(self, base: str, dir: str, request: Request,
+    def import_tsv(self, base: str, dir: str, state: State,
                    db_cnxn: Connection) -> Stream:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         return Stream(dbo.import_tsv(dir), media_type="text/event-stream")
 
 
     @get('/kdrs_xml', sync_to_thread=True)
     def export_kdrs_xml(self, base: str, version: str, descr: str,
-                        request: Request, db_cnxn: Connection) -> Stream:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+                        state: State, db_cnxn: Connection) -> Stream:
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         xml = dbo.export_as_kdrs_xml(version, descr)
         response = Stream(io.StringIO(xml), media_type="application/xml")
         response.headers['Content-Disposition'] = \
@@ -382,11 +392,10 @@ class Database_Controller(Controller):
 
 
     @get('/query', sync_to_thread=True)
-    def query(self, base: str, sql: str, limit: str, request: Request,
+    def query(self, base: str, sql: str, limit: str, state: State,
               db_cnxn: Connection) -> dict:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         limit = 0 if not limit else int(limit)
         result = dbo.query_result(sql, limit)
         return {'result': result}
@@ -394,10 +403,9 @@ class Database_Controller(Controller):
 
     @get('/urd/update_cache')
     async def update_cache(self, base: str, config: str,
-                           request: Request, db_cnxn: Connection) -> Stream:
-        cfg = request.app.state.cfg
-        engine = get_engine(cfg, base)
-        dbo = Database(engine, base, cfg.uid, db_cnxn)
+                           state: State, db_cnxn: Connection) -> Stream:
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         dbo.config = Dict(json.loads(config))
         dbo.config.update_cache = True
         dbo.cache = None

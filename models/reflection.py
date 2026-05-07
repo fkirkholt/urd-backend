@@ -179,6 +179,9 @@ class Reflection:
         if fk_table or pk_table is None:
             table_names = [fk_table] if fk_table else self.tables(schema).keys()
             for fk_tblname in table_names:
+                # Track all foreign key columns in table
+                # Is used for finding compound foreign key
+                fk_cols = []
                 for fk_col in columns[fk_tblname]:
                     for pk_tblname in table_names:
                         if (pk_tblname.rstrip('_') + '_') not in fk_col.name:
@@ -186,7 +189,7 @@ class Reflection:
                         for pk_col in columns[pk_tblname]:
                             if fk_col.name == pk_col.name and fk_tblname == pk_tblname:
                                 continue
-                            fkey = self.fkey_from_colname(fk_col, pk_col,
+                            fkey = self.fkey_from_colname(fk_col, pk_col, fk_cols,
                                                           fkeys[fk_tblname])
                             if fkey:
                                 fkeys[fk_tblname][fkey.name] = fkey
@@ -204,17 +207,25 @@ class Reflection:
 
         return all_fkeys if (fk_table is None) else all_fkeys[fk_table]
 
-    def fkey_from_colname(self, fk_col, pk_col, fkeys):
+    def fkey_from_colname(self, fk_col, pk_col, fk_cols, fkeys):
         fkey = Dict()
         if fk_col.name == pk_col.name and fk_col.table_name == pk_col.table_name:
             # If this is the same column
             return None
         ref = (pk_col.table_name + '_' + pk_col.name).replace('__', '_').rstrip('_')
-        if fk_col.name.endswith(ref) or fk_col.name == pk_col.name:
-            prefix = fk_col.name.replace(ref, '').rstrip('_')
-            prefix = '_' + prefix if prefix else ''
+        if (
+            fk_col.name.endswith(ref) or
+            fk_col.name == pk_col.name or
+            pk_col.name in fk_cols
+        ):
+            fk_cols.append(fk_col.name)
+            prefix = ''
+            if pk_col.name not in fk_cols:
+                prefix = fk_col.name.replace(ref, '').rstrip('_')
+                prefix = '_' + prefix if prefix else ''
             # Generate name for the fkey
             fk_name = fk_col.table_name + '_' + pk_col.table_name + prefix + '_fkey'
+            fkey_col_name = pk_col.name if pk_col.name in fk_cols else fk_col.name
 
             if fk_name not in fkeys:
                 fkey.constrained_columns = []
@@ -224,7 +235,7 @@ class Reflection:
                 fkey.schema = fk_col.schema_name
             else:
                 fkey = fkeys[fk_name]
-            fkey.constrained_columns.append(fk_col.name)
+            fkey.constrained_columns.append(fkey_col_name)
             fkey.referred_columns.append(pk_col.name)
             fkey.referred_schema = pk_col.schema_name
             fkey.referred_table = pk_col.table_name

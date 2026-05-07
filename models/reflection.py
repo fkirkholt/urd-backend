@@ -14,6 +14,7 @@ class Reflection:
         self.engine = engine
         self.expr = Expression(engine)
         self._fkeys = None
+        self._indexes = None
 
     def get_version(self):
         sql = self.expr.version()
@@ -176,6 +177,42 @@ class Reflection:
             return all_fkeys if (fk_table is None) else all_fkeys[fk_table]
 
         columns = self.columns(schema)
+        indexes = self.indexes(schema)
+        for child_table in indexes:
+            for idx in indexes[child_table]:
+                if not idx.name.startswith('fkey__'):
+                    continue
+                parts = idx.name.split('__')
+                if len(parts) < 3:
+                    continue
+
+                parent_table = parts[2]
+                valid_parent_cols = [col.name for col in columns[parent_table]]
+                parent_cols = []
+                for col in idx.column_names:
+                    if col in valid_parent_cols:
+                        parent_cols.append(col)
+                    # Looking for pattern" ...[table]_[column]"
+                    infix = f"{parent_table}_"
+                    if infix in col:
+                        potential_col = col.split(infix)[-1]
+                        if potential_col in valid_parent_cols:
+                            parent_cols.append(potential_col)
+                fkey = Dict({
+                    'name': idx.name,
+                    'table_name': child_table,
+                    'schema': schema,
+                    'referred_schema': schema,
+                    'referred_table': parent_table,
+                    'constrained_columns': idx.column_names,
+                    'referred_columns': parent_cols
+                })
+                fkeys[child_table][idx.name] = fkey
+        for tblname in fkeys:
+            self._fkeys[tblname] = fkeys[tblname].values()
+        if len(self._fkeys):
+            return self._fkeys if (fk_table is None) else self._fkeys[fk_table]
+
         if fk_table or pk_table is None:
             table_names = [fk_table] if fk_table else self.tables(schema).keys()
             for fk_tblname in table_names:
@@ -245,6 +282,8 @@ class Reflection:
             return None
 
     def indexes(self, schema, table=None):
+        if self._indexes:
+            return self._indexes
         with self.cnxn.cursor() as crsr:
             sql = self.expr.indexes()
             params = {'schema_name': schema, 'table_name': table}
@@ -270,13 +309,13 @@ class Reflection:
                     if 'direction' in rec:
                         idx.column_sorting[rec.column_name] = rec.direction
 
-        all_indexes = Dict()
+        self._indexes = Dict()
         for tbl_name in indexes:
-            all_indexes[tbl_name] = []
+            self._indexes[tbl_name] = []
             for key, idx in indexes[tbl_name].items():
-                all_indexes[tbl_name].append(idx)
+                self._indexes[tbl_name].append(idx)
 
-        return all_indexes if not table else all_indexes[table]
+        return self._indexes if not table else self._indexes[table]
 
     def get_view_definition(self, tbl_name, schema):
         sql = self.expr.view_definition()

@@ -299,7 +299,7 @@ class Reflection:
                 indexes[rec.table_name][name].unique = not rec.non_unique
                 if 'column_names' in rec:
                     if type(rec.column_names) is str:
-                        rec.column_names = yaml.load(rec.column_names)
+                        rec.column_names = yaml.load(rec.column_names.replace('"', ''))
                     indexes[rec.table_name][name].column_names = rec.column_names
                 if 'column_names' not in indexes[rec.table_name][name]:
                     indexes[rec.table_name][name].column_names = []

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from packaging.version import parse
 from addict import Dict
+import json
 import util
 from settings import Settings
 
@@ -39,9 +40,18 @@ class Field:
         if self.datatype == 'int' and getattr(self, 'size', 0) == 1:
             self.datatype = 'bool'
 
+        attrs = Dict()
+        if col.comment:
+            try:
+                comment = json.loads(col.comment)
+                attrs = Dict(comment)
+            except (ValueError, TypeError):
+                attrs['title'] = col.comment
+        if 'maxlength' in attrs:
+            self.size = attrs['maxlength']
+
         self.element, type_ = self.get_element()
 
-        attrs = Dict()
         if type_:
             attrs['type'] = type_
 

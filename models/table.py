@@ -1,5 +1,6 @@
 """Module for handling tables"""
 import pypandoc
+import json
 from addict import Dict
 import util
 from settings import Settings
@@ -513,6 +514,7 @@ class Table:
             ddl += "-- view exported as table\n"
         ddl += f"create table {self.name} (\n"
         coldefs = []
+        comments = []
         cols = self.columns
         for col in cols:
             col = Dict(col)
@@ -530,6 +532,10 @@ class Table:
                     datatype = ('int' if str(col.type).startswith('YEAR')
                                 else 'unknown')
                     print('type not recognized', col.type)
+
+            if dialect == 'duckdb' and datatype == 'str' and column.size:
+                data = json.dumps({ "maxlength": column.size })
+                comments.append(f"COMMENT ON COLUMN {self.name}.{col.name} IS '{data}'")
 
             if datatype == 'bytes':
                 self.indexes[f'{self.name}_{column.name}_filepath_idx'] = Dict({
@@ -550,6 +556,8 @@ class Table:
                 ddl += f"references {fkey.referred_table}("
                 ddl += ", ".join(fkey.referred_columns) + ")"
         ddl += ");\n\n"
+
+        ddl += ";\n".join(comments) + ';\n\n'
 
         return ddl
 

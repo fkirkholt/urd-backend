@@ -539,7 +539,8 @@ class Expression:
         elif self.dialect == 'duckdb':
             return """
             select table_name, column_name, is_nullable as nullable,
-                   column_default as column_def, data_type as type_name
+                   column_default as column_def, data_type as type_name,
+                   comment
             from duckdb_columns
             where schema_name = 'main'
                   and table_name = coalesce(:table_name, table_name)

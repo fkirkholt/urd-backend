@@ -556,7 +556,7 @@ class Expression:
                   and table_name = nvl(:table_name, table_name)
             order by table_name, column_id
             """
-        elif self.dialect in ('mariadb', 'mysql', 'mssql', 'postgresql'):
+        elif self.dialect in ('mssql', 'postgresql'):
             return """
             select table_name, column_name, data_type as type_name,
                    case when numeric_precision is not null then
@@ -565,6 +565,19 @@ class Expression:
                    case is_nullable when 'YES' then 1 else 0 end as nullable,
                    numeric_scale as decimal_digits,
                    column_default as column_def
+            from   information_schema.columns
+            where  table_schema = :schema_name and
+                   table_name = coalesce(:table_name, table_name)
+            """
+        elif self.dialect in ('mariadb', 'mysql'):
+            return """
+            select table_name, column_name, data_type as type_name,
+                   case when numeric_precision is not null then
+                       numeric_precision else character_maximum_length
+                   end as column_size,
+                   case is_nullable when 'YES' then 1 else 0 end as nullable,
+                   numeric_scale as decimal_digits,
+                   column_default as column_def, column_comment as comment
             from   information_schema.columns
             where  table_schema = :schema_name and
                    table_name = coalesce(:table_name, table_name)

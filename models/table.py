@@ -512,7 +512,10 @@ class Table:
         ddl = "\n"
         if self.type == 'view':
             ddl += "-- view exported as table\n"
-        ddl += f"create table {self.name} (\n"
+        ddl += f"create table {self.name}"
+        if self.comment:
+            ddl += '  -- ' + self.comment
+        ddl += "\n(\n"
         coldefs = []
         comments = []
         cols = self.columns
@@ -543,7 +546,8 @@ class Table:
                     'columns': [column.name],
                     'unique': False
                 })
-        ddl += ",\n".join(coldefs)
+        ddl += "\n".join(coldefs)
+        ddl = ddl[:-1]
         if (self.pkey.columns and self.pkey.columns != ['rowid']):
             ddl += f",\n    primary key ({', '.join(self.pkey.columns)})"
 
@@ -555,9 +559,10 @@ class Table:
                 ddl += ", ".join(fkey.constrained_columns) + ") "
                 ddl += f"references {fkey.referred_table}("
                 ddl += ", ".join(fkey.referred_columns) + ")"
-        ddl += ");\n\n"
+        ddl += "\n);\n\n"
 
-        ddl += ";\n".join(comments) + ';\n\n'
+        if comments:
+            ddl += "\n".join(comments) + ';\n\n'
 
         return ddl
 

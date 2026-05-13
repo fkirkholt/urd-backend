@@ -1,11 +1,12 @@
 from datetime import date, datetime
 from packaging.version import parse
 from addict import Dict
-import json
+from ruamel.yaml import YAML
 import util
 from settings import Settings
 
 cfg = Settings()
+yaml = YAML()
 
 
 class Field:
@@ -43,7 +44,7 @@ class Field:
         attrs = Dict()
         if col.comment:
             try:
-                comment = json.loads(col.comment)
+                comment = yaml.load(col.comment)
                 attrs = Dict(comment)
             except (ValueError, TypeError):
                 attrs['title'] = col.comment

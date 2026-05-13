@@ -891,6 +891,7 @@ class Database:
         last_progress = 0
         i = 0
         expr = Expression(Dict({'name': dialect, 'driver_name': None}))
+        tables = self.refl.tables(self.schema)
 
         if table_defs:
             for tbl_name in ordered_tables:
@@ -904,7 +905,8 @@ class Database:
                     continue
                 if '_fts' in tbl_name:
                     continue
-                tbl = Table(self, tbl_name)
+                table = tables[tbl_name]
+                tbl = Table(self, tbl_name, comment=table.comment)
                 if table_defs:
                     file.write(tbl.export_ddl(dialect, no_fkeys, no_empty, count_recs))
                     file.write(tbl.get_indexes_ddl())

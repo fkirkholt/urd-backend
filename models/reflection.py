@@ -1,5 +1,6 @@
 from ruamel.yaml import YAML
 from addict import Dict
+import sqlglot
 import util
 from models.expression import Expression
 
@@ -55,9 +56,20 @@ class Reflection:
 
             for row in rows:
                 rec = util.to_rec(row, crsr, lowercase=True)
-                self._tables[rec.table_name].name = rec.table_name
-                self._tables[rec.table_name].type = rec.table_type.lower()
-                self._tables[rec.table_name].comment = rec.remarks
+                tbl = Dict()
+                tbl.name = rec.table_name
+                tbl.type = rec.table_type.lower()
+                tbl.comment = rec.remarks
+
+                # Get inline comments in SQLite
+                if rec.sql and not tbl.name[0] == '_' and 'VIRTUAL' not in rec.sql:
+                    parsed = sqlglot.parse_one(rec.sql, read="sqlite")
+                    tbl_node = parsed.find(sqlglot.exp.Table)
+
+                    if tbl_node and tbl_node.comments:
+                        tbl.comment = " ".join(tbl_node.comments).strip()
+
+                self._tables[tbl.name] = tbl
 
         return self._tables
 
@@ -95,6 +107,27 @@ class Reflection:
         # if hasattr(self, '_columns'):
         #     return self._columns
         with self.cnxn.cursor() as crsr:
+            # Get inline comments in SQLite 
+            comment = Dict()  # holds all comments found in sql
+            if self.engine.name == 'sqlite':
+                sql = self.expr.user_tables()
+                sql, params = self.expr.prepare(sql, {'schema_name': schema,
+                                                  'table_name': table})
+                crsr.execute(sql, params)
+                rows = crsr.fetchall()
+                for row in rows:
+                    rec = util.to_rec(row, crsr, lowercase=True)
+                    if rec.table_name.startswith('_'):
+                        continue
+                    if rec.sql and 'VIRTUAL' not in rec.sql:
+                        parsed = sqlglot.parse_one(rec.sql, read="sqlite")
+                        for coldef in parsed.find_all(sqlglot.exp.ColumnDef):
+                            col_name = coldef.this.name
+                            comments = coldef.comments if coldef.comments else []
+                            comment_text = " ".join(comments) if comments else None
+                            if comment_text:
+                                comment[rec.table_name][col_name] = comment_text.strip()
+
             sql = self.expr.columns()
             sql, params = self.expr.prepare(sql, {'schema_name': schema,
                                                   'table_name': table})
@@ -123,6 +156,7 @@ class Reflection:
                 col.precision = col.size
                 col.scale = rec.decimal_digits if 'decimal_digits' in rec else None
                 col.comment = rec.comment if 'comment' in rec else None
+                col.comment = comment[rec.table_name][col.name] or col.comment
                 if rec.table_name not in self._columns:
                     self._columns[rec.table_name] = []
                 self._columns[rec.table_name].append(col)

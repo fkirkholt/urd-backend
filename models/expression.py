@@ -687,7 +687,7 @@ class Expression:
     def user_tables(self):
         if self.dialect == 'sqlite':
             return """
-            SELECT name as table_name, type as table_type, null as remarks
+            SELECT name as table_name, type as table_type, null as remarks, sql
             FROM   sqlite_master
             WHERE  type IN ('table', 'view')
                    AND name = coalesce(:table_name, name)

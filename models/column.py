@@ -159,5 +159,8 @@ class Column:
                 default = "'" + default + "'"
 
             coldef += " DEFAULT " + default
+        coldef += ','
+        if self.comment:
+            coldef += "  -- " + self.comment
 
         return coldef

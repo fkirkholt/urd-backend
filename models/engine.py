@@ -212,7 +212,9 @@ class Engine:
                 detail=str(ex)
             )
         if self.query:
-            cnxn.execute(self.query)
+            queries = self.query.split(';')
+            for query in queries:
+                cnxn.execute(query)
 
         return Connection(cnxn, self.driver)
 

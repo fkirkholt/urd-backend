@@ -1,19 +1,20 @@
 sqlite:
     sqlite3:
         string: "database={path};check_same_thread=False"
-        query: 'PRAGMA foreign_keys = ON'
+        query: 'PRAGMA foreign_keys = ON; PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;'
         placeholder: '?'
     sqlean:
         string: "database={path};check_same_thread=False"
-        query: 'PRAGMA foreign_keys = ON'
+        query: 'PRAGMA foreign_keys = ON; PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;'
         placeholder: '?'
     duckdb:
         string: ''
-        query: "ATTACH '{path}' (TYPE sqlite)"
+        query: "ATTACH '{path}' (TYPE sqlite, READ_ONLY true, BUSY_TIMEOUT 5000)"
         placeholder: '?'
     pyodbc:
         string: "Database={path};FKSupport=1;"
         placeholder: '?'
+        query: 'PRAGMA foreign_keys = ON; PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;'
 duckdb:
     duckdb:
         string: "{path}"

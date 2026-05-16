@@ -401,6 +401,15 @@ class Database_Controller(Controller):
         return {'result': result}
 
 
+    @put('/embed', sync_to_thread=True)
+    def embed(self, base: str, table: str, state: State, db_cnxn: Connection) -> dict:
+        engine = get_engine(state, base)
+        dbo = Database(engine, base, state.cfg.uid, db_cnxn)
+        tbl = Table(dbo, table)
+        result = tbl.make_embeddings()
+        return {'msg': result}
+
+
     @get('/urd/update_cache')
     async def update_cache(self, base: str, config: str,
                            state: State, db_cnxn: Connection) -> Stream:

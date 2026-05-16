@@ -704,6 +704,7 @@ class Expression:
             FROM   sqlite_master
             WHERE  type IN ('table', 'view')
                    AND name = coalesce(:table_name, name)
+                   AND name not in ('_sqliteai_vector')
             """
         elif self.dialect == 'oracle':
             return """

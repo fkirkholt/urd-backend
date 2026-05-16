@@ -62,7 +62,10 @@ class Reflection:
                 tbl.comment = rec.remarks
 
                 # Get inline comments in SQLite
-                if rec.sql and not tbl.name[0] == '_' and 'VIRTUAL' not in rec.sql:
+                if (
+                    rec.sql and 'VIRTUAL' not in rec.sql
+                    and (not tbl.name.startswith('_') or table)
+                ):
                     parsed = sqlglot.parse_one(rec.sql, read="sqlite")
                     tbl_node = parsed.find(sqlglot.exp.Table)
 
@@ -71,7 +74,7 @@ class Reflection:
 
                 self._tables[tbl.name] = tbl
 
-        return self._tables
+        return self._tables[tbl.name] if table else self._tables
 
     def pkeys(self, schema, table=None):
         with self.cnxn.cursor() as crsr:

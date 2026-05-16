@@ -11,6 +11,7 @@ from contextlib import closing
 from models.expression import Expression
 from models.reflection import Reflection
 from settings import drivers
+import util
 
 
 def get_engine(state, db_name=None):
@@ -70,7 +71,7 @@ class DatabaseManager:
 
 class ConnectionPool:
     def __init__(self, create_connection_fn, pool_size=5):
-        self._pool = queue.Queue(maxsize=pool_size)
+        self._pool = queue.LifoQueue(maxsize=pool_size)
 
         # Fill pool with initial connections
         for _ in range(pool_size):
@@ -78,7 +79,7 @@ class ConnectionPool:
             self._pool.put(conn)
 
     def get_connection(self, timeout=None):
-        """Get en available connection from the queue"""
+        """Get an available connection from the queue"""
         try:
             return self._pool.get(block=True, timeout=timeout)
         except queue.Empty:
@@ -120,6 +121,7 @@ class Connection:
     def __init__(self, cnxn, driver):
         self._cnxn = cnxn
         self.driver = driver
+        self.model_loaded = False
 
     def cursor(self):
         options = self.driver.get('options', {})
@@ -131,6 +133,18 @@ class Connection:
 
     def close(self):
         return self._cnxn.close()
+
+    def enable_load_extension(self, val):
+        return self._cnxn.enable_load_extension(val)
+
+    def load_extension(self, path):
+        return self._cnxn.load_extension(path)
+
+    def load_model(self, path):
+        print('loads embedding model ...')
+        self._cnxn.execute(f"SELECT llm_model_load('{path}', 'gpu_layers=0');")
+        self._cnxn.execute("SELECT llm_context_create_embedding('embedding_type=FLOAT32');")
+        self.model_loaded = True
 
 
 class Engine:
@@ -152,6 +166,8 @@ class Engine:
                 detail=msg
             )
         self.driver_name = driver.name
+        model_dir = os.path.expanduser(cfg.gguf_model_dir)
+        self.model_path = os.path.join(model_dir, cfg.gguf_model)
 
         pattern = r'([\w\.-]+)(:\d+)?([/\\]\w+)?'
         match = re.search(pattern, cfg.host)
@@ -215,6 +231,14 @@ class Engine:
             queries = self.query.split(';')
             for query in queries:
                 cnxn.execute(query)
+
+        if self.driver_name == 'sqlite3' and self.model_path:
+            vector_path = util.get_installed_vector_path()
+            ai_path = util.get_installed_ai_path()
+            cnxn.enable_load_extension(True)
+            cnxn.load_extension(str(vector_path))
+            cnxn.load_extension(ai_path)
+            cnxn.enable_load_extension(False)
 
         return Connection(cnxn, self.driver)
 

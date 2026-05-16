@@ -1,9 +1,10 @@
 """Module for handling tables"""
 import pypandoc
 import json
+import os
 from addict import Dict
 import util
-from settings import Settings
+from settings import Settings, yaml
 from models.record import Record
 from models.column import Column
 from models.field import Field
@@ -16,14 +17,13 @@ cfg = Settings()
 class Table:
     """Contains methods for getting metadata for table"""
 
-    def __init__(self, db, tbl_name, type=None, comment=None, alias=None):
+    def __init__(self, db, tbl_name, type=None, alias=None):
         self.state = db.state.tables[tbl_name]
         self.db = db
         self.name = tbl_name
         self.label = db.get_label(tbl_name)
         self.view = tbl_name
         self.main_type = type
-        self.comment = comment
         if tbl_name + '_view' in db.tablenames:
             cols = self.db.refl.columns(self.db.schema, tbl_name + '_view')
             colnames = [col['name'] for col in cols]
@@ -76,7 +76,7 @@ class Table:
             'rowcount': (None if not self.db.config.update_cache
                          else self.rowcount),
             'pkey': self.pkey,
-            'description': self.comment,
+            'comment': self.comment,
             'fkeys': self.fkeys,
             # Get more info about relations for cache, including use
             'relations': self.relations,
@@ -90,6 +90,12 @@ class Table:
             }
         })
 
+    @property
+    def comment(self):
+        if not self.state.comment:
+            metadata = self.db.refl.tables(self.db.schema, table=self.name)
+            self.state.comment = metadata.comment
+        return self.state.comment
 
     @property
     def type(self):
@@ -393,9 +399,31 @@ class Table:
 
             joins[self.grid_view] = join_view
 
-        if self.fts and self.name + '_fts' in self.db.tablenames:
-            join = f"join {self.name}_fts fts on fts.rowid = {self.name}.rowid\n"
-            joins[self.name + '_fts'] = join
+        if hasattr(self, 'fts_table'):
+            join = f"join {self.fts_table} fts on fts.rowid = {self.name}.rowid\n"
+            joins[self.fts_table] = join
+        if hasattr(self, 'vec_table'):
+            ons = [ f"vec.{colname} = {self.name}.{colname}"
+                    for colname in self.pkey.columns ]
+            on = ' and '.join(ons)
+            pkey_cols_str = ', '.join(self.pkey.columns)
+            joins[self.vec_table] = f"""
+            join (SELECT {pkey_cols_str},
+                   v.best_distance as distance
+            FROM (
+                SELECT {pkey_cols_str},
+                       MIN(vec.distance) AS best_distance
+                FROM {self.vec_table} vt
+                JOIN vector_quantize_scan(
+                    '{self.vec_table}',
+                    'vector',
+                    :query_vec,
+                    :limit
+                ) vec ON vec.rowid = vt.rowid
+                where vec.distance < 0.05
+                GROUP BY {pkey_cols_str}
+            ) v) as vec on {on}
+            """
 
         self._joins = joins
 
@@ -633,3 +661,139 @@ class Table:
                 self.db.cnxn.commit()
 
         return 'success'
+
+
+    def make_embeddings(self):
+        BATCH_SIZE = 64
+        model_dir = os.path.expanduser(cfg.gguf_model_dir)
+        model_path = os.path.join(model_dir, cfg.gguf_model)
+
+        if not os.path.exists(model_path):
+            return "model missing"
+
+        if not self.db.cnxn.model_loaded:
+            self.db.cnxn.load_model(model_path)
+
+        # Find columns for vector search or fulltext search
+        cols = {col.name: col for col in self.columns}
+        vector_cols = Dict()
+        fts_cols = []
+        for colname, col in cols.items():
+            col.attrs = Dict()
+            coltype = col.type.lower()
+            if col.comment:
+                try:
+                    comment = yaml.load(col.comment)
+                    col.attrs = Dict(comment)
+                except (ValueError, TypeError):
+                    col.attrs['title'] = col.comment
+            if (coltype == 'text' or coltype.startswith('varchar') and
+                'fulltext' in self.comment):
+                fts_cols.append(col)
+            if coltype == 'text' and 'vector' in self.comment:
+                vector_cols[colname] = col
+            if 'vector' in col.attrs.get('data-search-mode', ''):
+                vector_cols[colname] = col
+            if 'fulltext' in col.attrs.get('data-search-mode', ''):
+                fts_cols.append(col)
+
+        # Create fulltext index
+        fts_name = f"_{self.name.strip()}_fts"
+        if len(fts_cols):
+            fts_cols = self.pkey.columns + [ col.name for col in fts_cols ]
+            col_string = ", ".join(fts_cols)
+            sql_drop = f"DROP TABLE IF EXISTS {fts_name};"
+            sql_create = f"CREATE VIRTUAL TABLE {fts_name} USING fts5({col_string}"
+            sql_create += f", content='{self.name}', content_rowid='{", ".join(self.pkey.columns)}');"
+            sql_insert = f"INSERT INTO {fts_name} (rowid, {col_string})\n"
+            sql_insert += f"SELECT rowid, {col_string} FROM {self.name};"
+            with self.db.cnxn.cursor() as crsr:
+                crsr.execute(sql_drop)
+                crsr.execute(sql_create)
+                crsr.execute(sql_insert)
+            self.db.cnxn.commit()
+
+        # Create table for vector search
+        vec_tbl_name = f"_{self.name.strip()}_vector"
+        if len(vector_cols) and vec_tbl_name in self.db.tablenames:
+            pkeydefs = [ colname + ' ' + cols[colname].type
+                         for colname in self.pkey.columns ]
+            sql_drop = f"DROP TABLE IF EXISTS {vec_tbl_name};"
+            sql_create = f"CREATE TABLE {vec_tbl_name} -- data-model: {cfg.gguf_model}"
+            sql_create += "\n(\n"
+            sql_create += ",\n".join(pkeydefs) + ',\nchunk integer,'
+            sql_create += "\n column_name varchar(100),\nposition_start integer,"
+            sql_create += "\nposition_end integer,\nvector blob,"
+            sql_create += f"foreign key ({', '.join(self.pkey.columns)}) references "
+            sql_create += f" {self.name} ({', '.join(self.pkey.columns)})"
+            sql_create += "\n);"
+            with self.db.cnxn.cursor() as crsr:
+                crsr.execute(sql_drop)
+                crsr.execute(sql_create)
+                crsr.execute("SELECT llm_embed_generate('auto_detect_dimensions');")
+                test_blob = crsr.fetchone()[0]
+                dimension = len(test_blob) // 4
+            self.db.cnxn.commit()
+
+        with self.db.cnxn.cursor() as crsr:
+            # Initialize embedding column
+            init_query = f"""
+                SELECT vector_init(
+                    '{vec_tbl_name}',
+                    'vector',
+                    'type=FLOAT32,dimension={dimension},distance=COSINE'
+                );
+            """
+            crsr.execute(init_query)
+            self.db.cnxn.commit()
+
+        # Create embeddings in vector columns
+        for col in vector_cols.values():
+            with self.db.cnxn.cursor() as crsr:
+
+                ons = [ f"v.{colname} = s.{colname}" for colname in self.pkey.columns ]
+
+                sql = f"""SELECT s.{', s.'.join(self.pkey.columns)}, s.{col.name}
+                     FROM {self.name} s
+                     LEFT JOIN {vec_tbl_name} v ON {' AND '.join(ons)}
+                               and column_name = '{col.name}'
+                     WHERE v.vector IS NULL and s.{col.name} is not null"""
+                crsr.execute(sql)
+                rows = crsr.fetchall()
+                description = crsr.description
+
+                for i in range(0, len(rows), BATCH_SIZE):
+                    batch = rows[i:i + BATCH_SIZE]
+
+                    print(f"Processing row {i} to {i + len(batch)} via sqlite-ai...")
+
+                    for row in batch:
+                        cols = [col[0] for col in description]
+                        rec = Dict(zip(cols, row))
+
+                        text = rec[col.name]
+
+                        chunks = util.chunk_text_with_positions(text)
+                        pkey_vals = [str(rec[colname]) for colname in self.pkey.columns]
+
+                        for idx, chunk in enumerate(chunks):
+                            # Generate embedding and insert into vector table
+                            sql = f"""
+                                INSERT INTO {vec_tbl_name}
+                                VALUES (
+                                    {', '.join(pkey_vals)},
+                                    {idx},
+                                    '{col.name}',
+                                    {chunk.start_pos},
+                                    {chunk.end_pos},
+                                    llm_embed_generate(?)
+                                )
+                            """
+                            crsr.execute(sql, (chunk.text, ))
+
+                    # Commit per batch
+                    self.db.cnxn.commit()
+
+                crsr.execute(f"SELECT vector_quantize('{vec_tbl_name}', 'vector');")
+
+        return "Finished! All embeddings are generated and saved."

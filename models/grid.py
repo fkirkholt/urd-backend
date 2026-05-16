@@ -1,8 +1,9 @@
 import re
+import os
 import math
 from addict import Dict
 import util
-from settings import Settings
+from settings import Settings, yaml
 from models.expression import Expression
 
 cfg = Settings()
@@ -60,6 +61,8 @@ class Grid:
             'relations': self.tbl.relations,
             'fts': self.tbl.name + '_fts' in self.db.tablenames or
                 f'{self.db.cat}.fts_{self.db.schema}_{self.tbl.name}' in schema_names,
+            'fts_search': 'fulltext' in (self.tbl.comment or ''),
+            'vector_search': 'vector' in (self.tbl.comment or ''),
             'saved_filters': []  # Needed in frontend
         })
 
@@ -305,9 +308,8 @@ class Grid:
         q = Expression(self.db.engine).quote
         order = "order by "
         for alias, sort in self.sort_columns.items():
-            if alias == 'rank':
-                tbl_name = 'fts'
-                order += f"{sort.col} {sort.dir}"
+            if alias in ['rank', 'distance']:
+                order = f"order by {sort.col} {sort.dir}"
                 return order
             elif sort.col in self.tbl.fields and not self.tbl.fields[sort.col].virtual:
                 tbl_name = self.tbl.view
@@ -360,9 +362,9 @@ class Grid:
 
         if self.db.engine.name in ['mssql', 'oracle']:
             sql += f"offset {self.tbl.offset} rows\n"
-            sql += f"fetch next {self.tbl.limit} rows only"
+            sql += "fetch next :limit rows only"
         else:
-            sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
+            sql += "limit :limit offset :offset"
 
         with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
@@ -392,7 +394,8 @@ class Grid:
 
         # Counting can very slow in SQLite, so we limit to 1000
         if self.db.engine.name == 'sqlite':
-            sql = f"select count(*) from (\n{sql}\nlimit 1000)"
+            limit = self.tbl.limit if hasattr(self.tbl, 'vec_table') else 1000
+            sql = f"select count(*) from (\n{sql}\nlimit {limit})"
 
         with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
@@ -454,9 +457,12 @@ class Grid:
 
         if self.db.engine.name in ['mssql', 'oracle']:
             sql += f"offset {self.tbl.offset} rows\n"
-            sql += f"fetch next {self.tbl.limit} rows only"
+            sql += "fetch next :limit rows only"
         else:
-            sql += f"limit {self.tbl.limit} offset {self.tbl.offset}"
+            sql += "limit :limit offset :offset"
+
+        self.cond.params['limit'] = self.tbl.limit
+        self.cond.params['offset'] = self.tbl.offset
 
         with self.db.cnxn.cursor() as crsr:
             sql, params = self.db.expr.prepare(sql, self.cond.params)
@@ -553,17 +559,59 @@ class Grid:
                 conds = []
                 params = {}
                 duck_fts_table = f"fts_{self.db.schema}_{self.tbl.name}"
-                if self.tbl.name + '_fts' in self.db.tablenames:
-                    fts = self.tbl.name + '_fts'
-                    sql = f"{fts} match '{fltr}'"
-                    self.tbl.fts = True
+                fts_table = '_' + self.tbl.name.strip('_') + '_fts'
+                vec_table = '_' + self.tbl.name.strip('_') + '_vector'
+
+                if fltr[0] == '/' and vec_table in self.db.tablenames:
+                    if not self.db.cnxn.model_loaded:
+                        model_dir = os.path.expanduser(cfg.gguf_model_dir)
+                        vec_tbl = self.db.refl.tables(self.db.schema, table=vec_table)
+                        try:
+                            meta = yaml.load(vec_tbl.comment)
+                            vec_tbl.attrs = Dict(meta)
+                        except (ValueError, TypeError):
+                            meta = {}
+                        if 'data-model' in meta:
+                            model_path = os.path.join(model_dir, meta['data-model'])
+                            self.db.cnxn.load_model(model_path)
+                        else:
+                            model_path = os.path.join(model_dir, cfg.gguf_model)
+                            self.db.cnxn.load_model(model_path)
+                    self.tbl.vec_table = vec_table
+                    with self.db.cnxn.cursor() as crsr:
+                        crsr.execute("SELECT llm_embed_generate(?);", (fltr,))
+                        query_vec = crsr.fetchone()[0]
+                        dimension = len(query_vec) // 4
+
+                    init_query = f"""
+                        SELECT vector_init(
+                            '{vec_table}',
+                            'vector',
+                            'type=FLOAT32,dimension={dimension},distance=COSINE'
+                        );
+                    """
+                    with self.db.cnxn.cursor() as crsr:
+                        crsr.execute(init_query)
+                        crsr.execute("SELECT vector_quantize_preload(" +
+                                     f"'{vec_table}', 'vector');")
+
+                    params['query_vec'] = query_vec
+                    self.sort_columns.distance = Dict({
+                        'col': 'vec.distance',
+                        'dir': 'asc'
+                    })
+                elif fts_table in self.db.tablenames:
+                    sql = f"{fts_table} match :fltr"
+                    self.tbl.fts_table = fts_table
                     conds.append(sql)
-                    if len(self.sort_columns) == 0:
-                        self.sort_columns['rank'] = Dict({
+                    self.sort_columns = Dict({
+                        'rank': {
                             'col': 'rank',
                             'dir': 'asc',
                             'idx': 0
-                        })
+                        }
+                    })
+                    params['fltr'] = fltr
                 elif f'{self.db.cat}.{duck_fts_table}' in schema_names:
                     col = self.tbl.pkey.columns[0]
                     sql = f"{duck_fts_table}.match_bm25({col}, '{fltr}') IS NOT NULL"
@@ -615,9 +663,9 @@ class Grid:
                             row = "concat_ws('|'," + ','.join(concats) + ")"
                         conds.append(f"{row} {op} :{mark}")
                         params[mark] = value
-
-                conds_expr = "(" + " AND ".join(conds) + ")"
-                self.cond.prep_stmnts.append(conds_expr)
+                if conds:
+                    conds_expr = "(" + " AND ".join(conds) + ")"
+                    self.cond.prep_stmnts.append(conds_expr)
                 self.cond.params.update(params)
             else:
                 field_expr = parts[0].strip()

@@ -188,10 +188,12 @@ class Database:
             self.state.tables[tbl.name] = Dict()
             if tbl.name[-5:] == '_view' and tbl.name[:-5] in self.tablenames:
                 continue
-            if '_fts' in tbl.name:
+            if tbl.name[0] == '_':
+                continue
+            if tbl.name[0:7] == 'vector0':
                 continue
 
-            table = Table(self, tbl.name, type=tbl.type, comment=tbl.comment)
+            table = Table(self, tbl.name, type=tbl.type)
 
             self.tables[tbl.name] = table.get()
 
@@ -212,7 +214,6 @@ class Database:
         if self.state.tablenames:
             return self.state.tablenames
 
-        print('utleder tablenames')
         tablenames = [t.name for t in self.refl.tables(self.schema).values()
                       if t.type == 'table']
         self.state.tablenames = tablenames
@@ -906,7 +907,7 @@ class Database:
                 if '_fts' in tbl_name:
                     continue
                 table = tables[tbl_name]
-                tbl = Table(self, tbl_name, comment=table.comment)
+                tbl = Table(self, tbl_name)
                 if table_defs:
                     file.write(tbl.export_ddl(dialect, no_fkeys, no_empty, count_recs))
                     file.write(tbl.get_indexes_ddl())

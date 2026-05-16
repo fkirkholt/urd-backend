@@ -38,4 +38,6 @@ class Settings(BaseSettings):
     websocket: str | None = None
     # Filetypes that should be checked with LSP over websocket
     lsp_filetypes: str = ''  # bar delimited: .py|.js
-    embedding_model: str | None = 'NbAiLab/nb-sbert-v2-base'
+    gguf_model_dir: str = '~/.local/share/ai-models/'
+    gguf_model: str = 'paraphrase-multilingual-MiniLM-L12-118M-v2-Q4_K_M.gguf'
+    sqlite_ext_dir: str = '~/.local/share/sqlite-extensions'

@@ -1,8 +1,11 @@
 import time
 import inspect
+import os
 from functools import wraps
 from settings import Settings
 from addict import Dict
+import urllib.request
+import platform
 
 
 cfg = Settings()
@@ -83,3 +86,62 @@ def log_caller(func):
               f"in {end - start:.6f} seconds ---")
         return result
     return wrapper
+
+def get_installed_vector_path():
+    system = platform.system().lower()
+    ext = {"windows": ".dll", "darwin": ".dylib"}.get(system, ".so")
+    ext_dir = os.path.expanduser(cfg.sqlite_ext_dir)
+    ext_path = os.path.join(ext_dir, f"vector{ext}")
+    if os.path.exists(ext_path):
+        return os.path.join(ext_dir, 'vector')
+
+    raise FileNotFoundError(f"Couldn't find vector{ext} in system.")
+
+def get_installed_ai_path():
+    system = platform.system().lower()
+    ext = {"windows": ".dll", "darwin": ".dylib"}.get(system, ".so")
+    ext_dir = os.path.expanduser(cfg.sqlite_ext_dir)
+    ext_path = os.path.join(ext_dir, f"ai{ext}")
+    if os.path.exists(ext_path):
+        return os.path.join(ext_dir, 'ai')
+
+    raise FileNotFoundError(f"Couldn't find ai{ext} in system.")
+
+def chunk_text_with_positions(text: str) -> list[dict]:
+    """
+    Splits text by double newlines (paragraphs) and returns a list of
+    objects containing start_pos, end_pos, and the chunked text.
+    """
+    if not text:
+        return []
+
+    chunks = []
+    current_pos = 0
+
+    # Split by double newlines, keeping empty elements temporarily
+    # to calculate accurate positions in the original text
+    raw_segments = text.split('\n\n')
+
+    for i, segment in enumerate(raw_segments):
+        if segment.strip():  # Skip empty segments (e.g., multiple consecutive newlines)
+            # Find exactly where this segment starts in the original text
+            start_pos = text.find(segment, current_pos)
+            end_pos = start_pos + len(segment)
+
+            chunks.append(Dict({
+                "start_pos": start_pos,
+                "end_pos": end_pos,
+                "text": segment
+            }))
+
+            # Advance the search window past the current segment
+            current_pos = end_pos
+        else:
+            # If the segment was empty noise, advance past its length
+            current_pos += len(segment)
+
+        # Account for the length of the delimiter '\n\n' (if not the last segment)
+        if i < len(raw_segments) - 1:
+            current_pos += 2
+
+    return chunks

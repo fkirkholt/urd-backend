@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from msgspec_ext import BaseSettings, SettingsConfigDict
 from ruamel.yaml import YAML
 from pathlib import Path
 from addict import Dict
@@ -20,6 +20,8 @@ drivers = Dict(_drivers)
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', env_prefix = 'urdr_')
+
     secret_key: str = "some_secret_key"
     timeout: int = 30 * 60  # 30 minutes
     cnxn: str | None = None
@@ -36,6 +38,4 @@ class Settings(BaseSettings):
     websocket: str | None = None
     # Filetypes that should be checked with LSP over websocket
     lsp_filetypes: str = ''  # bar delimited: .py|.js
-
-    class Config:
-        env_prefix = 'urdr_'
+    embedding_model: str | None = 'NbAiLab/nb-sbert-v2-base'

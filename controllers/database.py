@@ -8,8 +8,8 @@ import tempfile
 from litestar import Controller, get, post, put, delete, Request
 from litestar.response import File, Stream
 from litestar.exceptions import HTTPException
+from litestar.status_codes import HTTP_403_FORBIDDEN
 from litestar.datastructures import State
-from starlette import status
 from typing import Any
 from addict import Dict
 from models.field import Field
@@ -147,7 +147,7 @@ class Database_Controller(Controller):
         privilege = dbo.user.table_privilege(dbo.schema, table)
         if privilege.select == 0:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=HTTP_403_FORBIDDEN,
                 detail="No access"
             )
         grid = Grid(tbl)

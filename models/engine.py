@@ -6,7 +6,7 @@ import queue
 import pyodbc
 from addict import Dict
 from litestar.status_codes import HTTP_401_UNAUTHORIZED
-from fastapi import HTTPException
+from litestar.exceptions import HTTPException
 from contextlib import closing
 from models.expression import Expression
 from models.reflection import Reflection

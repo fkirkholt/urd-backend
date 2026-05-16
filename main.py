@@ -9,12 +9,12 @@ from litestar.logging import LoggingConfig
 from litestar.datastructures import Cookie, State
 from litestar.di import Provide
 from litestar.status_codes import HTTP_401_UNAUTHORIZED
+from litestar.background_tasks import BackgroundTask
 from settings import drivers, Settings
 import os
 from jose import jwt
 import time
 import magic
-from starlette.background import BackgroundTask
 from addict import Dict
 import typer
 from controllers.file import File_Controller

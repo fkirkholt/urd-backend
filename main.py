@@ -78,7 +78,7 @@ def login_middleware(app):
         if session and scope['path'] != '/login':
             payload = jwt.decode(session, cfg.secret_key)
             cfg.system = payload["system"]
-            cfg.host = payload["server"]
+            cfg.host = os.path.expanduser(payload["server"])
             cfg.uid = payload["uid"]
             cfg.pwd = payload["pwd"]
             cfg.database = payload["database"]

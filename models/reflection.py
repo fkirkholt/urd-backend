@@ -1,6 +1,7 @@
 from ruamel.yaml import YAML
 from addict import Dict
 import sqlglot
+from sqlglot.errors import ParseError
 import util
 from models.expression import Expression
 
@@ -66,11 +67,14 @@ class Reflection:
                     rec.sql and 'VIRTUAL' not in rec.sql
                     and (not tbl.name.startswith('_') or table)
                 ):
-                    parsed = sqlglot.parse_one(rec.sql, read="sqlite")
-                    tbl_node = parsed.find(sqlglot.exp.Table)
+                    try:
+                        parsed = sqlglot.parse_one(rec.sql, read="sqlite")
+                        tbl_node = parsed.find(sqlglot.exp.Table)
 
-                    if tbl_node and tbl_node.comments:
-                        tbl.comment = " ".join(tbl_node.comments).strip()
+                        if tbl_node and tbl_node.comments:
+                            tbl.comment = " ".join(tbl_node.comments).strip()
+                    except ParseError as e:
+                        print(f"Couldn't parse SQL: {e}")
 
                 self._tables[tbl.name] = tbl
 

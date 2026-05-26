@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 from graphlib import TopologicalSorter
 import sqlglot
+from sqlglot.errors import ParseError
 import simplejson as json
 import pyodbc
 from addict import Dict
@@ -747,16 +748,23 @@ class Database:
 
                 query.data = [util.to_rec(row, crsr) for row in rows]
                 # Find the table selected from
-                query.table = str(sqlglot.parse_one(query.string)
-                                  .find(sqlglot.exp.Table))
+                try:
+                    query.table = str(sqlglot.parse_one(query.string)
+                                      .find(sqlglot.exp.Table))
 
-                # Get table name in correct case
-                tbl_names = self.refl.tables(self.schema).keys()
+                    # Get table name in correct case
+                    tbl_names = self.refl.tables(self.schema).keys()
 
-                for tbl_name in tbl_names:
-                    if tbl_name.lower() == query.table.lower():
-                        query.table = tbl_name
-                        break
+                    for tbl_name in tbl_names:
+                        if tbl_name.lower() == query.table.lower():
+                            query.table = tbl_name
+                            break
+                except ParseError as e:
+                    query.table = None
+                    print(f"Couldn't parse SQL: {e}")
+                    for err in e.errors:
+                        print(f"Error: {err.get('description')}")
+                        print(f"Line: {err.get('line')}, Column: {err.get('col')}")
 
             else:
                 rowcount = crsr.rowcount

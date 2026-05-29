@@ -661,8 +661,6 @@ class Expression:
             insert += '('
         for colname, val in rec.items():
             col = tbl.fields[colname]
-            if (tbl.name == 'meta_data' and colname == 'cache'):
-                val = ''
             if type(val) is str:
                 val = val.replace('\\n', '\n').replace('\\t', '\t')
                 val = "'" + val.strip().replace("'", "''") + "'"

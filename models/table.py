@@ -2,6 +2,7 @@
 import pypandoc
 import json
 import os
+from collections import Counter
 from addict import Dict
 import util
 from settings import Settings, yaml
@@ -73,19 +74,18 @@ class Table:
             'view': view,
             'icon': None,
             'label': self.db.get_label(self.name),
-            'rowcount': (None if not self.db.config.update_cache
+            'rowcount': (None if not self.db.config.analyze
                          else self.rowcount),
             'pkey': self.pkey,
             'comment': self.comment,
             'fkeys': self.fkeys,
-            # Get more info about relations for cache, including use
             'relations': self.relations,
             'indexes': self.indexes,
             'hidden': hidden,
-            # fields are needed only when creating cache
-            'fields': (None if not self.db.config.update_cache
+            # fields are needed only when analyzing
+            'fields': (None if not self.db.config.analyze
                        else self.fields),
-            'grid': None if not self.db.config.update_cache else {
+            'grid': None if not self.db.config.analyze else {
                 'columns': grid.columns
             }
         })
@@ -202,6 +202,9 @@ class Table:
             fields = Dict()
             indexed_cols = []
 
+            if self.db.config.column_use:
+                self.analyze_columns()
+
             if self.db.state.columns:
                 cols = self.db.state.columns[self.name]
             else:
@@ -233,14 +236,10 @@ class Table:
                     not self.name.startswith('meta_') and
                     self.type != 'view'
                 ):
-                    if col.name not in indexed_cols:
-                        column.create_index(col.type_name)
-
-                    # Find if column is (largely) empty
-                    field.use = column.check_use()
+                    field.use = self.col_use[col.name].null
 
                     if col.type_name not in ['blob', 'clob', 'text']:
-                        field.frequency = column.check_frequency()
+                        field.frequency = self.col_use[col.name].frequency
 
                 fields[col.name] = field.get()
 
@@ -270,9 +269,6 @@ class Table:
         """Return primary key of table"""
         if self.state.pkey:
             return self.state.pkey
-        if (self.db.cache and not self.db.config.update_cache):
-            self._pkey = self.db.cache.tables[self.name].pkey
-            return self._pkey
 
         if self.db.pkeys:
             self.state.pkey = self.db.pkeys[self.name]
@@ -312,6 +308,50 @@ class Table:
             self.state.columns = self.db.refl.columns(self.db.schema, self.name)
 
         return self.state.columns
+
+    def analyze_columns(self):
+
+        col_use = Dict()
+
+        sql = f"""
+        SELECT *
+        FROM {self.name}
+        WHERE rowid IN (
+            SELECT (abs(random()) % {self.rowcount}) + 1
+            FROM {self.name}
+            LIMIT 1000
+        );
+        """
+
+        with self.db.cnxn.cursor() as crsr:
+            sql, _ = self.db.expr.prepare(sql)
+            crsr.execute(sql)
+            rows = crsr.fetchall()
+            cols = [col[0] for col in crsr.description]
+            tbl_cols = {col.name: col for col in self.columns}
+            rowcount = len(rows)
+
+            for i, colname in enumerate(cols):
+                col = tbl_cols[colname]
+                if col.type in ['blob', 'clob', 'text']:
+                    values = [row[i] for row in rows if row[i] is None]
+                    count_null = len(values)
+                    col_use[colname].null = (rowcount - count_null / rowcount)
+                else:
+                    values = [row[i] for row in rows]
+                    count_null = values.count(None)
+
+                    counter = Counter(values)
+                    if not counter:
+                        continue
+
+                    most_used_value, count = counter.most_common(1)[0]
+                    frequency = (count / rowcount)
+                    col_use[colname].frequency = frequency
+                    col_use[colname].value = most_used_value
+                    col_use[colname].null = (rowcount - count_null) / rowcount
+
+        self.col_use = col_use
 
     def get_parent_fk(self):
         """Return foreign key defining hierarchy"""

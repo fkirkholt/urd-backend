@@ -216,8 +216,6 @@ class Grid:
         """Return columns belonging to grid"""
         if hasattr(self, '_columns'):
             return self._columns
-        elif self.db.cache:
-            return self.db.cache.tables[self.tbl.name].grid.columns
         from models.table import Table
         self._columns = []
         if self.tbl.name != self.tbl.grid_view:

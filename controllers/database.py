@@ -5,8 +5,10 @@ import time
 import re
 import io
 import tempfile
+import asyncio
 from litestar import Controller, get, post, put, delete, Request
 from litestar.response import File, Stream
+from litestar.response import ServerSentEvent
 from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_403_FORBIDDEN
 from litestar.datastructures import State
@@ -390,7 +392,6 @@ class Database_Controller(Controller):
         return response
 
 
-
     @get('/query', sync_to_thread=True)
     def query(self, base: str, sql: str, limit: str, state: State,
               db_cnxn: Connection) -> dict:
@@ -410,38 +411,36 @@ class Database_Controller(Controller):
         return {'msg': result}
 
 
-    @get('/urd/update_cache')
-    async def update_cache(self, base: str, config: str,
-                           state: State, db_cnxn: Connection) -> Stream:
+    @get('/urd/analyze')
+    async def analyze(self, base: str, config: str,
+                           state: State, db_cnxn: Connection) -> ServerSentEvent:
         engine = get_engine(state, base)
         dbo = Database(engine, base, state.cfg.uid, db_cnxn)
+        dbo.state.tables = Dict()
         dbo.config = Dict(json.loads(config))
-        dbo.config.update_cache = True
-        dbo.cache = None
-        dbo.tables = Dict()
+        dbo.config.analyze = True
 
         def event_stream():
-            if ('html_attributes' not in dbo.tablenames):
-                dbo.create_html_attributes()
             tbl_count = len(dbo.tablenames)
             i = 0
             for tbl in dbo.refl.tables(dbo.schema).values():
                 i += 1
+                print('i', i)
                 progress = round(i/tbl_count * 100)
-                data = json.dumps({'msg': tbl.name, 'progress': progress})
-                yield f"data: {data}\n\n"
+                jsondata = json.dumps({'msg': tbl.name, 'progress': progress})
+                yield {'data': jsondata}
 
                 if tbl.name[-5:] == '_view' and tbl.name[:-5] in dbo.tablenames:
                     continue
                 if '_fts' in tbl.name:
                     continue
 
-                table = Table(dbo, tbl.name, type=tbl.type, comment=tbl.comment)
-                dbo.tables[tbl.name] = table.get()
+                table = Table(dbo, tbl.name, type=tbl.type)
+                dbo.state.tables[tbl.name] = table.get()
 
             dbo.get_contents()
-            data = json.dumps({'msg': 'done'})
-            yield f"data: {data}\n\n"
+            jsondata = json.dumps({'msg': 'done'})
+            yield {'data': jsondata}
 
-        return Stream(event_stream(), media_type="text/event-stream")
+        return ServerSentEvent(event_stream())
 

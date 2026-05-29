@@ -15,7 +15,7 @@ class Record:
         self.base_name = db.identifier
         self.table_name = tbl.name
         self.pkey = self.format_pkey(pkey_vals)
-        self._cache = Dict()
+        self.values = Dict()
 
     def format_pkey(self, pkey_vals):
         """Return pkey values where floats are strings. Needed by pyodbc"""
@@ -28,10 +28,6 @@ class Record:
         return formatted_pkey
 
     def get(self):
-        # Cache metadata
-        self._db.indexes
-        self._db.fkeys
-
         return Dict({
             'base_name': self._db.identifier,
             'table_name': self._tbl.name,
@@ -85,11 +81,6 @@ class Record:
         from models.database import Database
         from models.table import Table
         from models.grid import Grid
-
-        # Cache metadata
-        self._db.indexes
-        self._db.columns
-        self._db.fkeys
 
         # values of primary key columns
         values = None if len(self.pkey) == 0 else self.get_values()
@@ -248,15 +239,15 @@ class Record:
         return relation
 
     def get_value(self, colname):
-        if self._cache.get('vals', None):
-            return self._cache.vals[colname]
+        if self.values:
+            return self.values[colname]
         values = self.get_values()
         return values[colname]
 
     def get_values(self):
         q = Expression(self._db.engine).quote
-        if self._cache.get('vals', None):
-            return self._cache.vals
+        if self.values:
+            return self.values
         conds = [f"{q(key)} = :{key}" for key in self.pkey
                  if self.pkey[key] is not None]
         conds = conds + [f"{q(key)} is null" for key in self.pkey
@@ -292,9 +283,9 @@ class Record:
             crsr.execute(sql, params)
             row = crsr.fetchone()
 
-            self._cache.vals = util.to_rec(row, crsr)
+            self.values = util.to_rec(row, crsr)
 
-        return self._cache.vals
+        return self.values
 
     def get_display_values(self):
         q = Expression(self._db.engine).quote

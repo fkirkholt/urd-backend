@@ -202,8 +202,6 @@ class Field:
             crsr.execute(sql, params2)
             rows = crsr.fetchall()
 
-            # Return list of regular python dicts so that it can be
-            # json serialized and put in cache
             return [util.to_rec(row, crsr) for row in rows]
 
     def get_view(self, fkey):

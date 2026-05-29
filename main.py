@@ -151,9 +151,9 @@ def logout(send: Send) -> dict:
     }
     return {'success': True, 'cnxn': cnxn}
 
-@get('/urd/dialog_cache', sync_to_thread=True)
-def dialog_cache(request: Request) -> Template:
-    return Template(template_name="update_cache.htm", context={
+@get('/urd/dialog_analyze', sync_to_thread=True)
+def dialog_analyze(request: Request) -> Template:
+    return Template(template_name="analyze.htm", context={
         "request": request
     })
 
@@ -196,7 +196,7 @@ def main(host: str = 'localhost', port: int = 8000):
 
 app = Litestar(
     route_handlers=[
-        home, get_drivers, login, logout, dialog_cache, download_file, capture_routes,
+        home, get_drivers, login, logout, dialog_analyze, download_file, capture_routes,
         File_Controller, Database_Controller, User_Controller,
         create_static_files_router(path="/static", directories=["static"]),
     ],

@@ -70,16 +70,12 @@ class Database:
 
         if not self.state.html_attrs:
             self.state.html_attrs = self.get_html_attributes()
-        attrs = Dict(self.state.html_attrs.pop('base', None))
-        self.cache = attrs.pop('data-cache', None)
-        if attrs.get('cache.config', None):
-            self.config = self.cache.config
-        else:
-            config = Settings()
-            self.config = Dict({
-                'norwegian_chars': config.norwegian_chars,
-                'exportdir': config.exportdir
-            })
+
+        config = Settings()
+        self.config = Dict({
+            'norwegian_chars': config.norwegian_chars,
+            'exportdir': config.exportdir
+        })
 
     def get_html_attributes(self):
         """Get data from table html_attributes"""
@@ -119,7 +115,7 @@ class Database:
             "schema": self.schema,
             "schemata": [s for s in self.schemas if s != 'urdr'],
             "label": self.get_label(self.identifier),
-            "tables": self.get_tables(),
+            "tables": self.tables,
             "contents": self.get_contents(),
             "description": self.get_comment(),
             "html_attrs": self.state.html_attrs,
@@ -172,18 +168,15 @@ class Database:
 
         # Refresh attributes
         self.state.html_attrs = self.get_html_attributes()
-        attrs = Dict(self.state.html_attrs.pop('base', None))
-        self.cache = attrs.pop('data-cache', None)
 
-    def get_tables(self):
+    @property
+    def tables(self):
         """Return metadata for every table"""
 
-        # Return metadata from cache if set
-        if (self.cache and not self.config.tables):
-            self.tables = self.cache.tables
-            return self.tables
+        if self.state.tables:
+            return self.state.tables
 
-        self.tables = Dict()
+        self.state.tables = Dict()
 
         for tbl in self.refl.tables(self.schema).values():
             self.state.tables[tbl.name] = Dict()
@@ -196,10 +189,9 @@ class Database:
 
             table = Table(self, tbl.name, type=tbl.type)
 
-            self.tables[tbl.name] = table.get()
+            self.state.tables[tbl.name] = table.get()
 
-        self.state.tables = self.tables
-        return self.tables
+        return self.state.tables
 
     @property
     def schemas(self):
@@ -304,10 +296,9 @@ class Database:
     def get_tbl_groups_urdr(self):
         """Group tables by prefix
 
-        If not generating cache or generating cache for databases
-        with Urdr structure. This is the default behaviour, which
-        treats databases as following the Urdr rules for self
-        documenting databases
+        If not analyzing or analyzes databases with Urdr structure.
+        This is the default behaviour, which treats databases as following
+        the Urdr rules for self documenting databases
         """
         tbl_groups = Dict()
         i = 0
@@ -485,13 +476,10 @@ class Database:
 
     def get_contents(self):
         """Get list of contents"""
-        if (self.cache and not self.config.update_cache):
-            self.contents = self.cache.contents
-            return self.contents
 
         contents = Dict()
 
-        if (not self.config.update_cache or self.config.urd_structure):
+        if (not self.config.analyze or self.config.urd_structure):
             tbl_groups = self.get_tbl_groups_urdr()
         else:
             tbl_groups = self.get_tbl_groups()
@@ -522,47 +510,6 @@ class Database:
 
                     contents[label].subitems[tbl_label] = \
                         self.get_content_node(tbl_name)
-
-        if self.config.update_cache:
-            sql = f"""
-            select count(*) from {self.schema}.html_attributes
-            where selector = :selector
-            """
-
-            with self.cnxn.cursor() as crsr:
-                sql, params = self.expr.prepare(sql, {'selector': 'base'})
-                crsr.execute(sql, params)
-                count = crsr.fetchone()[0]
-
-            cache = {
-                "tables": self.tables,
-                "contents": contents,
-                "config": self.config
-            }
-            attrs = {
-                'data-cache': cache
-            }
-            attrs_txt = json.dumps(attrs)
-
-            if count:
-                sql = f"""
-                update {self.schema}.html_attributes
-                set attributes = :attrs
-                where selector = :selector
-                """
-            else:
-                sql = f"""
-                insert into {self.schema}.html_attributes(attributes, selector)
-                values (:attrs, :selector)
-                """
-
-            with self.cnxn.cursor() as crsr:
-                sql, params = self.expr.prepare(sql, {
-                    'attrs': attrs_txt,
-                    'selector': 'base'
-                })
-                crsr.execute(sql, params)
-                self.cnxn.commit()
 
         return contents
 

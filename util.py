@@ -4,7 +4,6 @@ import os
 from functools import wraps
 from settings import Settings
 from addict import Dict
-import urllib.request
 import platform
 
 
@@ -87,6 +86,7 @@ def log_caller(func):
         return result
     return wrapper
 
+
 def get_installed_vector_path():
     system = platform.system().lower()
     ext = {"windows": ".dll", "darwin": ".dylib"}.get(system, ".so")
@@ -94,8 +94,9 @@ def get_installed_vector_path():
     ext_path = os.path.join(ext_dir, f"vector{ext}")
     if os.path.exists(ext_path):
         return os.path.join(ext_dir, 'vector')
+    else:
+        return None
 
-    raise FileNotFoundError(f"Couldn't find vector{ext} in system.")
 
 def get_installed_ai_path():
     system = platform.system().lower()
@@ -104,8 +105,9 @@ def get_installed_ai_path():
     ext_path = os.path.join(ext_dir, f"ai{ext}")
     if os.path.exists(ext_path):
         return os.path.join(ext_dir, 'ai')
+    else:
+        return None
 
-    raise FileNotFoundError(f"Couldn't find ai{ext} in system.")
 
 def chunk_text_with_positions(text: str) -> list[dict]:
     """

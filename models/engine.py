@@ -235,10 +235,11 @@ class Engine:
         if self.driver_name == 'sqlite3' and self.model_path:
             vector_path = util.get_installed_vector_path()
             ai_path = util.get_installed_ai_path()
-            cnxn.enable_load_extension(True)
-            cnxn.load_extension(str(vector_path))
-            cnxn.load_extension(ai_path)
-            cnxn.enable_load_extension(False)
+            if vector_path and ai_path:
+                cnxn.enable_load_extension(True)
+                cnxn.load_extension(str(vector_path))
+                cnxn.load_extension(ai_path)
+                cnxn.enable_load_extension(False)
 
         return Connection(cnxn, self.driver)
 

@@ -2,17 +2,19 @@ import os
 import magic
 import re
 import xattr
+import base64
 import subprocess
 from addict import Dict
 from settings import yaml
 from subprocess import run
 from litestar import Controller, get, post, put, delete, Request
 
+
 class File_Controller(Controller):
 
     def ripgrep(self, host: str, path: str, pattern: str):
         dir = os.path.join(host, path) if path else host
-        cmd = 'rg ' + pattern +  ' --line-number --color=always --colors=path:none'
+        cmd = 'rg ' + pattern + ' --line-number --color=always --colors=path:none'
         cmd += ' --max-columns=255 --max-columns-preview'
         cmd += '' if any(char.isupper() for char in pattern) else ' -i'
         result = run(cmd, cwd=dir, shell=True, capture_output=True, text=True)
@@ -81,7 +83,6 @@ class File_Controller(Controller):
             result.append(base)
         return result
 
-
     @get("/file_list", sync_to_thread=True)
     def file_list(self, request: Request, path: str = '', pattern: str = '') -> dict:
         cfg = request.app.state.cfg
@@ -112,7 +113,16 @@ class File_Controller(Controller):
                 else:
                     attrs = xattr.xattr(filepath)
                     if 'user.comment' in attrs:
-                        comment = attrs.get('user.comment')
+                        raw_value = attrs.get('user.comment')
+                        comment = base64.b64decode(raw_value).decode('latin-1')
+                        try:
+                            decoded_bytes = base64.b64decode(raw_value, validate=True)
+                            comment = decoded_bytes.decode('utf-8')
+                        except (ValueError, UnicodeDecodeError):
+                            try:
+                                comment = raw_value.decode('utf-8')
+                            except UnicodeDecodeError:
+                                comment = raw_value.decode('latin-1')
                 base = Dict()
                 base.columns.name = os.path.join(path, filename) if path else filename
                 base.columns.label = filename

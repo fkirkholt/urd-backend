@@ -2,6 +2,7 @@ from datetime import date, datetime
 from packaging.version import parse
 from addict import Dict
 from ruamel.yaml import YAML
+from ruamel.yaml.error import MarkedYAMLError
 import util
 from settings import Settings
 
@@ -45,8 +46,11 @@ class Field:
         if col.comment:
             try:
                 comment = yaml.load(col.comment)
-                attrs = Dict(comment)
-            except (ValueError, TypeError):
+                if type(comment) is str:
+                    attrs['title'] = col.comment
+                else:
+                    attrs = Dict(comment)
+            except MarkedYAMLError:
                 attrs['title'] = col.comment
         if 'maxlength' in attrs:
             self.size = attrs['maxlength']

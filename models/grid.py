@@ -4,6 +4,7 @@ import math
 from addict import Dict
 import util
 from settings import Settings, yaml
+from ruamel.yaml.error import MarkedYAMLError
 from models.expression import Expression
 
 cfg = Settings()
@@ -566,8 +567,11 @@ class Grid:
                         vec_tbl = self.db.refl.tables(self.db.schema, table=vec_table)
                         try:
                             meta = yaml.load(vec_tbl.comment)
-                            vec_tbl.attrs = Dict(meta)
-                        except (ValueError, TypeError):
+                            if type(meta) is dict:
+                                vec_tbl.attrs = Dict(meta)
+                            else:
+                                meta = {}
+                        except MarkedYAMLError:
                             meta = {}
                         if 'data-model' in meta:
                             model_path = os.path.join(model_dir, meta['data-model'])

@@ -6,6 +6,7 @@ from collections import Counter
 from addict import Dict
 import util
 from settings import Settings, yaml
+from ruamel.yaml.error import MarkedYAMLError
 from models.record import Record
 from models.column import Column
 from models.field import Field
@@ -724,8 +725,11 @@ class Table:
             if col.comment:
                 try:
                     comment = yaml.load(col.comment)
-                    col.attrs = Dict(comment)
-                except (ValueError, TypeError):
+                    if type(comment) is str:
+                        col.attrs['title'] = col.comment
+                    else:
+                        col.attrs = Dict(comment)
+                except MarkedYAMLError:
                     col.attrs['title'] = col.comment
             if (coltype == 'text' or coltype.startswith('varchar') and
                 'fulltext' in self.comment):

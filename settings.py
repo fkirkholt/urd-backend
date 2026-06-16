@@ -1,4 +1,4 @@
-from msgspec_ext import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from ruamel.yaml import YAML
 from pathlib import Path
 from addict import Dict

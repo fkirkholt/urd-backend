@@ -1044,7 +1044,7 @@ class Database:
                     os.makedirs(path, exist_ok=True)
                     blobcolumns.append(col.name)
                 if not cols or col.name in cols:
-                    selects[col.name] = col.name
+                    selects[col.name] = expr.quote(col.name)
                     if col.datatype == 'geometry':
                         selects[col.name] = f"{col.name}.ToString() as {col.name}"
 

@@ -20,11 +20,10 @@ dependencies = [
     "uvicorn>=0.42.0",
     "xattr>=1.3.0",
     "pydantic-settings>=2.14.1",
-    "pymssql>=2.3.13",
 ]
 
 [project.optional-dependencies]
 duckdb = ["duckdb==1.5.2"]
-pymysql = ["pymysql>=1.1.2"]
-
+mysql = ["pymysql>=1.1.2"]
+mssql = ["pymssql>=2.3.13"]
 

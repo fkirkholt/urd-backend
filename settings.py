@@ -1,7 +1,8 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from decouple import config
 from ruamel.yaml import YAML
 from pathlib import Path
 from addict import Dict
+from dataclasses import dataclass
 
 
 yaml = YAML()
@@ -19,25 +20,24 @@ if Path('drivers.local.yml').exists():
 drivers = Dict(_drivers)
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_prefix = 'urdr_')
-
-    secret_key: str = "some_secret_key"
-    timeout: int = 30 * 60  # 30 minutes
-    cnxn: str | None = None
-    system: str | None = None
-    host: str | None = None
-    subfolders: list = []
-    database: str | None = None
-    uid: str | None = None
-    pwd: str | None = None
-    driver: str | None = None
-    max_connections: int = 10
-    norwegian_chars: bool = False
-    exportdir: str | None = None
-    websocket: str | None = None
+@dataclass
+class Settings:
+    secret_key: str = config("URDR_SECRET_KEY", default="some_secret_key")
+    timeout: int = config("URDR_TIMEOUT", 30 * 60, cast=int)  # 30 minutes
+    cnxn: str | None = config("URDR_CNXN", default=None)
+    system: str | None = config("URDR_SYSTEM", default=None)
+    host: str | None = config("URDR_HOST", default=None)
+    database: str | None = config("URDR_DATABASE", default=None)
+    uid: str | None = config("URDR_UID", default=None)
+    pwd: str | None = config("URDR_PWD", default=None)
+    driver: str | None = config("URDR_DRIVER", default=None)
+    max_connections: int = config("URDR_MAX_CONNECTIONS", default=10, cast=int)
+    norwegian_chars: bool = config("URDR_NORWEGIAN_CHARS", default=False, cast=bool)
+    exportdir: str | None = config("URDR_EXPORTDIR", default=None)
+    websocket: str | None = config("URDR_WEBSOCKET", default=None)
     # Filetypes that should be checked with LSP over websocket
-    lsp_filetypes: str = ''  # bar delimited: .py|.js
-    gguf_model_dir: str = '~/.local/share/ai-models/'
-    gguf_model: str = 'paraphrase-multilingual-MiniLM-L12-118M-v2-Q4_K_M.gguf'
-    sqlite_ext_dir: str = '~/.local/share/sqlite-extensions'
+    lsp_filetypes: str = config("URDR_LSP_FILETYPES", default='')  # bar delimited: .py|.js
+    gguf_model_dir: str = config("GGUF_MODEL_DIR", default="~/.local/share/ai-models/")
+    gguf_model: str = config("URDR_GGUF_MODEL", default="paraphrase-multilingual-MiniLM-L12-118M-v2-Q4_K_M.gguf")
+    # gguf_model: str = 'bge-m3-Q4_K_M.gguf'
+    sqlite_ext_dir: str = config("SQLITE_EXT_DIR", default="~/.local/share/sqlite-extensions")

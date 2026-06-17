@@ -2,7 +2,7 @@ sqlite:
     sqlite3:
         string: "database={path};check_same_thread=False"
         query: 'PRAGMA foreign_keys = ON; PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;'
-        placeholder: '?'
+        placeholder: colon-prefixed
     sqlean:
         string: "database={path};check_same_thread=False"
         query: 'PRAGMA foreign_keys = ON; PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;'

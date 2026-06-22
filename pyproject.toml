@@ -26,4 +26,5 @@ dependencies = [
 duckdb = ["duckdb==1.5.2"]
 mysql = ["pymysql>=1.1.2"]
 mssql = ["pymssql>=2.3.13"]
+oracle = ["oracledb>=4.0.1"]
 

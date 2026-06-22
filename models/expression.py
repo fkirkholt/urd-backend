@@ -50,7 +50,7 @@ class Expression:
 
         if re.search("json", type_):
             return "json"
-        elif re.search("blob|image|long raw|binary", type_):
+        elif re.search("blob|image|long raw|binary|bfile", type_):
             return "bytes"
         elif re.search("char|text|clob|long|xml|sysname|uniqueidentifier", type_):
             return "str"
@@ -410,7 +410,7 @@ class Expression:
             SELECT  a.column_name as fkcolumn_name, a.position,
                     a.constraint_name as fk_name, a.table_name as fktable_name,
                     c.owner, c.delete_rule,
-                    – referenced pk
+                    -- referenced pk
                     c.r_owner as pktable_schem,
                     c_pk.table_name as pktable_name,
                     c_pk.constraint_name r_pk,

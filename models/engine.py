@@ -298,6 +298,10 @@ class ODBC_Engine:
 
     def connect(self):
         cnxn = pyodbc.connect(self.cnxnstr)
+        if self.name == 'oracle':
+            cnxn.setdecoding(pyodbc.SQL_CHAR, encoding='utf-8')
+            cnxn.setdecoding(pyodbc.SQL_WCHAR, encoding='utf-8')
+            cnxn.setencoding(encoding='utf-8')
         pyodbc.lowercase = False
         return Connection(cnxn, self.driver)
         # return cnxn

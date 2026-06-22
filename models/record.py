@@ -356,7 +356,7 @@ class Record:
             crsr.execute(sql, params)
             row = crsr.fetchone()
 
-        return os.path.normpath(row.path)
+        return os.path.normpath(row[0])
 
     def insert(self, values):
         # todo: Get values for auto and auto_update fields

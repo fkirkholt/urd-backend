@@ -6,6 +6,7 @@ import re
 import io
 import tempfile
 import asyncio
+import magic
 from litestar import Controller, get, post, put, delete, Request
 from litestar.response import File, Stream
 from litestar.response import ServerSentEvent
@@ -288,10 +289,9 @@ class Database_Controller(Controller):
         data = fld.get_options(cond, {}, get_parent=False)
         return data
 
-
     @get('/db_file', sync_to_thread=True)
     def get_db_file(self, base: str, table: str, pkey: str,
-                    state: State, db_cnxn: Connection, column: str = None) -> File:
+                    state: State, db_cnxn: Connection, column: str | None = None) -> File:
         """Download file from file reference in database"""
         pkey = json.loads(urllib.parse.unquote(pkey))
         engine = get_engine(state, base)
@@ -300,8 +300,17 @@ class Database_Controller(Controller):
         rec = Record(dbo, tbl, pkey)
         path = rec.get_file_path(column)
         path = os.path.join(state.cfg.host, os.path.dirname(base), path)
-        return File(path)
-
+        return File(
+            path=path,
+            filename=os.path.basename(path),
+            content_disposition_type="inline",
+            media_type=magic.from_file(path, mime=True),
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
     @post('/convert', sync_to_thread=True)
     def convert(self, base: str, table: str, from_format: str, to_format: str,

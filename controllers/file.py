@@ -98,6 +98,8 @@ class File_Controller(Controller):
         elif not pattern:
             title_regex = re.compile(r'^(?:#\s+(?P<h1>.*)|__(?P<bold>.*?)__)')
             for entry in sorted(os.scandir(dirpath), key=lambda e: e.name):
+                if entry.name == '$RECYCLE.BIN':
+                    continue
                 filename = entry.name
                 filepath = entry.path
                 if entry.is_symlink():
@@ -129,7 +131,11 @@ class File_Controller(Controller):
                 base.columns.title = title
                 base.columns.description = comment
                 base.columns.type = 'file'
-                base.columns.size = entry.stat().st_size
+                try:
+                    base.columns.size = entry.stat().st_size
+                except Exception as e:
+                    print(e)
+                    continue
                 if entry.is_dir():
                     base.columns.type = 'dir'
                 elif filename.endswith('.db'):

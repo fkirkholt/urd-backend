@@ -3,6 +3,7 @@ import os
 import time
 import csv
 import sys
+import asyncio
 import shutil
 import tempfile
 from pathlib import Path
@@ -983,12 +984,13 @@ class Database:
 
     @util.time_stream_generator
     async def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download,
-                         filter):
+                         filter, cancelled_jobs):
         # Loads metadata so we don't have to load for each table
         self.pkeys
         self.columns
 
         expr = Expression(self.engine)
+        cancelled_jobs.discard('export')
 
         params = []
         if filter:
@@ -1001,6 +1003,9 @@ class Database:
         # Count rows
         total_rows = 0
         for table in tables:
+            await asyncio.sleep(0)
+            if 'export' in cancelled_jobs:
+                break
             with self.cnxn.cursor() as crsr:
                 sql = f'select count(*) from {expr.quote(table)}'
                 if filter:
@@ -1065,6 +1070,11 @@ class Database:
                 n = 0
                 num_files = 0
                 for row in crsr:
+                    # wait a microsecond each 50 row to allow cancel call 
+                    if n % 50 == 0:
+                        await asyncio.sleep(0)
+                    if 'export' in cancelled_jobs:
+                        break
                     progress = '{:.1f}'.format(round(count/total_rows * 100, 1))
                     if progress != last_progress:
                         data = json.dumps({'msg': table.name, 'progress': progress})

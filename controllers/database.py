@@ -23,6 +23,9 @@ from models.table import Table, Grid
 from models.user import User
 
 
+cancelled_jobs: set[str] = set()
+
+
 class Database_Controller(Controller):
     @get("/dblist", sync_to_thread=True)
     def dblist(self, state: State, role: str = '') -> dict:
@@ -377,9 +380,12 @@ class Database_Controller(Controller):
                 os.makedirs(dest)
 
         return Stream(dbo.export_tsv(tbls, dest, limit, clobs_as_files,
-                                     cols, download, filter),
+                                     cols, download, filter, cancelled_jobs),
                       media_type="text/event-stream")
 
+    @post("/cancel/", sync_to_thread=True)
+    def cancel_job(self, job_id: str) -> dict:
+        cancelled_jobs.add(job_id)
 
     @get('/import_tsv', sync_to_thread=True)
     def import_tsv(self, base: str, dir: str, state: State,
@@ -387,7 +393,6 @@ class Database_Controller(Controller):
         engine = get_engine(state, base)
         dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         return Stream(dbo.import_tsv(dir), media_type="text/event-stream")
-
 
     @get('/kdrs_xml', sync_to_thread=True)
     def export_kdrs_xml(self, base: str, version: str, descr: str,

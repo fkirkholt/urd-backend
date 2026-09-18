@@ -52,7 +52,7 @@ class Expression:
             return "json"
         elif re.search("blob|image|long raw|binary|bfile", type_):
             return "bytes"
-        elif re.search("char|text|clob|long|xml|sysname|uniqueidentifier", type_):
+        elif re.search("char|text|clob|long|xml|sysname|uuid|uniqueidentifier", type_):
             return "str"
         elif re.search("bool|bit|tinyint", type_):
             return "bool"

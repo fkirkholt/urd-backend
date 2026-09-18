@@ -151,12 +151,12 @@ def logout(send: Send) -> dict:
     }
     return {'success': True, 'cnxn': cnxn}
 
+
 @get('/urd/dialog_analyze', sync_to_thread=True)
 def dialog_analyze(request: Request) -> Template:
     return Template(template_name="analyze.htm", context={
         "request": request
     })
-
 
 
 @get('/download', sync_to_thread=True)
@@ -187,12 +187,14 @@ async def capture_routes(request: Request, full_path: str) -> Template:
         "request": request, "v": mod, "base": cfg.database
     })
 
+
 def main(host: str = 'localhost', port: int = 8000):
     uvicorn.run(
         app,
         host=host,
         port=port,
     )
+
 
 app = Litestar(
     route_handlers=[

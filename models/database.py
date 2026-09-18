@@ -1070,7 +1070,7 @@ class Database:
                         col.datatype = col.type.python_type.__name__
                     except Exception:
                         col.datatype = ('int' if str(col.type).startswith('YEAR')
-                                         else 'unknown')
+                                        else 'unknown')
                 table.columns[idx] = col
                 if col.datatype == 'bytes' or (
                     clobs_as_files and col.datatype == 'str' and not col.size

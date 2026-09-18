@@ -703,7 +703,6 @@ class Table:
 
         return 'success'
 
-
     def make_embeddings(self):
         BATCH_SIZE = 64
         model_dir = os.path.expanduser(cfg.gguf_model_dir)

@@ -126,7 +126,7 @@ class File_Controller(Controller):
                             except UnicodeDecodeError:
                                 comment = raw_value.decode('latin-1')
                 base = Dict()
-                base.columns.name = os.path.join(path, filename) if path else filename
+                base.columns.name = filename
                 base.columns.label = filename
                 base.columns.title = title
                 base.columns.description = comment

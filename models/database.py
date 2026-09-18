@@ -1,11 +1,15 @@
 """Module for handling databases and connections"""
 import os
+import io
 import time
 import csv
 import sys
 import asyncio
 import shutil
 import tempfile
+import zipfile
+import magic
+import mimetypes
 from pathlib import Path
 from graphlib import TopologicalSorter
 import sqlglot
@@ -13,6 +17,7 @@ from sqlglot.errors import ParseError
 import simplejson as json
 import pyodbc
 from addict import Dict
+from charset_normalizer import from_bytes
 from settings import Settings
 from models.table import Table
 from models.grid import Grid
@@ -22,6 +27,9 @@ from models.engine import ODBC_Engine
 from models.reflection import Reflection
 from models.expression import Expression
 import util
+
+
+magic_scanner = magic.Magic(mime=True)
 
 
 class Database:
@@ -982,6 +990,28 @@ class Database:
             data = json.dumps({'msg': 'done'})
             yield f"data: {data}\n\n"
 
+    def check_zip_blob(self, val):
+        text_from_zip = False
+        with zipfile.ZipFile(io.BytesIO(val)) as z:
+            filelist = z.namelist()
+
+            if len(filelist) == 1:
+                filename = filelist[0]
+                file_bytes = z.read(filename)
+                mime_type = magic_scanner.from_buffer(file_bytes)
+                ext = mimetypes.guess_extension(mime_type) or ".bin"
+
+                text_types = [
+                    'application/javascript',
+                    'application/json',
+                    'application/xml'
+                ]
+                if mime_type.startswith("text/") or mime_type in text_types:
+                    val = util.decode_file_to_utf8(file_bytes, file_extension=ext)
+                    text_from_zip = True
+
+        return text_from_zip, val
+
     @util.time_stream_generator
     async def export_tsv(self, tables, dest, limit, clobs_as_files, cols, download,
                          filter, cancelled_jobs):
@@ -991,6 +1021,8 @@ class Database:
 
         expr = Expression(self.engine)
         cancelled_jobs.discard('export')
+
+        use_siegfried = util.is_siegfried_running()
 
         params = []
         if filter:
@@ -1011,8 +1043,8 @@ class Database:
                 if filter:
                     sql += '\n' + join
                     sql += ' where ' + cond
-                sql, params = self.expr.prepare(sql, params)
-                crsr.execute(sql, params)
+                sql, params_prep = self.expr.prepare(sql, params)
+                crsr.execute(sql, params_prep)
                 n = crsr.fetchone()[0]
                 if limit and n > limit:
                     n = limit
@@ -1043,10 +1075,6 @@ class Database:
                 if col.datatype == 'bytes' or (
                     clobs_as_files and col.datatype == 'str' and not col.size
                  ):
-                    foldername = table.name + '.' + col.name
-                    path = os.path.join(os.path.dirname(filepath), '../documents',
-                                        foldername)
-                    os.makedirs(path, exist_ok=True)
                     blobcolumns.append(col.name)
                 if not cols or col.name in cols:
                     selects[col.name] = expr.quote(col.name)
@@ -1089,27 +1117,41 @@ class Database:
                         file.write('\t'.join(rec.keys()) + '\n')
                     values = []
                     for colname, val in rec.items():
-                        if colname in blobcolumns:
-                            num_files += 1
-                            dir = os.path.dirname(filepath)
-                            if table.pkey:
-                                pkey_vals = []
-                                for pkey_col in table.pkey.columns:
-                                    pkey_vals.append(str(rec[pkey_col]))
-                                filename = '-'.join(pkey_vals) + '.data'
+                        if val is None:
+                            val = ''
+                        elif colname in blobcolumns:
+                            if use_siegfried:
+                                mime_type = util.get_sf_mime_type(val)
                             else:
-                                filename = str(num_files) + '.data'
+                                mime_type = magic_scanner.from_buffer(val)
+                            ext = mimetypes.guess_extension(mime_type) or ".bin"
+                            text_from_zip = False
+                            if ext == ".zip":
+                                text_from_zip, val = self.check_zip_blob(val)
+                            if not text_from_zip:
+                                if ext == ".bin" and val.find(b"%PDF-") != -1:
+                                    ext = ".pdf"
+                                num_files += 1
+                                dir = os.path.dirname(filepath)
+                                if table.pkey:
+                                    pkey_vals = []
+                                    for pkey_col in table.pkey.columns:
+                                        pkey_vals.append(str(rec[pkey_col]))
+                                    filename = '-'.join(pkey_vals) + ext
+                                else:
+                                    filename = str(num_files) + ext
 
-                            foldername = table.name + '.' + colname
-                            path = os.path.join(dir, '../documents', foldername,
-                                                filename)
-                            if val is not None:
+                                foldername = table.name + '.' + colname
+                                path = os.path.join(dir, '../documents', foldername,
+                                                    filename)
                                 for tbl_col in table.columns:
                                     if tbl_col.name == colname:
                                         col = tbl_col
                                         break
 
                                 mode = 'wb' if col.datatype == 'bytes' else 'w'
+
+                                Path(path).parent.mkdir(parents=True, exist_ok=True)
                                 with open(path, mode) as blobfile:
                                     blobfile.write(val)
                                 val = 'documents/' + foldername + '/' + filename
@@ -1121,8 +1163,8 @@ class Database:
                             val = val.replace('\r\n', '\\n')
                             val = val.replace('\r', '\\n')
                             val = val.replace('\n', '\\n')
-                        elif val is None:
-                            val = ''
+                            # Removes BOM
+                            val = val.replace("\ufeff", "")
                         else:
                             val = str(val)
                         values.append(val)

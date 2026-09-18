@@ -1,10 +1,16 @@
 import time
+import io
 import inspect
 import os
+import re
 from functools import wraps
 from settings import Settings
 from addict import Dict
 import platform
+import requests
+import xml.etree.ElementTree as ET
+import codecs
+from charset_normalizer import from_bytes
 
 
 cfg = Settings()
@@ -147,3 +153,86 @@ def chunk_text_with_positions(text: str) -> list[dict]:
             current_pos += 2
 
     return chunks
+
+
+def get_xml_encoding(raw_bytes):
+    head = raw_bytes[:100].decode("ascii", errors="ignore")
+    # Look for `encoding="..."`
+    match = re.search(r'encoding=["\']([^"\']+)["\']', head, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
+def is_siegfried_running(host="localhost", port=5138):
+    url = f"http://{host}:{port}/identify"
+    try:
+        requests.get(url, timeout=0.5, proxies={"http": None, "https": None})
+        return True
+    except requests.exceptions.RequestException:
+        return False
+
+
+def get_sf_mime_type(blob_bytes):
+    url = "http://localhost:5138/identify?format=json"
+    files = {
+        'file': ('doc.bin', io.BytesIO(blob_bytes), 'application/pdf')
+    }
+    proxies = {"http": None, "https": None}
+    response = requests.post(url, files=files, proxies=proxies)
+
+    if response.status_code == 200:
+        result = response.json()
+        fileinfo = result["files"][0]["matches"][0]
+        return fileinfo['mime']
+    else:
+        print(f"Feil fra server: {response.status_code}")
+        return False
+
+
+def decode_file_to_utf8(file_bytes: bytes, file_extension: str = "") -> str:
+    """
+    Decode raw bytes to UTF-8 string
+    """
+    if not file_bytes:
+        return ""
+
+    # Check Unicode BOM
+    for bom_name, bom_bytes in [
+        ('utf-8-sig', codecs.BOM_UTF8),
+        ('utf-16', codecs.BOM_UTF16),
+        ('utf-32', codecs.BOM_UTF32)
+    ]:
+        if file_bytes.startswith(bom_bytes):
+            return file_bytes.decode(bom_name)
+
+    if file_extension.lower() in ['.xml', '.xhtml']:
+        try:
+            # ElementTree decodes the content according to specified encoding
+            root = ET.fromstring(file_bytes)
+            return ET.tostring(
+                root,
+                encoding='unicode',
+                xml_declaration=True,
+                short_empty_elements=True
+            )
+        except ET.ParseError:
+            pass
+
+    # Try decode to utf-8
+    try:
+        return file_bytes.decode('utf-8')
+    except UnicodeDecodeError:
+        pass
+
+    # Analyze text to find encoding
+    result = from_bytes(file_bytes).best()
+    if result and result.encoding:
+        try:
+            return file_bytes.decode(result.encoding)
+        except (UnicodeDecodeError, LookupError):
+            pass
+
+    # Last resort: decode and replace errors
+    return file_bytes.decode('utf-8', errors='replace')
+

@@ -709,7 +709,7 @@ class Grid:
                     operator = 'NOT LIKE'
 
                 if (
-                    value and (
+                    value and operator != 'IN' and (
                         (field and field.datatype in ['int', 'Decimal']) or
                         (not field and value.replace('.', '', 1).isdigit())
                     )

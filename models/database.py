@@ -17,7 +17,6 @@ from sqlglot.errors import ParseError
 import simplejson as json
 import pyodbc
 from addict import Dict
-from charset_normalizer import from_bytes
 from settings import Settings
 from models.table import Table
 from models.grid import Grid
@@ -185,10 +184,7 @@ class Database:
         if self.state.tables:
             return self.state.tables
 
-        self.state.tables = Dict()
-
         for tbl in self.refl.tables(self.schema).values():
-            self.state.tables[tbl.name] = Dict()
             if tbl.name[-5:] == '_view' and tbl.name[:-5] in self.tablenames:
                 continue
             if tbl.name[0] == '_':

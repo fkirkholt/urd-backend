@@ -5,7 +5,6 @@ import time
 import re
 import io
 import tempfile
-import asyncio
 import magic
 from litestar import Controller, get, post, put, delete, Request
 from litestar.response import File, Stream
@@ -102,7 +101,6 @@ class Database_Controller(Controller):
             'system': state.cfg.system,
         }}
 
-
     @get("/database", sync_to_thread=True)
     def db_info(self, base: str, state: State, db_cnxn: Connection) -> dict:
         # time.sleep(10)
@@ -133,7 +131,6 @@ class Database_Controller(Controller):
                 'admin': is_admin
             }
         }}
-
 
     @get("/table")
     async def get_table(
@@ -180,7 +177,6 @@ class Database_Controller(Controller):
 
         return {'data': grid.get(pkey_vals)}
 
-
     @post("/record", sync_to_thread=True)
     def create_record(self, base: str, table: str, pkey: str, state: State,
                       data: str, db_cnxn: Connection) -> dict:
@@ -194,7 +190,6 @@ class Database_Controller(Controller):
         pkey = record.insert(vals)
         return {'values': pkey}
 
-
     @put("/record", sync_to_thread=True)
     def update_record(self, base: str, table: str, pkey: str, state: State,
                       data: str, db_cnxn: Connection) -> dict:
@@ -207,7 +202,6 @@ class Database_Controller(Controller):
         time.sleep(0.5)
         return {'result': record.update(vals)}
 
-
     @delete("/record", sync_to_thread=True, status_code=200)
     def delete_record(self, base: str, table: str, pkey: str, state: State,
                       db_cnxn: Connection) -> None:
@@ -217,7 +211,6 @@ class Database_Controller(Controller):
         pkey = json.loads(pkey)
         record = Record(dbo, tbl, pkey)
         return {'result': record.delete()}
-
 
     @get("/record", sync_to_thread=True)
     def get_record(self, base: str, table: str, pkey: str,
@@ -233,7 +226,6 @@ class Database_Controller(Controller):
         record = Record(dbo, tbl, pk)
         return {'data': record.get()}
 
-
     @get("/children", sync_to_thread=True)
     def get_children(self, base: str, table: str, pkey: str, state: State,
                      db_cnxn: Connection) -> dict:
@@ -245,7 +237,6 @@ class Database_Controller(Controller):
         pk = json.loads(pkey)
         record = Record(dbo, tbl, pk)
         return {'data': record.get_children()}
-
 
     @get("/relations", sync_to_thread=True)
     def get_relations(self, base: str, table: str, pkey: str, count: bool,
@@ -261,7 +252,6 @@ class Database_Controller(Controller):
             relation = record.get_relation(alias)
             return {'data': {alias: relation}}
 
-
     @put("/table")
     async def save_table(self, data: list[dict[str, Any]], state: State, base: str,
                          table: str, db_cnxn: Connection) -> dict:
@@ -269,7 +259,6 @@ class Database_Controller(Controller):
         dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         tbl = Table(dbo, table)
         return {'data': tbl.save(data)}
-
 
     @get("/options")
     async def get_options(self, request: Request, db_cnxn: Connection) -> list:
@@ -326,7 +315,6 @@ class Database_Controller(Controller):
             result = tbl.convert(field_name, from_format, to_format)
         return {'result': result}
 
-
     @get('/export_sql', sync_to_thread=True)
     def export_sql(self, dest: str, base: str, dialect: str, table_defs: bool,
                    no_fkeys: bool, list_recs: bool, data_recs: bool,
@@ -354,7 +342,6 @@ class Database_Controller(Controller):
                                      view_as_table, no_empty, view_defs,
                                      table, filter),
                       media_type="text/event-stream")
-
 
     @get('/export_tsv', sync_to_thread=True)
     def export_tsv(self, state: State, db_cnxn: Connection, base: str, tables: str,
@@ -405,7 +392,6 @@ class Database_Controller(Controller):
             f'attachment; filename={dbo.identifier}.xml'
         return response
 
-
     @get('/query', sync_to_thread=True)
     def query(self, base: str, sql: str, limit: str, state: State,
               db_cnxn: Connection) -> dict:
@@ -415,7 +401,6 @@ class Database_Controller(Controller):
         result = dbo.query_result(sql, limit)
         return {'result': result}
 
-
     @put('/embed', sync_to_thread=True)
     def embed(self, base: str, table: str, state: State, db_cnxn: Connection) -> dict:
         engine = get_engine(state, base)
@@ -424,10 +409,9 @@ class Database_Controller(Controller):
         result = tbl.make_embeddings()
         return {'msg': result}
 
-
     @get('/urd/analyze')
     async def analyze(self, base: str, config: str,
-                           state: State, db_cnxn: Connection) -> ServerSentEvent:
+                      state: State, db_cnxn: Connection) -> ServerSentEvent:
         engine = get_engine(state, base)
         dbo = Database(engine, base, state.cfg.uid, db_cnxn)
         dbo.state.tables = Dict()

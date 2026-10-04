@@ -662,8 +662,11 @@ class Expression:
         for colname, val in rec.items():
             col = tbl.fields[colname]
             if type(val) is str:
-                val = val.replace('\\n', '\n').replace('\\t', '\t')
-                val = "'" + val.strip().replace("'", "''") + "'"
+                if val == '':
+                    val = 'null'
+                else:
+                    val = val.replace('\\n', '\n').replace('\\t', '\t')
+                    val = "'" + val.strip().replace("'", "''") + "'"
             elif isinstance(val, date):
                 val = "'" + str(val) + "'"
             elif (col.datatype == 'bool' and self.dialect == 'oracle'):

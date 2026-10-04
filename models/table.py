@@ -20,7 +20,10 @@ class Table:
     """Contains methods for getting metadata for table"""
 
     def __init__(self, db, tbl_name, type=None, alias=None):
-        self.state = db.state.tables[tbl_name]
+        if db.state.tables:
+            self.state = db.state.tables[tbl_name]
+        else:
+            self.state = Dict()
         self.db = db
         self.name = tbl_name
         self.label = db.get_label(tbl_name)

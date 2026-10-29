@@ -811,7 +811,10 @@ class Expression:
             return '"' + object_name + '"'
         elif self.dialect == 'postgresql' and object_name != object_name.lower():
             return '"' + object_name + '"'
-        elif self.dialect == 'oracle' and object_name != object_name.upper():
+        elif self.dialect == 'oracle' and (
+            object_name != object_name.upper()
+            or not re.match(r"^[^\W\d_][\w$#]*$", object_name, re.UNICODE)
+        ):
             return '"' + object_name + '"'
         else:
             return object_name
